@@ -3,11 +3,12 @@
 import { useFrame } from "@react-three/fiber";
 import { Component, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { AVATAR_WORLD_SCALE, StorybookAvatar, avatarUrl } from "@/components/characters/StorybookAvatar";
+import { AVATAR_WORLD_SCALE, StorybookAvatar } from "@/components/characters/StorybookAvatar";
 import { avatarForIndex, inJoinOrder } from "@/lib/room/avatars";
-import { COUNCIL_AVATAR, CouncilSpirit } from "@/components/council/CouncilSpirit";
+import { CouncilMember } from "@/components/council/CouncilMember";
 import { Decoration } from "@/components/council/Decoration";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilEvent, decorationsFrom, reduceCouncil } from "@/lib/council/contracts";
+import { COUNCIL_MODELS } from "@/lib/council/animation";
 import { useGLTF } from "@react-three/drei";
 import { KitBuilder } from "../kit";
 import { KitParts } from "../islands/shared";
@@ -20,8 +21,8 @@ import { INTERIOR, INTERIOR_ORIGIN } from "./stageLayout";
 import { TowerProps } from "./TowerProps";
 
 /**
- * Inside the storybook tower: the AI Council's round table. The five agents are
- * the island's storybook spirits in role-coloured cloaks; they stand on the far side and animate only from persisted task events; the
+ * Inside the storybook tower: the AI Council's round table. The five agents
+ * stand on the far side and animate only from persisted task events; the
  * friends' spirits gather on the near side. Each newly shared memory is a
  * folded note that floats into the jar for its kind; when the Muse finishes,
  * the charm it designed rises over the table, ready to be carried outside.
@@ -387,7 +388,7 @@ function Agent({ actor, events, animate, onStatus, onPick }: { actor: CouncilAct
       }}
       onPointerOut={() => (document.body.style.cursor = "")}
     >
-      <CouncilSpirit state={state} position={[s.x, 0, s.z]} rotationY={s.faceY} scale={AVATAR_WORLD_SCALE * 0.95} animate={animate} onReady={ready} />
+      <CouncilMember state={state} position={[s.x, 0, s.z]} rotationY={s.faceY} scale={0.6} animate={animate} onReady={ready} />
     </group>
   );
 }
@@ -399,7 +400,7 @@ class ModelBoundary extends Component<{ actor: CouncilActor; onStatus: (actor: C
     return { failed: true };
   }
   componentDidCatch() {
-    useGLTF.clear(avatarUrl(COUNCIL_AVATAR[this.props.actor]));
+    useGLTF.clear(COUNCIL_MODELS[this.props.actor]);
     this.props.onStatus(this.props.actor, "failed");
   }
   render() {
@@ -515,4 +516,4 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
   );
 }
 
-for (const a of COUNCIL_ACTORS) useGLTF.preload(avatarUrl(COUNCIL_AVATAR[a]));
+for (const a of COUNCIL_ACTORS) useGLTF.preload(COUNCIL_MODELS[a]);
