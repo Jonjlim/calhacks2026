@@ -8,7 +8,8 @@
  *                         proposalRevisions, approvals, votes, researchJobs
  *   contributor_private:  evidenceSources, privateMessages, proposedClues,
  *                         contributionLimits
- *   server-only:          agentJobs, agentDecisions, askedSlots
+ *   server-only:          agentJobs, agentDecisions, askedSlots, evidenceMedia,
+ *                         mediaUploadGrants
  *
  * Recipient tables are server/owner-only and optional.
  * P1-B payment tables (paymentAttempts, providerEvents) are server-written;
@@ -102,6 +103,16 @@ export default defineSchema({
   })
     .index("by_source", ["sourceId"])
     .index("by_storage", ["storageId"]),
+
+  /** One row per issued evidence upload URL; server-only. `storageId` is set once a file is claimed against it. */
+  mediaUploadGrants: defineTable({
+    roomId: v.id("rooms"),
+    participantId: v.id("participants"),
+    issuedAt: v.number(),
+    storageId: v.optional(v.id("_storage")),
+  })
+    .index("by_room_participant_issued", ["roomId", "participantId", "issuedAt"])
+    .index("by_issued", ["issuedAt"]),
 
   privateMessages: defineTable({
     sourceId: v.id("evidenceSources"),
