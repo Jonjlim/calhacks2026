@@ -52,3 +52,57 @@ export function contentTokens(text: string): string[] {
     .map((t) => CANONICAL[t] ?? t);
   return [...new Set(tokens)];
 }
+
+/**
+ * Wording guard, not an image classifier. A visual observation or a tentative
+ * guess must be reviewed/reclassified before it can drive search or ownership.
+ */
+export function isUnconfirmedObservation(text: string): boolean {
+  const subject = text.trim().toLowerCase()
+    .replace(/^(?:she|he|they|maya|the recipient)\s+/, "")
+    .replace(/^(?:is|are|was|were)\s+/, "");
+  return /^(?:might|may|could|possibly|probably|seems?|appears?|looks? like)\b/.test(subject)
+    || /^(?:(?:seen|shown|pictured|photographed|observed)(?:\s+to be)?\s+)?(?:wearing|holding|carrying|using|standing|posing)\b/.test(subject)
+    || /^(?:in|from) (?:this |the |a )?(?:photo|picture|image)\b/.test(subject);
+}
+
+/** Remove generic preference framing; leave actual product/style words intact. */
+export function shoppingPhrase(text: string): string {
+  return cluePhrase(text)
+    .replace(/^(?:prefers?|drawn to)\s+/, "")
+    .replace(/\s+(?:style|styles|aesthetic|look)$/, "")
+    .trim();
+}
+
+const SHOPPING_ALIASES: Record<string, string> = {
+  minimalist: "minimal",
+  retro: "vintage",
+  jean: "denim",
+  jeans: "denim",
+  climbing: "climb",
+  climber: "climb",
+};
+const JEWELRY_ITEMS = new Set(["jewelry", "jewellery", "earring", "necklace", "bracelet", "pendant", "bangle"]);
+const PALETTE_COLORS = new Set(["olive", "terracotta", "beige", "tan", "brown"]);
+const VISIBLE_STYLE_ITEMS = new Set([
+  "jacket", "shirt", "tshirt", "sweater", "hoodie", "scarf", "tote", "bag",
+  "blanket", "cushion", "vase", "planter", "mug", "hat", "cap", "trouser", "pant",
+]);
+
+/**
+ * Small, explicit catalog vocabulary for positive preference matching only.
+ * Ownership/exclusion matching continues to use literal contentTokens so e.g.
+ * owning jeans does not imply owning every denim product.
+ */
+export function shoppingMatchTokens(text: string): string[] {
+  const phrase = text.toLowerCase()
+    .replace(/\brock[\s-]+climbing\b/g, "climbing")
+    .replace(/\bearth[\s-]+(?:tones?|toned)\b/g, "earthtone");
+  const tokens = contentTokens(phrase).map(token => SHOPPING_ALIASES[token] ?? token);
+  const result = new Set(tokens);
+  if (tokens.some(token => JEWELRY_ITEMS.has(token))) result.add("jewelry");
+  // "Olive oil" is not a style match. Require a visible goods category too.
+  if (tokens.some(token => PALETTE_COLORS.has(token))
+    && tokens.some(token => VISIBLE_STYLE_ITEMS.has(token))) result.add("earthtone");
+  return [...result];
+}

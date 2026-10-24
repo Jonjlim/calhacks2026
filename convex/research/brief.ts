@@ -5,7 +5,7 @@
  * become terms the search and ranking must avoid.
  */
 import type { PublishedClue, SearchBrief } from "../../lib/contracts";
-import { cluePhrase } from "./text";
+import { cluePhrase, isUnconfirmedObservation, shoppingPhrase } from "./text";
 
 export const DEFAULT_LISTING_LIMIT = 12;
 const MAX_LISTING_LIMIT = 24;
@@ -27,7 +27,7 @@ export interface BuildSearchBriefInput {
  * should not start a provider run rather than invent a generic query.
  */
 export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
-  const active = input.clues.filter((c) => c.status === "active");
+  const active = input.clues.filter((c) => c.status === "active" && !isUnconfirmedObservation(c.text));
   // Explicit wishes are stronger signals than general interests, so they lead.
   const positive = [
     ...active.filter((c) => c.kind === "explicit_wish"),
@@ -43,7 +43,7 @@ export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
   return {
     roomId: input.roomId,
     knowledgeRevision: input.knowledgeRevision,
-    queryTerms: uniquePhrases(positive).slice(0, MAX_QUERY_TERMS),
+    queryTerms: uniquePhrases(positive, true).slice(0, MAX_QUERY_TERMS),
     mustExclude: uniquePhrases(negative),
     ...(input.budgetMinor !== undefined && { budgetMinor: input.budgetMinor }),
     ...(input.occasion !== undefined && { occasion: input.occasion }),
@@ -51,11 +51,11 @@ export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
   };
 }
 
-function uniquePhrases(clues: BriefClue[]): string[] {
+function uniquePhrases(clues: BriefClue[], positive = false): string[] {
   const seen = new Set<string>();
   const phrases: string[] = [];
   for (const c of clues) {
-    const phrase = cluePhrase(c.text);
+    const phrase = positive ? shoppingPhrase(c.text) : cluePhrase(c.text);
     if (phrase && !seen.has(phrase)) {
       seen.add(phrase);
       phrases.push(phrase);
