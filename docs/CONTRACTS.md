@@ -13,7 +13,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 Owner: Dev 3; consumers: Dev 1 (agent controls/activity), Dev 2 (chat hook), Dev 4 (research jobs).
 Existing names remain compatible; additions below are optional unless creating a new agent operation.
 
-- `agents/buyer.requestTurn({ roomId, mode?: "quiet" | "auto" }) -> Result<{ jobId }>` checks membership, snapshots the latest human message and knowledge revision, deduplicates, then schedules evaluation. Quiet is the default; only `@unwrap` triggers a response. Dev 2 can call `enqueueBuyerTurn(ctx, roomId, participantId, mode)` after inserting a human message in the same mutation. No polling or recursive agent chat.
+- `agents/buyer.requestTurn({ roomId, mode?: "quiet" | "auto" }) -> Result<{ jobId }>` checks membership, snapshots the latest human message and knowledge revision, deduplicates, then schedules evaluation. Quiet is the default; only `@unwrap` triggers a response. `messages.sendMessage` calls `enqueueBuyerTurn(ctx, roomId, participantId, mode)` after inserting a human message in the same mutation. No polling or recursive agent chat.
 - `agents/buyer.answerQuestion({ roomId, slot, body, clientIdempotencyKey }) -> Result<{ messageId, jobId }>` records a human answer and closes the open slot atomically. `abandonQuestion({ roomId, slot })` closes an obsolete question. Slots are restricted to budget, exclusions, occasion, already_owns, size, timing, direction.
 - `agents/buyer.listActivity({ roomId })` returns bounded, room-safe `AgentEvent[]` and open questions. Private extraction events are visible only to their contributor. Events contain fixed summaries, never model rationale, private source text, grants, or preference IDs.
 - `agents/buyer.retryJob({ jobId }) -> Result<{ jobId }>` allows the acting member to retry failed/uncertain work once. Status claims, attempt fencing, input revision checks, and a watchdog prevent duplicate/late effects.
@@ -26,7 +26,7 @@ Existing names remain compatible; additions below are optional unless creating a
 - `queryRecipientAgent` is internal-only and bound to the current buyer job, room-linked profile, query ID, and permission grants. A validated verdict produces fixed guidance. The buyer records a room-safe result chip, never publishes a clue automatically. One recipient query per turn; no unbounded conversation. Profile revision is checked at commit, so revoked/replaced grants invalidate an in-flight reply.
 - Buyer search produces a `ResearchJob` with the existing `SearchBrief` and schedules `internal.research.research.runResearch({ jobId })`. Dev 4 owns execution/completion. Neither private imports nor contribution caps enter this brief.
 
-Migration: additive optional fields on existing tables, new `agentEvents`, `recipientProfiles`, `recipientPreferences`, and `recipientGrants` tables. Existing UI mocks remain valid. Dev 1 wires the public operations; Dev 2 wires the enqueue hook; Dev 4 consumes the existing research job runner.
+Migration: additive optional fields on existing tables, new `agentEvents`, `recipientProfiles`, `recipientPreferences`, and `recipientGrants` tables. Existing UI mocks remain valid. Dev 1 wires the public operations; the P0 chat enqueue hook is integrated; Dev 4 consumes the existing research job runner.
 
 - IDs are opaque strings here; they become Convex `Id<"table">` later.
 - Money: `amountMinor: number` (integer cents) + `currency: "USD"`.
@@ -72,6 +72,7 @@ interface Room {
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;
+  latestMessageId?: string; // latest human chat message; part of the evaluate_thread inputHash
   inviteToken: string; // do not leak in agent snapshots
   createdBy: string;
   createdAt: number;
@@ -496,6 +497,8 @@ interface AskedSlot {
 
 Each operation lists owner, consumers, input, output, access, and errors so another developer can mock it.
 
+Every Convex query and mutation returns `Result<T>` (`{ ok: true, value }` or `{ ok: false, error: AppError }`) from `lib/contracts`. Expected failures never throw.
+
 ### `createRoom`
 
 | | |
@@ -625,7 +628,7 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Organizer confirms; any member may propose. P0 default: organizer `selectGift` |
 | Errors | `unauthorized`, `not_found`, `invalid_revision` |
 
-Selecting supersedes the prior revision.
+Selecting supersedes the prior revision. P0 implementation: organizer only; non-organizers get `unauthorized`. Selecting always recomputes the proposal and returns the resulting revision (possibly `infeasible`).
 
 ### `castVote` (optional P0)
 
@@ -651,6 +654,8 @@ Advisory only.
 | Access | Owning participant |
 | Errors | `unauthorized`, `validation_failed`, `infeasible` |
 
+Unset caps count as 0. When a gift is selected, saving a cap recomputes the proposal; `revision` is the current revision afterwards (new if shares changed, possibly `infeasible`). The write itself succeeds even when the proposal is infeasible.
+
 ### `createProposal` / `getProposal`
 
 | | |
@@ -661,6 +666,8 @@ Advisory only.
 | Output | `{ revision, shares, approvals, feasible: boolean }` |
 | Access | Members see frozen shares and own pending approval, not others’ caps |
 | Errors | `infeasible`, `not_found` |
+
+`createProposal` is idempotent: it returns the current revision when nothing material changed. When caps fall short it records an `infeasible` revision (no shares, public reason in `conditions[0]`) and returns `infeasible`. `not_found` means no gift is selected. Revisions are also recomputed automatically on `selectGift`, `setContributionLimit`, `joinRoom`, and listing invalidation. Every participant listed in `shares` must approve before the revision becomes `approved_pledged`.
 
 ### `approveRevision`
 
@@ -674,6 +681,39 @@ Advisory only.
 | Errors | `invalid_revision`, `unauthorized`, `infeasible` |
 
 If `room.currentRevisionId !== revisionId`, `invalid_revision`.
+
+### Additional Dev 2 operations (additive)
+
+All are membership-checked and return `Result<T>`.
+
+| Name | Kind | Input | Output | Access |
+| --- | --- | --- | --- | --- |
+| `rooms.listMyRooms` | query | `{}` | `{ roomId, title, role }[]` | Signed-in user |
+| `rooms.getInvite` | query | `{ roomId }` | `{ inviteToken, joinPath }` (QR payload) | Member |
+| `rooms.previewInvite` | query | `{ inviteToken }` | `{ roomId, title, recipientDisplayName, occasion, participantCount, alreadyMember }` | Token holder |
+| `clues.getMyEvidenceMessages` | query | `{ sourceId }` | `PrivateMessage[]` | Source owner |
+| `clues.listMyEvidence` | query | `{ roomId }` | `EvidenceSource[]` | Caller's own |
+| `clues.deleteEvidence` | mutation | `{ sourceId }` | `null` | Source owner; tombstones dependents |
+| `clues.editProposedClue` | mutation | `{ proposedClueId, text?, kind?, speakerAssumption? }` | `ProposedClue` (`edited`) | Clue owner |
+| `clues.rejectProposedClue` | mutation | `{ proposedClueId }` | `ProposedClue` (`rejected`) | Clue owner |
+| `proposals.getSelection` | query | `{ roomId }` | `GiftSelection \| null` | Member |
+| `proposals.clearSelection` | mutation | `{ roomId }` | `null` | Organizer |
+| `proposals.listRevisions` | query | `{ roomId }` | `ProposalRevision[]` (newest first) | Member |
+| `proposals.withdrawApproval` | mutation | `{ revisionId }` | `Approval` (`withdrawn`) | Own approval, current revision |
+| `votes.listVotes` | query | `{ roomId }` | `{ listingId, tally, myVote? }[]` | Member |
+| `votes.clearVote` | mutation | `{ roomId, listingId }` | `{ listingId, tally }` | Member |
+| `jobs.listRoomJobs` | query | `{ roomId }` | recent agent + research job statuses | Member; `extract` jobs only to their owner |
+
+Server-only hooks for other workstreams (internal functions or helpers, not client-callable):
+
+| Name | For | Purpose |
+| --- | --- | --- |
+| `internal.clues.getOwnEvidenceForJob({ jobId, sourceId })` | Dev 3 `getOwnEvidence` | Source, messages, and proposed clues, only for an open `extract` job acting as the source owner |
+| `internal.clues.insertProposedClues({ jobId, sourceId, clues })` | Dev 3 `proposeClues` | Returns `{ insertedIds, dropped }`; drops clues citing messages outside the source |
+| `internal.messages.postAgentMessage({ jobId, body })` | Dev 3 | One `buyer_agent` message per `evaluate_thread` job |
+| `internal.jobs.setAgentJobStatus` / `setResearchJobStatus` | Dev 3 / Dev 4 | Enforced transitions; terminal states return `stale_job` |
+| `enqueueAgentJob`, `insertResearchJob`, `agentInputHash`, `isResearchJobCurrent` (exported from `convex/jobs.ts`) | Dev 3 / Dev 4 | Create job rows inside your own mutation with `inputHash` / `idempotencyKey` dedupe |
+| `internal.proposals.clearSelectionsForListing({ listingId })` | Dev 4 RC-007 | Clears a selection of an invalidated listing and supersedes its revision |
 
 ### `queryRecipientAgent` (P1-A)
 

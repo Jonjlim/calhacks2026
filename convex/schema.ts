@@ -11,12 +11,18 @@
  *   server-only:          agentJobs, agentDecisions, askedSlots
  *
  * Recipient tables are server/owner-only and optional. Payments remain P1-B.
+ *
+ * authTables (users, authSessions, ...) belong to Convex Auth and are never
+ * returned by room queries.
  */
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import * as V from "./validators";
 
 export default defineSchema({
+  ...authTables,
+
   rooms: defineTable({
     title: v.string(),
     recipientDisplayName: v.string(),
@@ -28,6 +34,8 @@ export default defineSchema({
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
     recipientProfileId: v.optional(v.id("recipientProfiles")),
+    /** Latest human chat message; part of the buyer-agent evaluate inputHash. */
+    latestMessageId: v.optional(v.id("chatMessages")),
     inviteToken: v.string(),
     createdBy: v.string(),
     createdAt: v.number(),
@@ -100,7 +108,9 @@ export default defineSchema({
     excerpt: v.optional(v.string()),
     status: V.publishedClueStatus,
     publishedAt: v.number(),
-  }).index("by_room", ["roomId"]),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_proposed_clue", ["proposedClueId"]),
 
   productListings: defineTable({
     roomId: v.id("rooms"),

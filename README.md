@@ -89,6 +89,7 @@ Baseline scaffold only. The Next.js app, Convex schema, and every endpoint in [d
 ```bash
 npm install
 npx convex dev      # first run: log in and create/link the team project; writes .env.local
+npx @convex-dev/auth  # once per deployment: sets JWT_PRIVATE_KEY, JWKS, SITE_URL for anonymous auth
 npm run dev         # in a second terminal; http://localhost:3000
 ```
 

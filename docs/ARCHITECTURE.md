@@ -230,7 +230,9 @@ Allowed transitions are in [COMMERCE_AND_PAYMENTS.md](COMMERCE_AND_PAYMENTS.md).
 
 ## Authentication and authorization
 
-Phase 0 may use Convex auth with anonymous or email magic-link identities — **verify the available method in the first hour**. A room invite token grants `Participant` membership.
+Decision (Phase 0): Convex Auth (`@convex-dev/auth`) with the anonymous provider. Each browser signs in anonymously; membership is the `Participant` row for that user. A room invite token grants `Participant` membership. The Convex deployment needs `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL` (run `npx @convex-dev/auth` once per deployment).
+
+P0 permission choice: any member can start research; only the organizer confirms the selected gift.
 
 Authorization checklist, enforced in mutations/queries:
 

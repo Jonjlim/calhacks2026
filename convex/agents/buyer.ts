@@ -86,6 +86,7 @@ export const answerQuestion = mutation({
       createdAt: Date.now(),
       clientIdempotencyKey: `answer:${member._id}:${args.clientIdempotencyKey}`,
     });
+    await ctx.db.patch(args.roomId, { latestMessageId: messageId });
     await ctx.db.patch(question._id, {
       status: "answered",
       answeredByMessageId: messageId,

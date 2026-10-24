@@ -4,7 +4,7 @@ The agent backend runs inside the existing Convex application. One configurable 
 
 ## Current status
 
-Implemented and tested with the Convex test backend and a mocked model transport. No live model call or deployed Convex smoke test has been performed. The application room still reads fixtures. Auth, regular chat/import/publish endpoints, and product execution are other workstreams' existing stubs; these agent endpoints do not make those stubs functional.
+Implemented and tested with the Convex test backend and a mocked model transport. No live model call or deployed Convex smoke test has been performed. The application room still reads fixtures. The merged P0 backend implements auth, regular chat/import/publish endpoints, membership, proposals, and job infrastructure. Human chat submissions now enqueue the agent through the shared runtime helper. Product research execution remains Dev 4's stub.
 
 The member 3 endpoints can be exercised with authenticated room/membership/evidence records. The tests seed those records directly to verify the real agent functions independently of unfinished backend features. Recipient onboarding is synthetic operator mode only, not a production identity/consent flow. Sensitive-text filtering is defense in depth, not a complete classification guarantee.
 
@@ -34,6 +34,8 @@ For a selected import, call `api.agents.extract.extractClues({ sourceId })`, the
 Synthetic recipient operator controls use `api.agents.recipient.createProfile`, `getMyProfile`, and `updateRecipientPreferences`. The owner alone can read/replace records. Empty preferences/grants revoke them. Non-disclosable rows never enter the recipient model. Other members see only a fixed verdict summary when the buyer asks a permitted question.
 
 ## Dev 2: chat and backend hook
+
+The `p0` merge wires this helper into `messages.sendMessage`. Question answers also update `room.latestMessageId`. Keep one enqueue call per new human message; do not also enqueue a legacy hash-only job. The generic helpers in `jobs.ts` remain available for other backend work, but current buyer jobs require the full runtime context and acting participant.
 
 After storing a new human chat message, call the exported helper inside the same mutation:
 

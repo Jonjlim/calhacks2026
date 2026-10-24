@@ -105,6 +105,25 @@ afterEach(() => {
 });
 
 describe("durable agent jobs", () => {
+  it("runs real P0 sendMessage through the agent runtime and deduplicates a retried submission", async () => {
+    const { t, ids, alice } = await setup();
+    vi.stubEnv("LLM_BASE_URL", "https://model.example/v1");
+    vi.stubEnv("LLM_API_KEY", "test");
+    vi.stubEnv("LLM_MODEL", "test");
+    const fetcher = vi.fn().mockImplementation(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(question) } }] }));
+    vi.stubGlobal("fetch", fetcher);
+    const args = { roomId: ids.roomId, body: "@unwrap what should we get Maya?", clientIdempotencyKey: "merged-chat" };
+    const first = value(await alice.mutation(api.messages.sendMessage, args));
+    expect(value(await alice.mutation(api.messages.sendMessage, args))._id).toBe(first._id);
+    const jobs = await t.run((ctx) => ctx.db.query("agentJobs").collect());
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ actingParticipantId: ids.alice, latestMessageId: first._id, mode: "quiet", status: "pending" });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    expect(await t.run((ctx) => ctx.db.get(jobs[0]!._id))).toMatchObject({ status: "succeeded" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const answer = value(await alice.mutation(api.agents.buyer.answerQuestion, { roomId: ids.roomId, slot: "direction", body: "A class together", clientIdempotencyKey: "merged-answer" }));
+    expect(await t.run((ctx) => ctx.db.get(ids.roomId))).toMatchObject({ latestMessageId: answer.messageId });
+  });
   it("requires membership, deduplicates turns, and allows one claim", async () => {
     const { t, ids, alice } = await setup();
     expect(

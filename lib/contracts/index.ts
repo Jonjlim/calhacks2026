@@ -41,6 +41,7 @@ export interface Room {
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;
+  latestMessageId?: string; // latest human chat message; part of the evaluate_thread inputHash
   inviteToken: string; // do not leak in agent snapshots
   createdBy: string;
   createdAt: number;
