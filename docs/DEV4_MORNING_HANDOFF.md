@@ -119,3 +119,10 @@ team’s exact lockfile after installing its existing pinned QR dependency.
 The initial merged checks passed 364 tests (3 live-only skipped) and app/Convex
 TypeScript. Production build and final remote race check are required before the
 requested shared-dev push. No production Convex deployment is part of this push.
+
+Final publication checks: 364 tests passed, 3 live-only skipped; app and Convex
+TypeScript passed; webpack production build passed from an isolated archive of
+merge `03d6262`, including `/room/[roomId]/phone`. Final fetch showed zero remote
+commits missing from this branch. Alex authorized the shared-dev push. This is
+source integration, not a production Convex deployment or a new live-browser
+acceptance claim for the merged phone surface.
