@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useState, type FormEvent } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { MediaDrop } from "@/components/clues/MediaDrop";
 import { Panel } from "@/components/ui/Panel";
 import { errorText, unwrap } from "@/lib/live/result";
 
@@ -19,6 +20,7 @@ export function LiveClues({ roomId }: { roomId: Id<"rooms"> }) {
   const [error, setError] = useState<string>();
   const [status, setStatus] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"paste" | "photo" | "screenshot">("paste");
 
   async function guard<T>(fn: () => Promise<{ ok: boolean; error?: { message: string } } & T>) {
     setError(undefined);
@@ -55,6 +57,28 @@ export function LiveClues({ roomId }: { roomId: Id<"rooms"> }) {
   return (
     <>
       <Panel title="Your proposed clues (private)">
+        <div className="mb-3 flex gap-2 text-sm" role="tablist">
+          {(
+            [
+              ["paste", "Paste"],
+              ["photo", "Photos"],
+              ["screenshot", "Screenshot"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={`rounded px-3 py-1 ${mode === m ? "bg-plum text-ivory" : "border"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode !== "paste" && <MediaDrop key={mode} roomId={roomId} kind={mode} />}
+        {mode === "paste" && (
         <form onSubmit={onImport} className="mb-3 flex flex-col gap-2">
           <textarea
             value={raw}
@@ -68,6 +92,7 @@ export function LiveClues({ roomId }: { roomId: Id<"rooms"> }) {
             Find clues
           </button>
         </form>
+        )}
         {status && <p className="mb-2 text-sm text-plum-soft">{status}</p>}
         {error && <p role="alert" className="mb-2 text-sm text-coral">{error}</p>}
         {proposed.loading && <p className="text-sm text-plum-soft">Loading…</p>}
@@ -77,6 +102,11 @@ export function LiveClues({ roomId }: { roomId: Id<"rooms"> }) {
               <p>
                 <span className="font-medium">{c.kind}</span>: {c.text}{" "}
                 <span className="text-plum-soft">({Math.round(c.confidence * 100)}%)</span>
+                {c.kind === "uncertain" && (
+                  <span className="ml-2 rounded bg-coral/15 px-2 text-xs text-coral">
+                    uncertain — your call
+                  </span>
+                )}
               </p>
               <div className="mt-1 flex gap-2">
                 <button type="button" className="rounded bg-coral px-2 py-1 text-white" onClick={() => guard(() => publishClue({ proposedClueId: c._id }))}>
