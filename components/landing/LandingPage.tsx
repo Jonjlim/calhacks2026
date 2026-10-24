@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { StorybookIntro } from "@/components/intro/StorybookIntro";
-import { mockLandingActions } from "@/lib/mocks/landing";
+import { useLandingActions } from "@/lib/live/landingActions";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
 
@@ -48,6 +48,7 @@ export function LandingPage() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [joinRequest, setJoinRequest] = useState(0);
   const [painterlyStrength, setPainterlyStrength] = useState(0);
+  const landingActions = useLandingActions();
   const phase = useIntroPhase();
   const introActive = phase !== "landingReady";
   const markWorldReady = useCallback(() => setReady(true), []);
@@ -137,7 +138,7 @@ export function LandingPage() {
               <LandingHeader soundEnabled={soundEnabled} onToggleSound={toggleSound} onJoin={() => setJoinRequest((n) => n + 1)} />
             </motion.div>
             <div className="flex flex-1 items-center px-[clamp(40px,5vw,88px)] pb-16">
-              <LandingHero actions={mockLandingActions} joinRequest={joinRequest} />
+              <LandingHero actions={landingActions} joinRequest={joinRequest} />
             </div>
           </div>
         )}
