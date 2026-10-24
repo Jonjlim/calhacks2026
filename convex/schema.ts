@@ -10,14 +10,19 @@
  *                         contributionLimits
  *   server-only:          agentJobs, agentDecisions, askedSlots
  *
- * P1 tables (recipient preferences/grants, payment attempts, provider events)
- * are added by BE-015 / BE-016 only if those phases start.
+ * Recipient tables are server/owner-only and optional. Payments remain P1-B.
+ *
+ * authTables (users, authSessions, ...) belong to Convex Auth and are never
+ * returned by room queries.
  */
+import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import * as V from "./validators";
 
 export default defineSchema({
+  ...authTables,
+
   rooms: defineTable({
     title: v.string(),
     recipientDisplayName: v.string(),
@@ -28,6 +33,9 @@ export default defineSchema({
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
+    recipientProfileId: v.optional(v.id("recipientProfiles")),
+    /** Latest human chat message; part of the buyer-agent evaluate inputHash. */
+    latestMessageId: v.optional(v.id("chatMessages")),
     inviteToken: v.string(),
     createdBy: v.string(),
     createdAt: v.number(),
@@ -51,6 +59,10 @@ export default defineSchema({
     body: v.string(),
     createdAt: v.number(),
     clientIdempotencyKey: v.string(),
+    agentJobId: v.optional(v.id("agentJobs")),
+    responseAgentJobId: v.optional(v.id("agentJobs")),
+    replyToSlot: v.optional(v.string()),
+    citations: v.optional(V.agentCitations),
   })
     .index("by_room", ["roomId"])
     .index("by_room_idempotency", ["roomId", "clientIdempotencyKey"]),
@@ -100,7 +112,9 @@ export default defineSchema({
     excerpt: v.optional(v.string()),
     status: V.publishedClueStatus,
     publishedAt: v.number(),
-  }).index("by_room", ["roomId"]),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_proposed_clue", ["proposedClueId"]),
 
   productListings: defineTable({
     roomId: v.id("rooms"),
@@ -200,9 +214,20 @@ export default defineSchema({
     kind: V.agentJobKind,
     status: V.jobStatus,
     inputHash: v.string(),
+    inputVersion: v.optional(v.string()),
     idempotencyKey: v.string(),
     attempt: v.number(),
     actingParticipantId: v.optional(v.id("participants")),
+    sourceId: v.optional(v.id("evidenceSources")),
+    sourceRevision: v.optional(v.number()),
+    latestMessageId: v.optional(v.id("chatMessages")),
+    knowledgeRevision: v.optional(v.number()),
+    mode: v.optional(v.union(v.literal("quiet"), v.literal("auto"))),
+    trigger: v.optional(V.agentTrigger),
+    researchJobId: v.optional(v.id("researchJobs")),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    modelUsage: v.optional(V.agentModelUsage),
     lastError: v.optional(v.string()),
     createdAt: v.number(),
   })
@@ -218,6 +243,12 @@ export default defineSchema({
     clarifySlot: v.optional(v.string()),
     extractSourceId: v.optional(v.id("evidenceSources")),
     needsFollowup: v.boolean(),
+    searchBrief: v.optional(V.searchBrief),
+    recipientQuery: v.optional(v.object({
+      type: v.union(v.literal("suitability"), v.literal("ownership"), v.literal("constraint")),
+      subject: v.object({ kind: v.union(v.literal("category"), v.literal("product")), label: v.string(), listingId: v.optional(v.string()) }),
+    })),
+    citations: v.optional(v.object({ listingIds: v.array(v.string()), publishedClueIds: v.array(v.string()) })),
     createdAt: v.number(),
   }).index("by_room", ["roomId"]),
 
@@ -226,13 +257,39 @@ export default defineSchema({
     slot: v.string(),
     messageId: v.optional(v.id("chatMessages")),
     status: V.askedSlotStatus,
+    answeredByMessageId: v.optional(v.id("chatMessages")),
     askedAt: v.number(),
   }).index("by_room_slot", ["roomId", "slot"]),
+
+  agentEvents: defineTable({
+    roomId: v.id("rooms"), jobId: v.id("agentJobs"),
+    participantId: v.optional(v.id("participants")),
+    actor: v.union(v.literal("buyer"), v.literal("extractor"), v.literal("research_planner"), v.literal("recipient")),
+    kind: v.union(v.literal("started"), v.literal("question"), v.literal("handoff"), v.literal("completed"), v.literal("failed"), v.literal("stale")),
+    summary: v.string(), createdAt: v.number(),
+    citations: v.optional(V.agentCitations),
+  }).index("by_room", ["roomId"]),
+
+  recipientProfiles: defineTable({
+    roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
+  }).index("by_room", ["roomId"]),
+  recipientPreferences: defineTable({
+    recipientProfileId: v.id("recipientProfiles"),
+    category: V.recipientCategory, text: v.string(), disclosable: v.boolean(), authorized: v.boolean(), createdAt: v.number(),
+  }).index("by_profile", ["recipientProfileId"]),
+  recipientGrants: defineTable({
+    recipientProfileId: v.id("recipientProfiles"), category: V.recipientCategory,
+    allowedQuestionTypes: v.array(V.recipientQuestionType),
+  }).index("by_profile", ["recipientProfileId"]),
 
   researchJobs: defineTable({
     roomId: v.id("rooms"),
     knowledgeRevision: v.number(),
     publishedClueIds: v.array(v.id("publishedClues")),
+    actingParticipantId: v.optional(v.id("participants")),
+    originatingAgentJobId: v.optional(v.id("agentJobs")),
+    latestMessageId: v.optional(v.id("chatMessages")),
+    continuationAgentJobId: v.optional(v.id("agentJobs")),
     brief: v.optional(V.searchBrief),
     status: V.jobStatus,
     inputHash: v.string(),

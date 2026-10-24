@@ -8,6 +8,41 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Member 3 research continuation (2026-10-24)
+
+Owner: Dev 3; shared consumers: Dev 1 (message evidence/activity), Dev 2 (human messages/knowledge hooks), Dev 4 (catalog/research completion).
+
+- Shared `readCatalog(ctx, room)` in `convex/research/catalog.ts` supplies the same latest-successful candidate pool and dynamic ranking to both `listRecommendations` and buyer snapshots. Legacy stored recommendation rows are not an agent source. The helper also supplies latest-request status, excluded-listing reasons, and current active clues. Public query output stays unchanged.
+- `ResearchJob` storage adds optional `actingParticipantId`, `originatingAgentJobId`, `latestMessageId`, and `continuationAgentJobId`. Public and agent-started research capture the acting member and latest human message. Every terminal current research request may enqueue **one** continuation atomically; a duplicate callback, newer request, changed knowledge, removed member, or newer human message cannot start another or post an obsolete response. Old jobs without an actor have no automatic continuation.
+- `AgentJob` gains optional `trigger: "human" | "research_completed" | "knowledge_changed"` and `researchJobId`. Continuations use the existing evaluate-thread worker, independent of quiet-mode mentions. Non-human turns may recommend, clarify, listen, or wait; they may not search or query the recipient agent. No recursive/paid-provider loop is introduced. Failed/uncertain research yields a fixed, truthful status message without another model call. Research retry remains an explicit new research request.
+- Publication/withdrawal/source deletion bumps knowledge and schedules a debounced, cached-candidate re-evaluation when a prior candidate pool exists. No automatic paid retrieval occurs. The server rechecks current catalog/version/membership at commit. Selection and proposals still change only through their existing deterministic operations.
+- Recommendation chat is rendered from validated listing/clue IDs, observed price/status, and source observations; the model chooses the shortlist but cannot author purchase facts. Chat storage/`ChatMessage` gains optional `agentJobId`, `citations: { listingIds, publishedClueIds, researchJobId? }`, and `responseAgentJobId`. Activity events may carry the same room-visible citations. No private source IDs or recipient preference IDs are included.
+- `sendMessage` adds optional `replyToSlot`; it closes that exact open question atomically with the submitted human message. `answerQuestion` retries return the original message/job pair, even after later chat, rather than scheduling another turn. Untargeted ordinary chat does not silently resolve a question or publish a preference.
+- Activity projection adds bounded owner-safe job status/retry eligibility and model-configuration presence flags (booleans only). No secret values, provider payloads, or private job details are returned.
+- Model calls include a configurable output-token cap (default 2,400, allowed 256–8,192) and optional configured reasoning effort. `AgentJob.modelUsage` optionally records `{ calls, reportedCalls, inputTokens, outputTokens, cachedInputTokens, reasoningTokens }`, including retries and returned recipient-role usage. Counts are attempt-local and exposed only to the acting member. Missing provider usage is explicitly distinguished by `reportedCalls`; counts are diagnostics, not a settled bill. No model price is hardcoded.
+
+Migration: additive optional fields; existing fixtures and old records remain readable. Research completion and knowledge-revision hooks are narrow cross-workstream changes. Frontend remains a separate integration task.
+
+### Member 3 implementation additions (2026-10-24)
+
+Owner: Dev 3; consumers: Dev 1 (agent controls/activity), Dev 2 (chat hook), Dev 4 (research jobs).
+Existing names remain compatible; additions below are optional unless creating a new agent operation.
+
+- `agents/buyer.requestTurn({ roomId, mode?: "quiet" | "auto" }) -> Result<{ jobId }>` checks membership, snapshots the latest human message and knowledge revision, deduplicates, then schedules evaluation. Quiet is the default; only `@unwrap` triggers a response. `messages.sendMessage` calls `enqueueBuyerTurn(ctx, roomId, participantId, mode)` after inserting a human message in the same mutation. No polling or recursive agent chat.
+- `agents/buyer.answerQuestion({ roomId, slot, body, clientIdempotencyKey }) -> Result<{ messageId, jobId }>` records a human answer and closes the open slot atomically. `abandonQuestion({ roomId, slot })` closes an obsolete question. Slots are restricted to budget, exclusions, occasion, already_owns, size, timing, direction.
+- `agents/buyer.listActivity({ roomId })` returns bounded, room-safe `AgentEvent[]` and open questions. Private extraction events are visible only to their contributor. Events contain fixed summaries, never model rationale, private source text, grants, or preference IDs.
+- `agents/buyer.retryJob({ jobId }) -> Result<{ jobId }>` allows the acting member to retry failed/uncertain work once. Status claims, attempt fencing, input revision checks, and a watchdog prevent duplicate/late effects.
+- `AgentJob` gains optional `actingParticipantId`, `sourceId`, `sourceRevision`, `latestMessageId`, `knowledgeRevision`, `mode`, `startedAt`, `finishedAt`, `inputVersion`. Buyer jobs index a short `inputHash` and compare the full immutable-ID version token as well; a lookup collision cannot accept stale effects. `AgentDecision` gains optional `searchBrief`, `recipientQuery`, and `citations: { listingIds, publishedClueIds }`. Model payloads omit server-owned IDs/timestamps.
+- `AgentEvent = { id, roomId, jobId, actor: "buyer" | "extractor" | "research_planner" | "recipient", kind: "started" | "question" | "handoff" | "completed" | "failed" | "stale", summary, createdAt }`. Storage adds optional `participantId` for private events. Job details remain server-only.
+- `AskedSlot` storage adds optional `answeredByMessageId`. Answering or abandoning a slot also invalidates an in-flight turn via its input fingerprint.
+- Extraction retains `extractClues({ sourceId }) -> Result<{ jobId }>`; only an owning member can enqueue. Proposed-clue writes and job completion are atomic and recheck ownership, source revision, message references, and active contradiction IDs.
+- `agents/recipient.createProfile({ roomId }) -> Result<{ recipientProfileId }>` creates a room-linked profile owned by the authenticated identity. For the hackathon only, gated by server `RECIPIENT_AGENT_DEMO_ENABLED=true`, an organizer can act as a synthetic recipient operator. This is not recipient consent for real data.
+- `updateRecipientPreferences({ recipientProfileId, preferences, grants })` replaces that owner's authorized records. Owner-only reads via `getMyProfile({ roomId })`; room membership never grants access to other profiles. Empty records/grants revoke access. `RecipientGrant` stores question-type allowlists. Only authorized **and disclosable** rows reach the model; non-disclosable rows produce no disclosure. No model-written free text crosses this boundary.
+- `queryRecipientAgent` is internal-only and bound to the current buyer job, room-linked profile, query ID, and permission grants. A validated verdict produces fixed guidance. The buyer records a room-safe result chip, never publishes a clue automatically. One recipient query per turn; no unbounded conversation. Profile revision is checked at commit, so revoked/replaced grants invalidate an in-flight reply.
+- Buyer search produces a `ResearchJob` with the existing `SearchBrief` and schedules `internal.research.research.runResearch({ jobId })`. Dev 4 owns execution/completion. Neither private imports nor contribution caps enter this brief.
+
+Migration: additive optional fields on existing tables, new `agentEvents`, `recipientProfiles`, `recipientPreferences`, and `recipientGrants` tables. Existing UI mocks remain valid. Dev 1 wires the public operations; the P0 chat enqueue hook is integrated; Dev 4 consumes the existing research job runner.
+
 - IDs are opaque strings here; they become Convex `Id<"table">` later.
 - Money: `amountMinor: number` (integer cents) + `currency: "USD"`.
 - Timestamps: unix milliseconds.
@@ -52,6 +87,7 @@ interface Room {
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;
+  latestMessageId?: string; // latest human chat message; part of the evaluate_thread inputHash
   inviteToken: string; // do not leak in agent snapshots
   createdBy: string;
   createdAt: number;
@@ -272,6 +308,37 @@ interface ProductListing {
 }
 ```
 
+### Product normalization helpers (RC-001 / RC-003)
+
+**Owner:** Dev 4. **Consumers:** Dev 4 research action; Dev 1/2/3 receive the unchanged ProductListing shape.
+
+- `normalizeListing(raw, retrievedAt, context?)` returns ProductListing fields without IDs/status, or null. Context is trusted server-side US query localization (`{ country: "us" }`), never model-provided currency.
+- `normalizeDataset(raw, retrievedAt)` reads the verified Actor's page envelopes, accepts only `search_parameters.gl === "us"`, skips malformed rows, and deduplicates identical product/seller/title observations within one dataset.
+- No schema migration or client endpoint changes. USD must be established by explicit currency, explicit USD price label, or validated US query context. Explicit foreign currency is rejected.
+- Exact nonnegative prices become safe integer cents. Ambiguous, conflicting or invalid prices remain unknown with no amount. Stock and shipping stay unknown for this provider.
+- Preserve bundle/size text. Source links remain the observed Google Shopping URLs; they are not merchant checkout links.
+- Provider-only fields, opaque page tokens, and helper URLs never enter normalized listings.
+
+### Derived product presentation (RC-008 / RC-016)
+
+**Owner:** Dev 4. **Consumer:** Dev 1. These are pure helpers; no database migration or endpoint changes.
+
+```ts
+interface PriceFreshness {
+  kind: "recent" | "aging" | "stale" | "unknown" | "unavailable";
+  label: string;
+  needsRefresh: boolean;
+  observedAt?: number;
+  ageMs?: number;
+  nextChangeAt?: number;
+}
+```
+
+- `getPriceFreshness(listing, now, { sourceFailed? })` lives in `lib/research/freshness.ts`. The caller supplies a Unix millisecond clock: under 30 minutes is recent, 30 minutes through just under 6 hours is aging, and 6 hours onward is stale. A source failure or explicitly stale listing also needs refresh. Unknown prices remain unknown; invalid listings are unavailable. Invalid/future timestamps never count as recent.
+- `nextChangeAt` tells the UI when the age category changes. Recompute with the client's clock on a timer or visibility change; a Convex query does not rerun merely because wall-clock time passes. No automatic refresh request or price/proposal mutation is performed.
+- `hasProductImageUrl(listing)` validates an HTTPS thumbnail URL; it does not fetch the image or guarantee that the remote image loads. Dev 1 should show a placeholder on missing/failed images.
+- Ranking ties compare total score, personal relevance, then budget fit, then presence of a valid HTTPS image URL, and finally listing ID. Images do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.
@@ -476,6 +543,8 @@ interface AskedSlot {
 
 Each operation lists owner, consumers, input, output, access, and errors so another developer can mock it.
 
+Every Convex query and mutation returns `Result<T>` (`{ ok: true, value }` or `{ ok: false, error: AppError }`) from `lib/contracts`. Expected failures never throw.
+
 ### `createRoom`
 
 | | |
@@ -583,6 +652,19 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Room member |
 | Errors | `unauthorized`, `stale_job`, `provider_timeout` |
 
+### Research execution semantics (RC-004 / RC-006)
+
+**Owner:** Dev 4. Uses Dev 2's requireMember and insertResearchJob helpers. Client endpoint signatures are unchanged.
+
+- startResearch validates active same-room published clues and integer-cent budgets, then uses buildSearchBrief. Reusing a request key with changed inputs is validation_failed. Matching open input fingerprints reuse the existing job.
+- Storage adapter for the existing searchBrief validator: omit roomId from researchJobs.brief because it already lives on researchJobs; restore it when calling the provider. Shared SearchBrief still includes roomId. This is explicit compatibility handling, not a schema migration.
+- Pending job insertion and worker scheduling occur in one mutation. The provider uses verified Actor build 0.0.142, one US search page, 120-second provider timeout and a $0.20 maximum run charge.
+- Only pending jobs can claim a provider start. Network ambiguity becomes uncertain; no automatic paid POST retry. Run IDs are retained in durable scheduled poll arguments. If a start response is lost before returning the run ID, operators must check Apify Console; automatic run discovery/reconciliation is not implemented.
+- Completion inserts normalized listings and succeeds atomically, at most once. It rejects changed knowledgeRevision or any newer research request. Ordering uses the room index's creation-order suffix, not completion time.
+- listRecommendations uses the latest successful request among the 50 most recent room jobs. While a refresh is pending/failed, the previous successful candidate pool remains available. It re-ranks against all current active clues on each read, includes only visible ranked listings, and does not trust stored recommendation rows. Changing clues after a successful search can update the ranking without another provider run.
+- Query recommendations have stable derived IDs (job ID + listing ID) and request timestamps. Product retrievedAt is the observed retrieval time; clients compute price-age labels from it.
+- Research-specific claim/completion/poll mutations live in research.ts. Dev 2's generic jobs.ts and schema are unchanged. Research timeouts cannot restart the paid provider automatically.
+
 ### `listRecommendations`
 
 | | |
@@ -593,6 +675,29 @@ P0 manual room clue for preferences/exclusions without an import.
 | Output | `{ recommendations: Recommendation[], listings: ProductListing[] }` |
 | Access | Room member |
 | Errors | `unauthorized` |
+
+### Confirmed visual preferences in research
+
+**Owner:** Dev 4. Existing PublishedClue, SearchBrief, ranking and provider signatures are unchanged. Dev 3 remains responsible for extracting/reviewing visual evidence.
+
+- Photo analysis must supply reviewed, active interest/explicit_wish clues for positive recommendations; uncertain clues do not drive search/ranking. Plain observation/tentative wording (e.g. holding a camera, wearing a jacket, might own a camera) is additionally ignored even if misclassified as an interest or ownership clue. This lexical guard is not an image classifier or a complete uncertainty detector.
+- Confirmed short preferences require all normalized shopping terms to match. Bounded positive-only vocabulary covers minimal/minimalist, retro/vintage, jeans/denim, rock climbing, jewelry items, and a small earth-tone palette when a visible goods category is present. These are catalog-text heuristics, not image similarity or semantic embeddings.
+- Ownership and exclusions retain their literal matching rules; positive shopping vocabulary does not broaden them. Exact duplicate normalized preferences can cite multiple clues but do not multiply the relevance score.
+- SearchBrief queryTerms are ordered complete query phrases. The one-page provider uses the first nonempty phrase, rather than concatenating unrelated interests. Planners should place a useful complete phrase first (e.g. vintage denim jacket, not separate vintage/denim/jacket elements). Remaining phrases are alternate directions, not additional paid searches in this task.
+- Photo-derived and typed clues use the same research path. A clue's source type never creates an interest or ownership fact by itself. No media upload, model transport or shared database schema changes are included.
+
+### `research.invalidateListing` (RC-007)
+
+**Owner:** Dev 4. **Consumers:** Dev 1 (organizer control); verified server-side source checks use the internal equivalent.
+
+- Public mutation input: `{ roomId, listingId }`; output: `Result<{ listingId, cleared: number }>`.
+- Only that room's organizer may invalidate its listing. Outsiders and ordinary members get unauthorized; foreign-room/missing listing IDs get not_found.
+- Uses `internal.proposals.clearSelectionsForListing` and marks the listing invalid in one transaction. A matching active selection is cleared, its proposal superseded, and live approvals invalidated. Existing deal snapshots remain for history.
+- Returns invalid_revision without changing anything if the selected proposal is locked for payment. It does not cancel authorizations, capture, refund, or perform recovery.
+- Repeating the operation returns cleared: 0 and cannot clear a different replacement gift. An unselected listing does not disturb the current proposal.
+- `internal.research.research.invalidateListingInternal({ listingId })` provides the same behavior for trusted server code. It is not exposed as a model tool.
+- Invalid listings disappear from recommendations and cannot be selected again. A clue mismatch or old price does not itself establish that a listing is invalid.
+- This task adds the transition, not automatic stock verification, merchant URL probing, price refresh, or a frontend button. No schema migration or existing endpoint changes.
 
 ### `selectGift`
 
@@ -605,7 +710,7 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Organizer confirms; any member may propose. P0 default: organizer `selectGift` |
 | Errors | `unauthorized`, `not_found`, `invalid_revision` |
 
-Selecting supersedes the prior revision.
+Selecting supersedes the prior revision. P0 implementation: organizer only; non-organizers get `unauthorized`. Selecting always recomputes the proposal and returns the resulting revision (possibly `infeasible`).
 
 ### `castVote` (optional P0)
 
@@ -631,6 +736,8 @@ Advisory only.
 | Access | Owning participant |
 | Errors | `unauthorized`, `validation_failed`, `infeasible` |
 
+Unset caps count as 0. When a gift is selected, saving a cap recomputes the proposal; `revision` is the current revision afterwards (new if shares changed, possibly `infeasible`). The write itself succeeds even when the proposal is infeasible.
+
 ### `createProposal` / `getProposal`
 
 | | |
@@ -641,6 +748,8 @@ Advisory only.
 | Output | `{ revision, shares, approvals, feasible: boolean }` |
 | Access | Members see frozen shares and own pending approval, not others’ caps |
 | Errors | `infeasible`, `not_found` |
+
+`createProposal` is idempotent: it returns the current revision when nothing material changed. When caps fall short it records an `infeasible` revision (no shares, public reason in `conditions[0]`) and returns `infeasible`. `not_found` means no gift is selected. Revisions are also recomputed automatically on `selectGift`, `setContributionLimit`, `joinRoom`, and listing invalidation. Every participant listed in `shares` must approve before the revision becomes `approved_pledged`.
 
 ### `approveRevision`
 
@@ -654,6 +763,39 @@ Advisory only.
 | Errors | `invalid_revision`, `unauthorized`, `infeasible` |
 
 If `room.currentRevisionId !== revisionId`, `invalid_revision`.
+
+### Additional Dev 2 operations (additive)
+
+All are membership-checked and return `Result<T>`.
+
+| Name | Kind | Input | Output | Access |
+| --- | --- | --- | --- | --- |
+| `rooms.listMyRooms` | query | `{}` | `{ roomId, title, role }[]` | Signed-in user |
+| `rooms.getInvite` | query | `{ roomId }` | `{ inviteToken, joinPath }` (QR payload) | Member |
+| `rooms.previewInvite` | query | `{ inviteToken }` | `{ roomId, title, recipientDisplayName, occasion, participantCount, alreadyMember }` | Token holder |
+| `clues.getMyEvidenceMessages` | query | `{ sourceId }` | `PrivateMessage[]` | Source owner |
+| `clues.listMyEvidence` | query | `{ roomId }` | `EvidenceSource[]` | Caller's own |
+| `clues.deleteEvidence` | mutation | `{ sourceId }` | `null` | Source owner; tombstones dependents |
+| `clues.editProposedClue` | mutation | `{ proposedClueId, text?, kind?, speakerAssumption? }` | `ProposedClue` (`edited`) | Clue owner |
+| `clues.rejectProposedClue` | mutation | `{ proposedClueId }` | `ProposedClue` (`rejected`) | Clue owner |
+| `proposals.getSelection` | query | `{ roomId }` | `GiftSelection \| null` | Member |
+| `proposals.clearSelection` | mutation | `{ roomId }` | `null` | Organizer |
+| `proposals.listRevisions` | query | `{ roomId }` | `ProposalRevision[]` (newest first) | Member |
+| `proposals.withdrawApproval` | mutation | `{ revisionId }` | `Approval` (`withdrawn`) | Own approval, current revision |
+| `votes.listVotes` | query | `{ roomId }` | `{ listingId, tally, myVote? }[]` | Member |
+| `votes.clearVote` | mutation | `{ roomId, listingId }` | `{ listingId, tally }` | Member |
+| `jobs.listRoomJobs` | query | `{ roomId }` | recent agent + research job statuses | Member; `extract` jobs only to their owner |
+
+Server-only hooks for other workstreams (internal functions or helpers, not client-callable):
+
+| Name | For | Purpose |
+| --- | --- | --- |
+| `internal.clues.getOwnEvidenceForJob({ jobId, sourceId })` | Dev 3 `getOwnEvidence` | Source, messages, and proposed clues, only for an open `extract` job acting as the source owner |
+| `internal.clues.insertProposedClues({ jobId, sourceId, clues })` | Dev 3 `proposeClues` | Returns `{ insertedIds, dropped }`; drops clues citing messages outside the source |
+| `internal.messages.postAgentMessage({ jobId, body })` | Dev 3 | One `buyer_agent` message per `evaluate_thread` job |
+| `internal.jobs.setAgentJobStatus` / `setResearchJobStatus` | Dev 3 / Dev 4 | Enforced transitions; terminal states return `stale_job` |
+| `enqueueAgentJob`, `insertResearchJob`, `agentInputHash`, `isResearchJobCurrent` (exported from `convex/jobs.ts`) | Dev 3 / Dev 4 | Create job rows inside your own mutation with `inputHash` / `idempotencyKey` dedupe |
+| `internal.proposals.clearSelectionsForListing({ listingId })` | Dev 4 RC-007 | Clears a selection of an invalidated listing and supersedes its revision |
 
 ### `queryRecipientAgent` (P1-A)
 

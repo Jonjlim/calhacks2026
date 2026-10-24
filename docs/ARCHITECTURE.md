@@ -6,6 +6,16 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D10 — Bounded research feedback and cached replanning (2026-10-24)
+
+Member 3 and member 4 share one database/catalog projection for ranking and evidence. Each research request captures its requester/message context and at most one persisted continuation pointer. Completion/failure/timeout and continuation scheduling are one transaction. The follow-up is a distinct, version-fenced job; it cannot start research or call another recipient agent. Confirmed knowledge changes can re-evaluate the existing pool after a short debounce, but cannot authorize another paid provider run. Purchase facts in recommendation messages are rendered by application code from current observations, not model prose. Question replies require an explicit slot. No new service/provider is added.
+
+### D9 — Agent backbone implementation (2026-10-24)
+
+Dev 3 implements bounded role handoffs within Convex, using one configurable Chat Completions-compatible model adapter (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). JSON mode plus strict local Zod validation is used; provider/model support remains **unverified** until a credentialed spike succeeds. No SDK, additional database, or agent service is added. Reference: [JSON mode and structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
+
+Scheduling and effect commits happen in mutations. An action must claim a pending job; all commits fence on status, attempt, membership, and current input. A watchdog marks abandoned work uncertain. Model retries are bounded; HTTP failures do not expose response bodies or secrets. UI activity is a separate projection of fixed event summaries. Recipient-agent support remains optional, with a server-gated synthetic operator profile, grants, revision-aware revocation, and fixed output guidance. Existing P0 does not depend on it.
+
 | ID | Decision | Rationale | Rejected alternative |
 | --- | --- | --- | --- |
 | D1 | Unwrap is a collaborative evidence-backed studio. AI improves decisions; it is not decoration. | Matches the pitch and GiftSync chat requirement. | Chat wrapper around a generic recommender. |
@@ -24,7 +34,7 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 | Next.js + React + TS + Tailwind | Confirmed starting point. One app for solo and group. |
 | Convex | Confirmed. Authoritative room state, reactive queries, membership. |
 | One tool-capable LLM + Zod | Confirmed. Provider and model ID are **unverified** until Phase 0. |
-| Apify as first product source | **Unverified.** Need one actor that returns purchasable listings. A supported shopping search API may replace it. |
+| Apify as first product source | **Conditional go for discovery.** RC-002: `johnvc/google-shopping-api-google-shopping-products-prices-deals`, build `0.0.142`, passed two live searches (40 products each). Links are Google Shopping URLs; direct merchant navigation and final prices remain unverified. Results and limitations: [DEV4_SOURCE_SPIKE.md](DEV4_SOURCE_SPIKE.md). |
 | React Flow | Proposed for the map. P0 may ship a simpler graph or list if it threatens the critical path. |
 | Motion / CSS | Confirmed for lightweight, state-honest animation. |
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
@@ -224,7 +234,9 @@ Allowed transitions are in [COMMERCE_AND_PAYMENTS.md](COMMERCE_AND_PAYMENTS.md).
 
 ## Authentication and authorization
 
-Phase 0 may use Convex auth with anonymous or email magic-link identities — **verify the available method in the first hour**. A room invite token grants `Participant` membership.
+Decision (Phase 0): Convex Auth (`@convex-dev/auth`) with the anonymous provider. Each browser signs in anonymously; membership is the `Participant` row for that user. A room invite token grants `Participant` membership. The Convex deployment needs `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL` (run `npx @convex-dev/auth` once per deployment).
+
+P0 permission choice: any member can start research; only the organizer confirms the selected gift.
 
 Authorization checklist, enforced in mutations/queries:
 
@@ -313,3 +325,11 @@ Dev 3 can run extraction and agent decisions in actions that write the documente
 Dev 4 can normalize one live search into `ProductListing` and score against fixture published clues.
 
 Integration checkpoints are in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
+## Dev 4 research integration (RC-004 / RC-006)
+
+The research mutation uses Dev 2's membership and job-insertion helpers. Pure brief/ranking functions are provided by the parallel Dev 4 workstream. Provider start/poll/dataset calls run in Convex actions with APIFY_TOKEN from deployment environment variables. Durable scheduled polls retain provider run IDs; a watchdog marks stranded workers uncertain.
+
+A completion transaction validates current knowledge and request order before writing listings. The recommendations query re-ranks the latest successful candidate pool against current room clues. No extra services or queues are introduced. The existing brief validator remains unchanged: research explicitly stores the brief without duplicated roomId and restores it at the provider boundary.
+
+Local tests mock paid provider traffic. This checkout still needs the team's Convex deployment configuration and its APIFY_TOKEN before a deployed end-to-end test. Do not create a competing team deployment just for Dev 4. Anonymous-auth setup belongs to Dev 2 / frontend integration.
