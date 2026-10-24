@@ -140,3 +140,18 @@ describe("caption-based fashion suggestions", () => {
     expect(discoverFashionIdeas(posts, context, 0)).toEqual([]);
   });
 });
+
+describe("category-scoped vocabulary", () => {
+  const jewelry: FashionSampleContext = { ...context, seedTerm: "jewelry outfit" };
+  it("finds jewelry directions only for a jewelry seed", () => {
+    const values = [post("201", "alice", "Gold hoop earrings and a charm bracelet"), post("202", "bob", "My everyday #hoopearrings stack")]
+      .map(row => ({ ...row, hashtags: [] }));
+    const posts = normalizeTikTokPosts(values, jewelry);
+    expect(discoverFashionIdeas(posts, jewelry).map(row => [row.garment, row.searchQuery])).toEqual([["gold hoop earrings", "gold hoop earrings"]]);
+    expect(discoverFashionIdeas(normalizeTikTokPosts(values, context), context)).toEqual([]);
+  });
+  it("returns nothing for a seed outside the reviewed categories", () => {
+    const other = { ...context, seedTerm: "pottery outfit" };
+    expect(discoverFashionIdeas(normalizeTikTokPosts([post("301", "alice"), post("302", "bob")], other), other)).toEqual([]);
+  });
+});

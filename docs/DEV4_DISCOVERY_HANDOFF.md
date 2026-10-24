@@ -7,7 +7,9 @@ No room UI or Alan agent files were modified.
 
 ## Consumer sequence
 
-1. Publish a confirmed interest/wish containing denim (and vintage if applicable).
+1. Publish a confirmed interest/wish naming a reviewed style category: denim/jeans,
+   jewelry/earrings/necklaces/bracelets, sneakers, sweaters/cardigans/knitwear, or
+   handbags/purses/totes/crossbody (plus vintage if applicable).
 2. Call `api.research.fashion.startDiscovery({roomId, idempotencyKey})` from an
    explicit human action. At most 20 posts, one fixed public query, cap $0.50.
 3. Subscribe to `api.research.fashion.getDiscovery({roomId})`. Display the current
@@ -24,8 +26,8 @@ No room UI or Alan agent files were modified.
    existing run. This starts no new paid run. Unknown-start outcomes require
    operator review in Apify, not a new request key/repeated start.
 
-The current bounded vocabulary supports denim garments. Other clothing categories
-need a reviewed seed/vocabulary extension; arbitrary names, accounts and private
+The bounded vocabulary (`lib/research/styleCategories.ts`) supports denim, jewelry,
+sneakers, knitwear and bags. Other categories need a reviewed table entry; arbitrary names, accounts and private
 evidence cannot become social search terms. Empty suggestions are legitimate.
 Style mentions do not establish garment age, size, stock or recipient ownership.
 
@@ -75,3 +77,20 @@ discovery-to-shopping handoff is verified offline against recorded source data;
 it was not established by this live sample. No repeated paid search was issued.
 UI cards and Alan's tool call remain consumer work. Payment worker/cancellation
 changes remain offline-tested helpers, not enabled payment controls.
+
+## Google Trends discovery (live, same pattern)
+
+`convex/research/trendJobs.ts` adds persisted Google Trends discovery for any short,
+confirmed published interest/wish (e.g. "pottery tools", "rock climbing", "film camera").
+
+1. `api.research.trendJobs.startDiscovery({roomId, publishedClueId, idempotencyKey})`
+   from an explicit human action. One capped run ($0.20), US, past 3 months.
+2. Subscribe to `api.research.trendJobs.getDiscovery({roomId})`. Show `sample.suggestions`
+   (query, Google Trends link, rising % or breakout) with the label "related US searches,
+   past 3 months; search interest, not sales". Show failed/uncertain status honestly.
+3. Shop it: `api.research.research.startResearch({..., trendJobId: sample.jobId})` with the
+   supporting published clue included. The first suggestion becomes the shopping query.
+4. `resumeDiscovery({roomId, jobId})` when `latestJob.canResume`.
+
+Names, numbers and long phrases are refused before any paid call. Needs Jonathon's deploy
+(new `trendJobs` table) before it works on the shared deployment.

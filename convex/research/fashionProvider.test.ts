@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFashionProvider, FASHION_ACTOR, FASHION_BUILD } from "./fashionProvider";
+import { STYLE_SEED_TERMS } from "../../lib/research/styleCategories";
 import { PROVIDER_MAX_RESPONSE_BYTES } from "./provider";
 
 describe("bounded live fashion provider", () => {
@@ -46,5 +47,17 @@ describe("bounded live fashion provider", () => {
     const provider = createFashionProvider("token", fetcher);
     expect((await provider.getDataset("data123")).kind).toBe("uncertain");
     expect((await provider.getDataset("data123")).kind).toBe("uncertain");
+  });
+});
+
+describe("style seed allowlist", () => {
+  it("accepts every reviewed category seed and refuses others before any request", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const provider = createFashionProvider("test-token", fetcher);
+    for (const seed of ["pottery outfit", "vintage pottery outfit", "sneakers", "maya sneaker outfit"])
+      expect((await provider.start(seed)).kind).toBe("failed");
+    expect(fetcher).not.toHaveBeenCalled();
+    for (const seed of STYLE_SEED_TERMS) expect([...STYLE_SEED_TERMS]).toContain(seed);
+    expect(STYLE_SEED_TERMS.has("sneaker outfit") && STYLE_SEED_TERMS.has("vintage jewelry outfit")).toBe(true);
   });
 });

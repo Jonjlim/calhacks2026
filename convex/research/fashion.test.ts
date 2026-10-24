@@ -236,3 +236,26 @@ describe("persisted live fashion discovery", () => {
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 });
+
+describe("reviewed style categories", () => {
+  it.each([
+    ["Loves chunky sneakers", "sneaker outfit"],
+    ["Wants gold earrings", "jewelry outfit"],
+    ["Likes vintage cardigans", "vintage sweater outfit"],
+    ["Wants a new crossbody bag", "handbag outfit"],
+    ["Likes baggy jeans", "denim outfit"],
+  ])("derives a fixed seed for %s", async (clueText, seedTerm) => {
+    const s = await setup(clueText);
+    const { jobId } = value(await s.alex.mutation(f.startDiscovery, s.args));
+    expect(await s.t.run(ctx => ctx.db.get(jobId))).toMatchObject({ seedTerm, supportingPublishedClueIds: [s.clue._id] });
+  });
+  it("picks one category with the most confirmed clues and never sends free text", async () => {
+    const s = await setup("Loves chunky sneakers");
+    await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "interest", text: "Wants pearl necklaces" });
+    await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "explicit_wish", text: "Would love gold earrings" });
+    const { jobId } = value(await s.alex.mutation(f.startDiscovery, s.args));
+    const job = await s.t.run(ctx => ctx.db.get(jobId));
+    expect(job?.seedTerm).toBe("jewelry outfit");
+    expect(job?.supportingPublishedClueIds).toHaveLength(2);
+  });
+});

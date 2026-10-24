@@ -1,6 +1,7 @@
 /** Public caption/hashtag evidence only; no growth inference or production score changes. */
 import { z } from "zod";
 import type { FashionDiscovery, FashionSampleContext, TikTokFashionPost } from "../contracts";
+import { categoryForSeed } from "./styleCategories";
 
 const timestamp = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const contextSchema = z.object({ seedTerm: z.string().trim().min(1).max(100),
@@ -95,30 +96,14 @@ function deduplicateEvidence(posts: TikTokFashionPost[]): TikTokFashionPost[] {
   return [...unique.values()].filter(post => !conflicts.has(post.postId));
 }
 
-/** Bounded English denim vocabulary. Literal mentions, not visual garment recognition. */
-const GARMENTS: Array<{ garment: string; pattern: RegExp }> = [
-  { garment: "baggy jeans", pattern: /\bbaggy[\s_-]*(?:jeans|denim)\b/i },
-  { garment: "loose fit jeans", pattern: /\bloose[\s_-]*(?:(?:fit|leg)[\s_-]*)?(?:jeans|denim)\b/i },
-  { garment: "wide leg jeans", pattern: /\bwide[\s_-]*leg[\s_-]*(?:jeans|denim)\b/i },
-  { garment: "barrel leg jeans", pattern: /\bbarrel[\s_-]*(?:leg[\s_-]*)?(?:jeans|denim)\b/i },
-  { garment: "straight leg jeans", pattern: /\bstraight[\s_-]*(?:leg[\s_-]*)?(?:jeans|denim)\b/i },
-  { garment: "flared jeans", pattern: /\bflar(?:e|ed)[\s_-]*(?:jeans|denim)\b/i },
-  { garment: "bootcut jeans", pattern: /\bboot[\s_-]*cut[\s_-]*(?:jeans|denim)\b/i },
-  { garment: "denim jacket", pattern: /\b(?:denim|jean)[\s_-]*jackets?\b/i },
-  { garment: "denim skirt", pattern: /\b(?:denim|jean)[\s_-]*(?:(?:maxi|mini|midi)[\s_-]*)?skirts?\b/i },
-  { garment: "denim vest", pattern: /\bdenim[\s_-]*vests?\b/i },
-  { garment: "denim shorts", pattern: /\b(?:jorts|denim[\s_-]*shorts)\b/i },
-  { garment: "denim dress", pattern: /\bdenim[\s_-]*dress(?:es)?\b/i },
-  { garment: "denim overalls", pattern: /\bdenim[\s_-]*overalls\b/i },
-];
-
 export function discoverFashionIdeas(posts: TikTokFashionPost[], context: FashionSampleContext, limit = 3): FashionDiscovery[] {
-  if (!contextSchema.safeParse(context).success) return [];
+  const category = categoryForSeed(context.seedTerm);
+  if (!contextSchema.safeParse(context).success || !category) return [];
   const vintage = /\bvintage\b/i.test(context.seedTerm);
   const unique = deduplicateEvidence(posts)
     .filter(post => post.advertising !== "flagged" && post.publishedAt >= context.windowStart && post.publishedAt <= context.windowEnd);
   const ideas: FashionDiscovery[] = [];
-  for (const { garment, pattern } of GARMENTS) {
+  for (const { garment, pattern } of category.garments) {
     const matching = unique.filter(post => {
       const text = `${post.caption} ${post.hashtags.join(" ")}`;
       return pattern.test(text) && (!vintage || /vintage/i.test(text));

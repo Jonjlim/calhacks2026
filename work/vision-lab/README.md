@@ -1,6 +1,37 @@
 # Unwrap vision lab
 
-## Current revision: the sky tree
+## Current revision: shared gestures and group direction
+
+The guided prototype now has real **same-browser, same-origin tab collaboration** through `BroadcastChannel`, with localStorage snapshots and per-field logical clocks. It is not a hosted multiplayer service: another device, browser profile, or origin cannot join this transport. Demo identities are selectable names, not authenticated participants.
+
+- Click an island or character to inspect it; hold and drag its label, character, or ground to move it. Its connections follow. Drag empty sky to orbit. Reset island layout restores the arrangement.
+- While held, left/right release lanes appear. Release far left to pass or right to support; a fast horizontal flick also counts. A gentle or diagonal move arranges the island. The gift box moves but does not receive direction votes. Pointer cancellation/blur releases holds; simultaneous local claims use a deterministic winner and expire with presence.
+- Other tabs see named cursors, held-island ownership, positions, and attributed signals. Position records are per island so independent concurrent moves do not overwrite an entire layout. Presence expires after five seconds and is not persisted. Reload preserves the local room's records; Restart resets the shared prototype room.
+- Each demo identity has one replaceable/undoable signal per island. Positive gift votes add 18 to an illustrative fit score; memory-direction votes add 10 to gifts with that primary memory. Passes subtract the same weight. User-pinned layouts remain pinned; unpinned supported branches lift slightly. A mug has visible connections to both pottery and slow coffee, although this prototype score uses its primary coffee memory.
+- Group signals reveal the pre-authored clay-class alternative. The explanation is labelled **sample agent exploration**. There are no model calls, new source retrievals, or real algorithm training in this page. A vote changes ranking, never confirms ownership, alters a budget, approves a proposal, or orders a gift.
+- Button equivalents in the inspector support phone and keyboard users. The three-step guided flow remains intact. Research progress and results are shared local demo state; a lost demo worker expires after twelve seconds. Approval simulation remains explicitly labelled.
+
+Browser checks: diagonal dragging moved a memory without opening details; the other tab saw the new arrangement. A right toss registered one support signal; a later click opened details normally. Jon's separate support for the mug raised its sample score from 66 to 84 and moved it to rank one in the first tab. Jon then tossed it left: both tabs showed his pass and a score of 48. The first tab visibly displayed Jon’s cursor. Reset layout restored positions without erasing group signals. The supported pottery memory raised the kit from 70 to 80 and revealed the class alternative. This is a design prototype, not production authorization or a production concurrency guarantee.
+
+## Current revision: one shared journey
+
+The guided foundation opens `guided.jsx`: **Remember → Explore → Choose together** on one island with one persistent detail panel. The previous `prototype.jsx` remains an archived study. Rebuild the current page with:
+
+```sh
+node_modules/.bin/esbuild work/vision-lab/guided.jsx --bundle --minify --define:process.env.NODE_ENV='"production"' --outfile=work/vision-lab/prototype.js
+python3 -m http.server 4178 --bind 127.0.0.1 --directory work/vision-lab
+```
+
+The Remember step offers picture prompts and a confirmation before publishing a local sample memory. Clicking an existing character opens its editable memory. One explicit Find gifts action runs a labelled simulated council sequence; sample products grow from their supporting memory islands. The same panel shows the gift story, ownership/price reactions, undo, and an experience alternative. The next-step bar stays visible while scrolling.
+
+Choosing an affordable gift opens the versioned box and a cent-exact illustrative three-person split. Your approval is separate from an explicit button that simulates Jon and Ally approving. Wrapping requires all three. A different gift resets all approvals; editing a memory clears the researched samples and selected gift. The $118 wheel cannot be selected against the $80 budget. Desktop/phone switching preserves this same local state; phone mode unmounts the 3D scene and uses buttons. OS reduced motion is respected, with an additional review toggle.
+
+All memories, research, listings, alternatives, approvals and split amounts on this page are local prototype state. There is no live Convex connection, source retrieval, checkout, permission validation or cross-device synchronization. Shared records now persist locally across reload; Restart resets the shared demo room. This iteration changes only the vision-lab files; it does not restructure the production room yet.
+
+Browser validation: memory confirmation, research progress, product inspection, ownership alternative, version-one approvals, choosing a different gift resetting approvals to zero on version two, and wrapping after all three approvals. Bundle and JavaScript syntax checks pass. Phone mode was checked visually and exercised through research and product inspection. The $118 wheel was disabled; editing its supporting memory returned to Remember and removed the old research results. Actual multi-device collaboration is outside this prototype.
+
+
+## Earlier revision: the sky tree
 
 The default prototype is now a real, interactive Three.js scene using the application's existing React Three Fiber/Drei stack and its actual `curious`, `explorer`, `kind`, `dreamer`, and `calm` character models. This replaces the screenshot-overlay concept as the primary direction. No new dependencies were added.
 

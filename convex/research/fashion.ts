@@ -47,7 +47,7 @@ export const startDiscovery = mutation({
     const key = args.idempotencyKey.trim();
     if (!key || key.length > 200) return err("validation_failed", "Provide a discovery request key of at most 200 characters.");
     const seed = await publishedSeed(ctx, args.roomId);
-    if (!seed) return err("validation_failed", "Publish a confirmed denim interest or wish before discovery.");
+    if (!seed) return err("validation_failed", "Publish a confirmed style interest or wish (denim, jewelry, sneakers, sweaters or bags) before discovery.");
     const previous = await ctx.db.query("fashionJobs").withIndex("by_room_key", q => q.eq("roomId", args.roomId).eq("idempotencyKey", key)).unique();
     if (previous) return previous.seedTerm === seed.seedTerm && previous.knowledgeRevision === member.room.knowledgeRevision
       ? ok({ jobId: previous._id }) : err("validation_failed", "Use a new request key when published interests change.");
