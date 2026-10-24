@@ -18,6 +18,7 @@ import { readCatalog } from "./catalog";
 import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
 import { usableFashionJob } from "./fashion";
+import { usableTrendJob } from "./trendJobs";
 
 type StoredBrief = NonNullable<Doc<"researchJobs">["brief"]>;
 type ClaimedJob = { brief: SearchBrief } | null;
@@ -46,6 +47,7 @@ export const startResearch = mutation({
     budgetMinor: v.optional(v.number()),
     idempotencyKey: v.string(),
     fashionJobId: v.optional(v.id("fashionJobs")),
+    trendJobId: v.optional(v.id("trendJobs")),
   },
   handler: async (ctx, args): Promise<Result<{ jobId: Id<"researchJobs"> }>> => {
     const member = await requireMember(ctx, args.roomId);
@@ -80,18 +82,28 @@ export const startResearch = mutation({
         return err("stale_job", "Use a fresh discovery supported by the current search's published clues.");
       if (direction) brief.queryTerms = [direction.searchQuery];
     }
+    if (args.trendJobId) {
+      if (args.fashionJobId) return err("validation_failed", "Use one discovery source per search.");
+      const trend = await usableTrendJob(ctx, room._id, args.trendJobId);
+      if (!trend || !clueIds.includes(trend.publishedClueId))
+        return err("stale_job", "Use a fresh trend search supported by the current search's published clues.");
+      const suggestion = trend.sample?.suggestions[0];
+      if (suggestion) brief.queryTerms = [suggestion.query];
+    }
     // Canonical collision-free input fingerprint. It contains no raw imports or private caps.
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null,
-      ...(args.fashionJobId ? [args.fashionJobId] : [])]);
+      ...(args.fashionJobId ? [args.fashionJobId] : []), ...(args.trendJobId ? ["trend", args.trendJobId] : [])]);
     const previous = await ctx.db.query("researchJobs")
       .withIndex("by_room_idempotency", q => q.eq("roomId", room._id).eq("idempotencyKey", key)).unique();
     if (previous) return previous.inputHash === inputHash
       ? ok({ jobId: previous._id })
       : err("validation_failed", "Use a new request key when search inputs change.");
-    const recent = await ctx.db.query("researchJobs")
-      .withIndex("by_room", q => q.eq("roomId", room._id)).order("desc").take(50);
-    const duplicate = recent.find(job => job.inputHash === inputHash
-      && ["pending", "running", "uncertain"].includes(job.status));
+    // No recency cap: an older open or uncertain start may already be billable.
+    const duplicate = await ctx.db.query("researchJobs")
+      .withIndex("by_room", q => q.eq("roomId", room._id)).order("desc")
+      .filter(q => q.and(q.eq(q.field("inputHash"), inputHash), q.or(
+        q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain"))))
+      .first();
     if (duplicate) return ok({ jobId: duplicate._id });
     // Explicit persistence adapter for existing Dev 2 validator: roomId lives on the job.
     // Full SearchBrief is restored when calling the provider. No silent schema change.

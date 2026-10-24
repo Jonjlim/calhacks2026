@@ -1079,11 +1079,11 @@ interface FashionDiscovery {
 }
 ```
 
-Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to documented denim garment patterns for this spike. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
+Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to the reviewed category tables in `lib/research/styleCategories.ts`; a sample is matched only against the category of its own seed. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
 
 Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
 
-The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
+The bounded caption vocabulary covers five reviewed categories. Denim: baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. Jewelry: hoop and huggie earrings, ear cuffs, pearl and layered necklaces, charm and tennis bracelets, stacking and signet rings. Sneakers: chunky, platform, retro, suede, slim, white and high-top. Knitwear: cable, chunky and fair isle knits, quarter-zips, turtlenecks, sweater vests, cardigans. Bags: tote, crossbody, shoulder, bucket, baguette, hobo, saddle and mini bags. Adding a category requires a reviewed table entry and tests. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
 ### `giftWorlds` (opt-in zoom-out summaries)
 
 | | |
@@ -1294,6 +1294,49 @@ only an unresolved current request becomes uncertain and queues a status follow-
 This prevents old unresolved inputs from blocking a later explicitly requested
 search while preserving the no-automatic-paid-retry rule for current uncertainty.
 
+### Live Google Trends discovery jobs (Dev 4)
+
+Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools;
+Dev 2 deploy review. Adds a room-indexed `trendJobs` table (`convex/research/trendSchema.ts`),
+isolated from payment and agent tables; no migration of existing rows. Room deletion
+cancels open trend jobs and purges them in the job-first phase, like `fashionJobs`.
+Provider: the already-evaluated `agenscrape~google-trends-scraper` build `1.0.21`
+on the existing Apify account; US, past 3 months, related searches only, at most
+10 dataset rows, $0.20 charge cap. Both social and trend sources share the bounded run
+client in `convex/research/apifyRun.ts` (one POST per start, no automatic retry).
+
+- `research/trendJobs.startDiscovery({roomId, publishedClueId, idempotencyKey})` is a
+  membership-checked mutation for one explicit human request. The seed is the shopping
+  phrase of one active, confirmed published interest/wish: 1–4 lowercase words, letters
+  only, at most 40 characters. Phrases containing a recipient or participant name token
+  are refused (`validation_failed`), never rewritten. Uncertain wording, exclusions and
+  private evidence never reach the provider. Pending is persisted before the paid start;
+  same-key retries, same-seed open/uncertain jobs and fresh (24 h) succeeded samples are
+  reused instead of starting another run.
+- `research/trendJobs.resumeDiscovery({roomId, jobId})` polls a known uncertain run only.
+- `research/trendJobs.getDiscovery({roomId})` returns `Result<TrendDiscoveryView>`:
+  latest job status (`FashionDiscoveryJobView` shape) and the current usable sample.
+- Completion keeps only gift-shaped related queries that contain every seed word and are
+  not local/informational (`discoverShoppingQueries`), up to 5, rising/breakout first.
+  Each `TrendSuggestion` keeps its Google Trends source URL and the observed signals
+  (`popularityIndex`, `growthPercent`, or breakout). Label: search interest, not sales.
+- `research/research.startResearch` adds optional `trendJobId`. It must be a fresh,
+  current, same-room succeeded job whose `publishedClueId` is among the search's clues;
+  otherwise `stale_job`. The first suggestion becomes the one shopping query; an empty
+  sample keeps the ordinary brief. Supplying both `fashionJobId` and `trendJobId` is
+  `validation_failed`. Budget, exclusions, ranking and job fences are unchanged; a trend
+  never becomes a per-product "trending" claim.
+
+```ts
+interface TrendSignal { kind: "top_search" | "rising_search" | "breakout_search"; popularityIndex?: number; growthPercent?: number }
+interface TrendSuggestion { query: string; sourceUrl: string; signals: TrendSignal[] }
+interface TrendDiscoverySample {
+  mode: "live_sample"; label: string; actor: string; build: string; providerRunId: string;
+  context: TrendContext; publishedClueId: string; suggestions: TrendSuggestion[];
+  evidenceSummary: { returnedRows: number; observations: number };
+}
+interface TrendDiscoveryView { latestJob: FashionDiscoveryJobView | null; sample: (TrendDiscoverySample & { jobId: string }) | null }
+```
 ### Live fashion discovery jobs (RC-014, Dev 4)
 
 Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools.
@@ -1306,8 +1349,11 @@ workers refuse rooms marked `deletedAt` and members who have left, so late
 provider responses cannot recreate data after access revocation.
 
 - `research/fashion.startDiscovery({roomId, idempotencyKey})` is a membership-checked
-  mutation. It derives only `denim outfit` or `vintage denim outfit` from active,
-  confirmed published interest/wish clues. Raw private evidence, names and arbitrary
+  mutation. It derives one fixed seed (`denim outfit`, `jewelry outfit`, `sneaker outfit`,
+  `sweater outfit` or `handbag outfit`, optionally prefixed `vintage `) from active,
+  confirmed published interest/wish clues. When several categories match, the one with the
+  most confirmed clues wins (ties keep table order); one request is still one paid run.
+  The provider refuses any seed outside this allowlist. Raw private evidence, names and arbitrary
   user queries never reach the social provider. It persists pending before scheduling
   one bounded Actor start. Same-key retries reuse the job; same-seed open/uncertain
   jobs block duplicate paid starts. A current succeeded sample is reused for 24 hours.
