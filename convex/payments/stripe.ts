@@ -139,6 +139,21 @@ export function createStripeTestAdapter(config: { secretKey: string; frontendOri
     captureIntent(id: string, key: string) {
       return intentId.safeParse(id).success ? intent(`payment_intents/${id}/capture`, "POST", key) : Promise.resolve(failed("Invalid PaymentIntent ID."));
     },
+    async cancelAuthorization(id: string, key: string): Promise<StripeAdapterResult<StripeTestIntent>> {
+      if (!intentId.safeParse(id).success || !keySchema.safeParse(key).success) return failed("Cancellation requires a PaymentIntent and stable idempotency key.");
+      const parent = await intent(`payment_intents/${id}`);
+      if (parent.kind !== "ok") return parent;
+      const p = parent.value;
+      if (p.status === "canceled" && p.amountReceivedMinor === 0 && p.amountCapturableMinor === 0) return parent;
+      if (p.status !== "requires_capture" || p.captureMethod !== "manual" || p.amountReceivedMinor !== 0 || p.amountCapturableMinor <= 0)
+        return failed("Only an uncaptured manual authorization can be canceled. Reconcile other states before recovery.");
+      const result = await intent(`payment_intents/${id}/cancel`, "POST", key);
+      if (result.kind === "ok" && (result.value.status !== "canceled" || result.value.amountReceivedMinor !== 0
+        || result.value.amountCapturableMinor !== 0 || result.value.amountMinor !== p.amountMinor
+        || (["roomId", "revisionId", "participantId", "attemptId"] as const).some(field => result.value.binding[field] !== p.binding[field])))
+        return uncertain("Cancellation did not confirm release of the expected authorization.");
+      return result;
+    },
     async listIntentRefunds(id: string): Promise<StripeAdapterResult<StripeTestRefund[]>> {
       if (!intentId.safeParse(id).success) return failed("Invalid PaymentIntent ID.");
       // Refund objects have no livemode: validate the parent before listing any.

@@ -39,6 +39,28 @@ export interface FashionDiscovery {
   label: string;
 }
 
+export interface FashionDiscoverySample {
+  mode: "live_sample";
+  label: string;
+  actor: string;
+  build: string;
+  providerRunId: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+export interface FashionDiscoveryJobView {
+  id: string;
+  status: JobStatus;
+  createdAt: number;
+  lastError?: string;
+  canResume: boolean;
+}
+export interface FashionDiscoveryView {
+  latestJob: FashionDiscoveryJobView | null;
+  sample: (FashionDiscoverySample & { jobId: string }) | null;
+}
+
 /** RC-014 local experiment; term-level evidence, not product popularity. */
 export interface TrendContext {
   seedTerm: string;
@@ -592,6 +614,17 @@ export interface StripeTestEvent {
 export type StripeAdapterResult<T> =
   | { kind: "ok"; value: T }
   | { kind: "failed" | "uncertain"; message: string };
+
+/** Server-only durable worker port. Implementations enforce human/revision policy in Convex. */
+export interface OrganizerCheckoutClaim {
+  claimId: string;
+  input: StripeCheckoutInput;
+  checkoutSessionId?: string;
+}
+export interface OrganizerCheckoutStore {
+  claim(): Promise<StripeAdapterResult<OrganizerCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
 
 export interface StripePaymentExpectation {
   binding: StripePaymentBinding;

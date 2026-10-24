@@ -9,6 +9,8 @@ This is not an enabled end-to-end payment feature. P0 still ends at pledges.
 - `convex/payments/webhook.ts`: raw UTF-8 body HMAC verification, five-minute past/future tolerance, rotated v1 signatures, test-event envelope validation. Returns event/object references only.
 - `convex/payments/read.ts`: fresh provider reads for an existing stored attempt. A completed redirect is not success. A known intent is retrieved even if Checkout expired. Captured payments discover refunds through `listIntentRefunds`, including refunds whose create response/ID was lost. One complete page of up to 100 is required; truncation or a missing tracked refund stays uncertain. Only GET methods exist on this reader port.
 - `convex/payments/reconcile.ts`: provider observations tied to the expected amount and room/revision/member/attempt. Full authorization, full capture, partial capture, customer action, cancellation and partial/pending/full refunds remain distinct. No database writes or authorization decisions.
+- `convex/payments/checkout.ts`: organizer runner through the documented `OrganizerCheckoutStore` port. Claim must authorize and persist before provider creation; settle must commit under its claim fence before a Checkout URL is released. Existing sessions use GETs, and expired/completed sessions are never automatically replaced. Offline tests include competing workers, persistence failure, lost provider replies and amount/binding mismatch.
+- `cancelAuthorization`: checked test-mode manual-hold cancellation, with zero captured funds and a stable operation key. This follows current Stripe docs and has offline coverage; actual Checkout hold cancellation is still unverified live.
 
 The signatures and DTOs are in CONTRACTS.md and lib/contracts/index.ts. These
 helpers consume the existing PaymentAttempt statuses rather than defining a
@@ -42,6 +44,12 @@ The state layer needs to:
 4. Apply the observation only under the stored attempt/operation version fence. Capture requires current approvals and the group/revision lock before the external call. The existing proposal engine treats P1 statuses as frozen; review that behavior while wiring BE-015.
 5. Keep partial capture and incomplete refunds in recovery. Per-person provider observations do not by themselves establish a funded group or a merchant order.
 6. Return owner-scoped payment views; never expose another member's private caps, raw payer data or provider secrets.
+
+For organizer Checkout, Dev 2 can implement `OrganizerCheckoutStore.claim()` and
+`settle(claimId, result)` and call `runOrganizerCheckout`. The runner does not
+replace any of the authorization, freeze, persistence or reconciliation work
+above. Port interfaces are additive in lib/contracts/index.ts and CONTRACTS.md;
+the payment schema and public endpoints remain untouched.
 
 Do not configure a Stripe webhook endpoint until there is a durable receipt path;
 acknowledging a verified event without persisting it would lose recovery events.

@@ -12,7 +12,8 @@ payment UI has been enabled. P0 still ends at approved pledges.
 - No LLM path can authorize payment operations. Test keys only; no raw card data.
 - Verified events are references to reconcile, not payment-success assertions. Event deduplication belongs in the database.
 - `read.ts` retrieves current Checkout/intent/refund state; `reconcile.ts` derives bounded observations. Captured payments use a complete bounded refund list, including refunds whose create response was lost. Incomplete lists or missing tracked refunds remain uncertain. Repeated events lead to fresh reads, never replayed embedded payment status.
-- Expiring an open Checkout does not cancel a completed authorization. Post-authorization cancellation and durable refund recovery still need the provider/state integration.
+- `cancelAuthorization` retrieves and cancels only a manual hold with zero captured funds, using a stable key. Already canceled holds use a read only. Expiring an open Checkout is a separate operation; live hold cancellation remains unverified.
+- `checkout.ts` runs organizer collection through Dev 2's durable claim/settle port. It returns a Checkout URL only after settlement, re-reads existing references, and never replaces completed/expired sessions automatically. The Convex store implementation is still missing.
 
 Next: pair the existing contract with Dev 2, wire organizer Checkout plus one
 verified webhook route, then

@@ -1221,3 +1221,104 @@ and newest requested job. A superseded lost worker becomes `stale`, not `uncerta
 only an unresolved current request becomes uncertain and queues a status follow-up.
 This prevents old unresolved inputs from blocking a later explicitly requested
 search while preserving the no-automatic-paid-retry rule for current uncertainty.
+
+### Live fashion discovery jobs (RC-014, Dev 4)
+
+Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools.
+This adds a room-indexed `fashionJobs` table, isolated from payment and agent tables.
+The new table has no migration of existing rows. UI and buyer-agent wiring are
+separate consumers; existing research requests remain compatible.
+
+- `research/fashion.startDiscovery({roomId, idempotencyKey})` is a membership-checked
+  mutation. It derives only `denim outfit` or `vintage denim outfit` from active,
+  confirmed published interest/wish clues. Raw private evidence, names and arbitrary
+  user queries never reach the social provider. It persists pending before scheduling
+  one bounded Actor start. Same-key retries reuse the job; same-seed open/uncertain
+  jobs block duplicate paid starts. A current succeeded sample is reused for 24 hours.
+- `research/fashion.resumeDiscovery({roomId, jobId})` polls an existing known run
+  after uncertainty. It never creates a new Actor run. Unknown-start outcomes need
+  operator reconciliation. Changed room knowledge makes a job stale.
+- `research/fashion.getDiscovery({roomId})` returns `Result<FashionDiscoveryView>`.
+  Only room members can see the current room's latest status and usable sample.
+  A sample includes provider Actor/build/run provenance, original 30-day window,
+  retrieval time, supporting published clue IDs, garment queries and TikTok post
+  URLs. No raw captions, creator profiles, media URLs or private imports are stored.
+  Ads are excluded by the existing normalizer; unflagged/unknown is not organic.
+  Labels say sampled mentions, never viral, growing or platform-wide popularity.
+- The pinned GoFetch Actor uses at most 20 results, no profile/comment expansion,
+  one keyword and a $0.50 cap. Provider response limits and no-POST-retry rules apply.
+  A lost worker becomes uncertain. Completion rechecks room knowledge and current
+  confirmed clues; future/stale samples cannot be offered for shopping.
+- Existing `research/research.startResearch` adds optional `fashionJobId`. If supplied,
+  it must be a succeeded, fresh, same-room job for current knowledge. The first sourced
+  direction becomes the one shopping query. Budget, exclusions and ordinary job fences
+  remain server-owned. Discovery does not publish a recipient preference or establish
+  product popularity, sizing, stock, garment age or purchase suitability.
+
+```ts
+interface FashionDiscoverySample {
+  mode: "live_sample";
+  label: string;
+  actor: string;
+  build: string;
+  providerRunId: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+interface FashionDiscoveryJobView {
+  id: string;
+  status: ResearchJob["status"];
+  createdAt: number;
+  lastError?: string;
+  canResume: boolean;
+}
+interface FashionDiscoveryView {
+  latestJob: FashionDiscoveryJobView | null;
+  sample: (FashionDiscoverySample & { jobId: string }) | null;
+}
+```
+
+### Canceling an uncaptured Stripe authorization (Dev 4, RC-013)
+
+`cancelAuthorization(intentId, idempotencyKey)` first retrieves the test-mode
+PaymentIntent. Only manual `requires_capture` intents with zero captured funds
+may be canceled; already-canceled zero-balance intents are returned from the read.
+Other states need reconciliation or refunds. Every write requires a persisted
+operation claim and stable key from Dev 2, and is never automatically retried.
+Only an observed canceled intent with zero received/capturable cents is accepted.
+This does not authorize cancellation or implement group recovery. Real sandbox
+hold cancellation remains unverified; current reference:
+https://docs.stripe.com/api/payment_intents/cancel.
+
+### Organizer Checkout worker port (Dev 4 → Dev 2)
+
+`runOrganizerCheckout(store, adapter)` consumes a server-only durable claim port;
+it is not a public action or authorization policy. `store.claim()` must verify the
+human organizer, current approved revision/total/conditions and enabled test mode,
+then atomically return a persisted claim (or existing reference/pending result).
+Only a newly claimed operation may POST. Every claim supplies the immutable
+`StripeCheckoutInput` with `mode: "collect"` and its stored idempotency key.
+`store.settle(claimId, result)` durably records the provider outcome under the
+operation fence and returns true only if committed for that claim. No Checkout
+URL is released until settlement succeeds. A database interruption after provider
+success remains uncertain; a second worker never blindly creates a new session.
+
+An existing reference is retrieved and checked against the same expected amount,
+USD currency and all four binding IDs. Expired/completed sessions are not replaced
+with another charge attempt. Only an observed open matching session supplies a
+Checkout link; returning from that link is still not payment confirmation. The
+runner uses the existing session/adapter DTOs. It requires Dev 2's implementation
+of the two durable store methods before a public endpoint can use it.
+
+```ts
+interface OrganizerCheckoutClaim {
+  claimId: string;
+  input: StripeCheckoutInput;
+  checkoutSessionId?: string;
+}
+interface OrganizerCheckoutStore {
+  claim(): Promise<StripeAdapterResult<OrganizerCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+```

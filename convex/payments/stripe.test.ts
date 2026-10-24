@@ -99,6 +99,50 @@ describe("Stripe sandbox transport", () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe(`https://api.stripe.com/v1/checkout/sessions/${session.id}/expire`);
   });
 
+  it("cancels an uncaptured manual hold with a keyed write and verifies its release", async () => {
+    const { adapter, fetcher } = setup();
+    fetcher.mockResolvedValueOnce(Response.json(intent))
+      .mockResolvedValueOnce(Response.json({ ...intent, status: "canceled", amount_capturable: 0 }));
+    expect(await adapter.cancelAuthorization(intent.id, "attempt1:cancel")).toMatchObject({ kind: "ok", value: { status: "canceled", amountReceivedMinor: 0, amountCapturableMinor: 0 } });
+    expect(fetcher.mock.calls[1]?.[0]).toBe("https://api.stripe.com/v1/payment_intents/pi_123/cancel");
+    expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({ "Idempotency-Key": "attempt1:cancel" });
+  });
+
+  it("returns an already canceled zero-balance intent without another write", async () => {
+    const { adapter, fetcher } = setup({ ...intent, status: "canceled", amount_capturable: 0 });
+    expect((await adapter.cancelAuthorization(intent.id, "attempt1:cancel")).kind).toBe("ok");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[1]?.method).toBe("GET");
+  });
+
+  it("refuses captured, processing, live and automatic intents without attempting cancellation", async () => {
+    for (const parent of [
+      { ...intent, status: "succeeded", amount_received: 2500, amount_capturable: 0 },
+      { ...intent, status: "processing", amount_capturable: 0 },
+      { ...intent, capture_method: "automatic" }, { ...intent, livemode: true },
+      { ...intent, amount_received: 500, amount_capturable: 2000 },
+    ]) {
+      const { adapter, fetcher } = setup(parent);
+      expect((await adapter.cancelAuthorization(intent.id, "attempt1:cancel")).kind).not.toBe("ok");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("does not assume cancellation succeeded after timeout, retained funds or changed bindings", async () => {
+    for (const response of [
+      intent, { ...intent, status: "canceled", amount_capturable: 0, amount_received: 100 },
+      { ...intent, status: "canceled", amount_capturable: 0, metadata: { ...metadata, revisionId: "other" } },
+    ]) {
+      const { adapter, fetcher } = setup();
+      fetcher.mockResolvedValueOnce(Response.json(intent)).mockResolvedValueOnce(Response.json(response));
+      expect((await adapter.cancelAuthorization(intent.id, "attempt1:cancel")).kind).toBe("uncertain");
+    }
+    const { adapter, fetcher } = setup();
+    fetcher.mockResolvedValueOnce(Response.json(intent)).mockRejectedValueOnce(new Error("private provider detail"));
+    expect((await adapter.cancelAuthorization(intent.id, "attempt1:cancel")).kind).toBe("uncertain");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it("retrieves a succeeded test intent before refunding and preserves a pending refund", async () => {
     const { adapter, fetcher } = setup();
     fetcher.mockResolvedValueOnce(Response.json({ ...intent, status: "succeeded", amount_received: 2500, amount_capturable: 0 }))
