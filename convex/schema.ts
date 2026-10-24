@@ -59,6 +59,10 @@ export default defineSchema({
     body: v.string(),
     createdAt: v.number(),
     clientIdempotencyKey: v.string(),
+    agentJobId: v.optional(v.id("agentJobs")),
+    responseAgentJobId: v.optional(v.id("agentJobs")),
+    replyToSlot: v.optional(v.string()),
+    citations: v.optional(V.agentCitations),
   })
     .index("by_room", ["roomId"])
     .index("by_room_idempotency", ["roomId", "clientIdempotencyKey"]),
@@ -219,8 +223,11 @@ export default defineSchema({
     latestMessageId: v.optional(v.id("chatMessages")),
     knowledgeRevision: v.optional(v.number()),
     mode: v.optional(v.union(v.literal("quiet"), v.literal("auto"))),
+    trigger: v.optional(V.agentTrigger),
+    researchJobId: v.optional(v.id("researchJobs")),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
+    modelUsage: v.optional(V.agentModelUsage),
     lastError: v.optional(v.string()),
     createdAt: v.number(),
   })
@@ -260,6 +267,7 @@ export default defineSchema({
     actor: v.union(v.literal("buyer"), v.literal("extractor"), v.literal("research_planner"), v.literal("recipient")),
     kind: v.union(v.literal("started"), v.literal("question"), v.literal("handoff"), v.literal("completed"), v.literal("failed"), v.literal("stale")),
     summary: v.string(), createdAt: v.number(),
+    citations: v.optional(V.agentCitations),
   }).index("by_room", ["roomId"]),
 
   recipientProfiles: defineTable({
@@ -278,6 +286,10 @@ export default defineSchema({
     roomId: v.id("rooms"),
     knowledgeRevision: v.number(),
     publishedClueIds: v.array(v.id("publishedClues")),
+    actingParticipantId: v.optional(v.id("participants")),
+    originatingAgentJobId: v.optional(v.id("agentJobs")),
+    latestMessageId: v.optional(v.id("chatMessages")),
+    continuationAgentJobId: v.optional(v.id("agentJobs")),
     brief: v.optional(V.searchBrief),
     status: V.jobStatus,
     inputHash: v.string(),

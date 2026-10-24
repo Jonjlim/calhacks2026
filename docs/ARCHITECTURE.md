@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D10 — Bounded research feedback and cached replanning (2026-10-24)
+
+Member 3 and member 4 share one database/catalog projection for ranking and evidence. Each research request captures its requester/message context and at most one persisted continuation pointer. Completion/failure/timeout and continuation scheduling are one transaction. The follow-up is a distinct, version-fenced job; it cannot start research or call another recipient agent. Confirmed knowledge changes can re-evaluate the existing pool after a short debounce, but cannot authorize another paid provider run. Purchase facts in recommendation messages are rendered by application code from current observations, not model prose. Question replies require an explicit slot. No new service/provider is added.
+
 ### D9 — Agent backbone implementation (2026-10-24)
 
 Dev 3 implements bounded role handoffs within Convex, using one configurable Chat Completions-compatible model adapter (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). JSON mode plus strict local Zod validation is used; provider/model support remains **unverified** until a credentialed spike succeeds. No SDK, additional database, or agent service is added. Reference: [JSON mode and structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).

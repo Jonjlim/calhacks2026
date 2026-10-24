@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AppErrorCode } from "../../lib/contracts";
+import type { AppErrorCode, AgentModelUsage } from "../../lib/contracts";
 
 export class AgentFailure extends Error {
   constructor(
@@ -17,24 +17,104 @@ export interface ModelRequest {
 }
 export type ModelTransport = (request: ModelRequest) => Promise<unknown>;
 
+export function createUsageAccumulator() {
+  const summary: AgentModelUsage = {
+    calls: 0,
+    reportedCalls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+  };
+  return {
+    summary,
+    add: (usage: AgentModelUsage) => {
+      for (const key of Object.keys(summary) as Array<keyof AgentModelUsage>)
+        summary[key] += usage[key];
+    },
+  };
+}
+const tokenCount = z.number().int().nonnegative().refine(Number.isSafeInteger);
+const usageSchema = z.object({
+  prompt_tokens: tokenCount,
+  completion_tokens: tokenCount,
+  prompt_tokens_details: z
+    .object({ cached_tokens: tokenCount.optional() })
+    .optional(),
+  completion_tokens_details: z
+    .object({ reasoning_tokens: tokenCount.optional() })
+    .optional(),
+});
+export interface ModelConfig {
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+  maxOutputTokens?: number;
+  reasoningEffort?: string;
+  onUsage?: (usage: AgentModelUsage) => void;
+}
+
 /** Only server configuration controls the URL; model/user content cannot select tools or hosts. */
 export function createModelTransport(
-  config: { baseUrl?: string; apiKey?: string; model?: string },
+  config: ModelConfig,
   fetcher: typeof fetch = fetch,
 ): ModelTransport {
   return async (request) => {
     if (!config.baseUrl || !config.apiKey || !config.model) {
       throw new AgentFailure("unknown", "Model provider is not configured.");
     }
-    const url = new URL(
-      `${config.baseUrl.replace(/\/$/, "")}/chat/completions`,
-    );
-    if (url.protocol !== "https:" || url.username || url.password) {
+    let url: URL;
+    try {
+      url = new URL(`${config.baseUrl.replace(/\/$/, "")}/chat/completions`);
+    } catch {
+      throw new AgentFailure(
+        "validation_failed",
+        "Model endpoint is not a valid URL.",
+      );
+    }
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
       throw new AgentFailure(
         "validation_failed",
         "Model endpoint must use HTTPS.",
       );
     }
+    const maxOutputTokens = config.maxOutputTokens ?? 2400;
+    if (
+      !Number.isSafeInteger(maxOutputTokens) ||
+      maxOutputTokens < 256 ||
+      maxOutputTokens > 8192
+    )
+      throw new AgentFailure(
+        "validation_failed",
+        "Output-token limit must be between 256 and 8192.",
+      );
+    if (
+      config.reasoningEffort &&
+      !["none", "low", "medium", "high", "xhigh"].includes(
+        config.reasoningEffort,
+      )
+    )
+      throw new AgentFailure("validation_failed", "Unknown reasoning effort.");
+    const serialized = JSON.stringify(request.input) ?? "null";
+    if (serialized.length + request.instructions.length > 120_000)
+      throw new AgentFailure(
+        "validation_failed",
+        "Model input exceeded the supported context budget.",
+      );
+    const usage: AgentModelUsage = {
+      calls: 1,
+      reportedCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      reasoningTokens: 0,
+    };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
@@ -49,9 +129,13 @@ export function createModelTransport(
         body: JSON.stringify({
           model: config.model,
           response_format: { type: "json_object" },
+          max_completion_tokens: maxOutputTokens,
+          ...(config.reasoningEffort
+            ? { reasoning_effort: config.reasoningEffort }
+            : {}),
           messages: [
             { role: "system", content: request.instructions },
-            { role: "user", content: JSON.stringify(request.input) },
+            { role: "user", content: serialized },
           ],
         }),
       });
@@ -84,6 +168,21 @@ export function createModelTransport(
         body += decoder.decode(part.value, { stream: true });
       }
       body += decoder.decode();
+      const raw: unknown = JSON.parse(body);
+      const metadata = z.object({ usage: usageSchema }).safeParse(raw);
+      if (metadata.success) {
+        usage.reportedCalls = 1;
+        usage.inputTokens = metadata.data.usage.prompt_tokens;
+        usage.outputTokens = metadata.data.usage.completion_tokens;
+        usage.cachedInputTokens = Math.min(
+          usage.inputTokens,
+          metadata.data.usage.prompt_tokens_details?.cached_tokens ?? 0,
+        );
+        usage.reasoningTokens = Math.min(
+          usage.outputTokens,
+          metadata.data.usage.completion_tokens_details?.reasoning_tokens ?? 0,
+        );
+      }
       const envelope = z
         .object({
           choices: z
@@ -99,7 +198,7 @@ export function createModelTransport(
             .min(1)
             .max(1),
         })
-        .parse(JSON.parse(body));
+        .parse(raw);
       const choice = envelope.choices[0]!;
       if (choice.message.refusal)
         throw new AgentFailure("refused", "Model declined the request.");
@@ -121,6 +220,7 @@ export function createModelTransport(
       throw new AgentFailure("unknown", "Model provider could not be reached.");
     } finally {
       clearTimeout(timeout);
+      config.onUsage?.(usage);
     }
   };
 }
@@ -157,10 +257,19 @@ export async function validatedModelCall<T>(
   );
 }
 
-export function configuredModel(): ModelTransport {
+export function configuredModel(
+  onUsage?: (usage: AgentModelUsage) => void,
+): ModelTransport {
   return createModelTransport({
     baseUrl: process.env.LLM_BASE_URL,
     apiKey: process.env.LLM_API_KEY,
     model: process.env.LLM_MODEL,
+    ...(process.env.LLM_MAX_OUTPUT_TOKENS
+      ? { maxOutputTokens: Number(process.env.LLM_MAX_OUTPUT_TOKENS) }
+      : {}),
+    ...(process.env.LLM_REASONING_EFFORT
+      ? { reasoningEffort: process.env.LLM_REASONING_EFFORT }
+      : {}),
+    onUsage,
   });
 }

@@ -11,6 +11,7 @@ import { requireMember } from "./lib/auth";
 import { cleanText, IDEMPOTENCY_KEY_MAX_CHARS, LIMITS } from "./lib/input";
 import { err, memberError, ok } from "./lib/result";
 import { enqueueBuyerTurn } from "./agents/runtime";
+import { questionSlotSchema } from "../lib/validation";
 
 const TRANSCRIPT_WINDOW = 200;
 
@@ -19,6 +20,7 @@ export const sendMessage = mutation({
     roomId: v.id("rooms"),
     body: v.string(),
     clientIdempotencyKey: v.string(),
+    replyToSlot: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const member = await requireMember(ctx, args.roomId);
@@ -42,6 +44,13 @@ export const sendMessage = mutation({
       return ok(duplicate);
     }
 
+    if (args.replyToSlot !== undefined && !questionSlotSchema.safeParse(args.replyToSlot).success) return err<Doc<"chatMessages">>("validation_failed", "Unknown question slot.");
+    const question = args.replyToSlot === undefined ? null : await ctx.db.query("askedSlots")
+      .withIndex("by_room_slot", q => q.eq("roomId", args.roomId).eq("slot", args.replyToSlot!)).first();
+    if (args.replyToSlot !== undefined && question?.status !== "open") {
+      return err<Doc<"chatMessages">>("invalid_revision", "This question is no longer open.");
+    }
+
     const messageId = await ctx.db.insert("chatMessages", {
       roomId: args.roomId,
       authorKind: "participant",
@@ -49,10 +58,13 @@ export const sendMessage = mutation({
       body,
       createdAt: Date.now(),
       clientIdempotencyKey: key,
+      ...(args.replyToSlot ? { replyToSlot: args.replyToSlot } : {}),
     });
     await ctx.db.patch(args.roomId, { latestMessageId: messageId });
+    if (question) await ctx.db.patch(question._id, { status: "answered", answeredByMessageId: messageId });
 
-    await enqueueBuyerTurn(ctx, args.roomId, member.me._id, "quiet");
+    const turn = await enqueueBuyerTurn(ctx, args.roomId, member.me._id, question ? "auto" : "quiet");
+    if (turn.ok) await ctx.db.patch(messageId, { responseAgentJobId: turn.value.jobId });
 
     return ok((await ctx.db.get(messageId))!);
   },

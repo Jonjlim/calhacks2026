@@ -3,7 +3,7 @@
  * Own job transitions locally so Dev 2's generic jobs.ts remains untouched.
  */
 import { v } from "convex/values";
-import type { ProductListing, PublishedClue, RecommendationsView, Result, SearchBrief } from "../../lib/contracts";
+import type { PublishedClue, RecommendationsView, Result, SearchBrief } from "../../lib/contracts";
 import { normalizedListingSchema } from "../../lib/validation";
 import { internal } from "../_generated/api";
 import { internalAction, internalMutation, mutation, query } from "../_generated/server";
@@ -14,17 +14,14 @@ import { insertResearchJob, isResearchJobCurrent } from "../jobs";
 import { err, ok } from "../lib/result";
 import { buildSearchBrief } from "./brief";
 import { normalizeDataset } from "./normalize";
-import { rankListings } from "./score";
+import { readCatalog } from "./catalog";
+import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
 
 type StoredBrief = NonNullable<Doc<"researchJobs">["brief"]>;
 type ClaimedJob = { brief: SearchBrief } | null;
 
 function toClue(doc: Doc<"publishedClues">): PublishedClue {
-  const { _id, _creationTime: _, ...fields } = doc;
-  return { ...fields, id: _id };
-}
-function toListing(doc: Doc<"productListings">): ProductListing {
   const { _id, _creationTime: _, ...fields } = doc;
   return { ...fields, id: _id };
 }
@@ -94,7 +91,10 @@ export const startResearch = mutation({
       publishedClueIds: clueIds, brief: storedBrief satisfies StoredBrief,
       inputHash, idempotencyKey: key,
     });
-    if (created) await ctx.scheduler.runAfter(0, internal.research.research.runResearch, { jobId });
+    if (created) {
+      await ctx.db.patch(jobId, { actingParticipantId: member.me._id, latestMessageId: room.latestMessageId });
+      await ctx.scheduler.runAfter(0, internal.research.research.runResearch, { jobId });
+    }
     return ok({ jobId });
   },
 });
@@ -104,28 +104,8 @@ export const listRecommendations = query({
   handler: async (ctx, args): Promise<Result<RecommendationsView>> => {
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room to see gifts.");
-    const room = member.room;
-    // by_room's creation-order suffix gives request order, not completion order.
-    const recent = await ctx.db.query("researchJobs")
-      .withIndex("by_room", q => q.eq("roomId", room._id)).order("desc").take(50);
-    const latest = recent.find(job => job.status === "succeeded");
-    if (!latest) return ok({ recommendations: [], listings: [] });
-    const docs = await ctx.db.query("productListings")
-      .withIndex("by_job", q => q.eq("jobId", latest._id)).collect();
-    const clues = (await ctx.db.query("publishedClues")
-      .withIndex("by_room", q => q.eq("roomId", room._id)).collect())
-      .filter(clue => clue.status === "active").map(toClue);
-    const listings = docs.filter(listing => listing.status === "active" && listing.roomId === room._id).map(toListing);
-    const ranked = rankListings({
-      listings, clues, budgetMinor: room.budgetMinor, limit: latest.brief?.listingLimit ?? 12,
-    });
-    const recommendations = ranked.map(row => ({
-      ...row, id: latest._id + ":" + row.listingId, roomId: room._id,
-      // Stable observation time: do not manufacture a new timestamp on every reactive read.
-      createdAt: latest.createdAt,
-    }));
-    const visible = new Set(recommendations.map(row => row.listingId));
-    return ok({ recommendations, listings: listings.filter(listing => visible.has(listing.id)) });
+    const { recommendations, listings } = await readCatalog(ctx, member.room);
+    return ok({ recommendations, listings });
   },
 });
 
@@ -149,6 +129,7 @@ export const expireJob = internalMutation({
     if (job?.status === "running") await ctx.db.patch(jobId, {
       status: "uncertain", lastError: "Research did not finish in time. Check the provider run before retrying.",
     });
+    if (job?.status === "running" && await isCurrent(ctx, job)) await enqueueResearchContinuation(ctx, jobId);
     return null;
   },
 });
@@ -164,6 +145,7 @@ export const settleJob = internalMutation({
     if (!job || job.status !== "running") return null;
     if (await staleUnlessCurrent(ctx, job)) return null;
     await ctx.db.patch(job._id, { status: args.status, lastError: args.message });
+    await enqueueResearchContinuation(ctx, job._id);
     return null;
   },
 });
@@ -177,6 +159,7 @@ export const completeJob = internalMutation({
     const listings = normalizeDataset(args.raw, args.retrievedAt);
     if (!listings.length) {
       await ctx.db.patch(job._id, { status: "failed", lastError: "No usable product listings were returned." });
+      await enqueueResearchContinuation(ctx, job._id);
       return null;
     }
     // Retain the full small candidate pool for instant clue-based re-ranking.
@@ -185,6 +168,7 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
+    await enqueueResearchContinuation(ctx, job._id);
     return null;
   },
 });

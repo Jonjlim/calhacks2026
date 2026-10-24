@@ -17,6 +17,9 @@ import {
   type ExtractionInput,
 } from "./engine";
 import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
+import { readCatalog } from "../research/catalog";
+import { renderRecommendation, researchStatusMessage } from "./presentation";
+import { agentModelUsage } from "../validators";
 
 type AgentJob = Doc<"agentJobs">;
 export async function recordEvent(
@@ -25,6 +28,7 @@ export async function recordEvent(
   actor: AgentEvent["actor"],
   kind: AgentEvent["kind"],
   summary: string,
+  citations?: Doc<"chatMessages">["citations"],
 ): Promise<void> {
   await ctx.db.insert("agentEvents", {
     roomId: job.roomId,
@@ -36,6 +40,7 @@ export async function recordEvent(
       ? { participantId: job.actingParticipantId }
       : {}),
     createdAt: Date.now(),
+    ...(citations ? { citations } : {}),
   });
 }
 
@@ -53,31 +58,17 @@ export async function readBuyerSnapshot(
     .withIndex("by_room", (q) => q.eq("roomId", room._id))
     .order("desc")
     .take(30);
-  const clues = await ctx.db
-    .query("publishedClues")
-    .withIndex("by_room", (q) => q.eq("roomId", room._id))
-    .filter((q) => q.eq(q.field("status"), "active"))
-    .take(100);
+  const catalog = await readCatalog(ctx, room);
   const askedSlots = await ctx.db
     .query("askedSlots")
     .withIndex("by_room_slot", (q) => q.eq("roomId", room._id))
     .take(50);
-  const listings = await ctx.db
-    .query("productListings")
+  const previous = await ctx.db
+    .query("agentDecisions")
     .withIndex("by_room", (q) => q.eq("roomId", room._id))
-    .filter((q) => q.eq(q.field("status"), "active"))
+    .filter((q) => q.eq(q.field("intent"), "recommend"))
     .order("desc")
-    .take(12);
-  const recs = await ctx.db
-    .query("recommendations")
-    .withIndex("by_room", (q) => q.eq("roomId", room._id))
-    .order("desc")
-    .take(12);
-  const research = await ctx.db
-    .query("researchJobs")
-    .withIndex("by_room", (q) => q.eq("roomId", room._id))
-    .order("desc")
-    .take(20);
+    .first();
   const chronological = messages.reverse();
   return {
     roomId: room._id,
@@ -91,6 +82,8 @@ export async function readBuyerSnapshot(
       .filter((m) => m.authorKind === "participant")
       .at(-1)?._id,
     mode: job.mode ?? "quiet",
+    trigger: job.trigger ?? "human",
+    ...(job.researchJobId ? { researchJobId: job.researchJobId } : {}),
     recipientAgentEnabled:
       !!room.recipientProfileId &&
       process.env.RECIPIENT_AGENT_DEMO_ENABLED === "true",
@@ -99,29 +92,53 @@ export async function readBuyerSnapshot(
       author: m.authorKind,
       text: m.body,
     })),
-    publishedClues: clues.map((c) => ({
-      id: c._id,
+    publishedClues: catalog.clues.map((c) => ({
+      id: c.id,
       kind: c.kind,
       text: c.text,
     })),
     askedSlots: askedSlots.map((s) => ({ slot: s.slot, status: s.status })),
-    listings: listings.map((l) => ({
-      id: l._id,
+    listings: catalog.listings.map((l) => ({
+      id: l.id,
       title: l.title,
       ...(l.priceMinor !== undefined ? { priceMinor: l.priceMinor } : {}),
       sourceUrl: l.sourceUrl,
       retrievedAt: l.retrievedAt,
+      priceStatus: l.priceStatus,
+      availability: l.availability,
+      shippingStatus: l.shippingStatus,
+      ...(l.shippingMinor !== undefined
+        ? { shippingMinor: l.shippingMinor }
+        : {}),
     })),
-    recommendations: recs.map((r) => ({
+    recommendations: catalog.recommendations.map((r) => ({
       listingId: r.listingId,
       publishedClueIds: r.publishedClueIds,
       explanation: r.explanation,
     })),
-    researchRunning: research.some(
-      (r) =>
-        r.knowledgeRevision === room.knowledgeRevision &&
-        ["pending", "running", "uncertain"].includes(r.status),
-    ),
+    researchRunning:
+      !!catalog.latestRequest &&
+      catalog.latestRequest.knowledgeRevision === room.knowledgeRevision &&
+      ["pending", "running", "uncertain"].includes(
+        catalog.latestRequest.status,
+      ),
+    ...(catalog.latestRequest
+      ? {
+          research: {
+            jobId: catalog.latestRequest._id,
+            status: catalog.latestRequest.status,
+            ...(catalog.candidatePool
+              ? {
+                  poolJobId: catalog.candidatePool._id,
+                  poolKnowledgeRevision:
+                    catalog.candidatePool.knowledgeRevision,
+                }
+              : {}),
+          },
+        }
+      : {}),
+    excluded: catalog.excluded,
+    previousRecommendationListingIds: previous?.citations?.listingIds ?? [],
   };
 }
 
@@ -130,6 +147,8 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
   return fingerprint({
     roomId: snapshot.roomId,
     mode: snapshot.mode,
+    trigger: snapshot.trigger ?? "human",
+    researchJobId: snapshot.researchJobId,
     recipient: snapshot.recipientDisplayName,
     occasion: snapshot.occasion,
     budget: snapshot.budgetMinor,
@@ -137,13 +156,15 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
     revision: snapshot.knowledgeRevision,
     messages: snapshot.recentMessages.map((m) => m.id),
     slots: snapshot.askedSlots,
-    listings: snapshot.listings.map((l) => [l.id, l.priceMinor, l.retrievedAt]),
+    listings: snapshot.listings,
     recommendations: snapshot.recommendations.map((r) => [
       r.listingId,
       r.publishedClueIds,
     ]),
     researchRunning: snapshot.researchRunning,
     recipientEnabled: snapshot.recipientAgentEnabled,
+    research: snapshot.research,
+    excluded: snapshot.excluded,
   });
 }
 
@@ -165,6 +186,11 @@ export async function enqueueBuyerTurn(
   roomId: Id<"rooms">,
   participantId: Id<"participants">,
   mode: "quiet" | "auto" = "quiet",
+  options: {
+    trigger?: "human" | "research_completed" | "knowledge_changed";
+    researchJobId?: Id<"researchJobs">;
+    delayMs?: number;
+  } = {},
 ): Promise<Result<{ jobId: Id<"agentJobs"> }>> {
   const room = await ctx.db.get(roomId);
   const member = await ctx.db.get(participantId);
@@ -177,6 +203,8 @@ export async function enqueueBuyerTurn(
     kind: "evaluate_thread",
     status: "pending",
     mode,
+    trigger: options.trigger ?? "human",
+    ...(options.researchJobId ? { researchJobId: options.researchJobId } : {}),
     attempt: 0,
     inputHash: "",
     idempotencyKey: "",
@@ -207,10 +235,93 @@ export async function enqueueBuyerTurn(
       : undefined,
     knowledgeRevision: room.knowledgeRevision,
   });
-  await ctx.scheduler.runAfter(0, internal.agents.buyer.evaluateThread, {
-    jobId,
-  });
+  await ctx.scheduler.runAfter(
+    options.delayMs ?? 0,
+    internal.agents.buyer.evaluateThread,
+    {
+      jobId,
+    },
+  );
   return ok({ jobId });
+}
+
+/** Completion hook shared with Dev 4. Runs in the same transaction as research settlement. */
+export async function enqueueResearchContinuation(
+  ctx: MutationCtx,
+  researchJobId: Id<"researchJobs">,
+): Promise<Id<"agentJobs"> | null> {
+  const research = await ctx.db.get(researchJobId);
+  if (
+    !research ||
+    !["succeeded", "failed", "uncertain"].includes(research.status)
+  )
+    return null;
+  if (research.continuationAgentJobId) return research.continuationAgentJobId;
+  const room = await ctx.db.get(research.roomId);
+  const latest = await ctx.db
+    .query("researchJobs")
+    .withIndex("by_room", (q) => q.eq("roomId", research.roomId))
+    .order("desc")
+    .first();
+  if (
+    !room ||
+    latest?._id !== research._id ||
+    room.knowledgeRevision !== research.knowledgeRevision ||
+    room.latestMessageId !== research.latestMessageId ||
+    !research.actingParticipantId
+  )
+    return null;
+  const result = await enqueueBuyerTurn(
+    ctx,
+    room._id,
+    research.actingParticipantId,
+    "auto",
+    { trigger: "research_completed", researchJobId },
+  );
+  if (!result.ok) return null;
+  await ctx.db.patch(researchJobId, {
+    continuationAgentJobId: result.value.jobId,
+  });
+  const job = (await ctx.db.get(result.value.jobId))!;
+  await recordEvent(
+    ctx,
+    job,
+    "research_planner",
+    "handoff",
+    research.status === "succeeded"
+      ? "Product research returned; reviewing the sourced options."
+      : "Product research needs attention; preparing an update.",
+  );
+  return result.value.jobId;
+}
+
+/** Cached replanning only. Rapid clue changes supersede earlier jobs before any model call. */
+export async function enqueueKnowledgeTurn(
+  ctx: MutationCtx,
+  roomId: Id<"rooms">,
+): Promise<void> {
+  const latestSuccess = await ctx.db
+    .query("researchJobs")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .filter((q) => q.eq(q.field("status"), "succeeded"))
+    .order("desc")
+    .first();
+  if (!latestSuccess) return;
+  const room = await ctx.db.get(roomId);
+  if (!room) return;
+  // Prefer the person who requested the pool; never assume organizer authority for an agent.
+  let participantId = latestSuccess.actingParticipantId;
+  if (!participantId) {
+    const last = room.latestMessageId
+      ? await ctx.db.get(room.latestMessageId)
+      : null;
+    participantId = last?.participantId;
+  }
+  if (!participantId) return;
+  await enqueueBuyerTurn(ctx, roomId, participantId, "auto", {
+    trigger: "knowledge_changed",
+    delayMs: 350,
+  });
 }
 
 async function isCurrent(ctx: QueryCtx, job: AgentJob): Promise<boolean> {
@@ -218,6 +329,8 @@ async function isCurrent(ctx: QueryCtx, job: AgentJob): Promise<boolean> {
     const snapshot = await readBuyerSnapshot(ctx, job);
     return (
       !!snapshot &&
+      (job.trigger !== "research_completed" ||
+        snapshot.research?.jobId === job.researchJobId) &&
       buyerInputHash(snapshot) === job.inputHash &&
       buyerInputVersion(snapshot) === job.inputVersion
     );
@@ -374,6 +487,7 @@ export const failJob = internalMutation({
     attempt: v.number(),
     timedOut: v.boolean(),
     code: v.string(),
+    modelUsage: v.optional(agentModelUsage),
   },
   handler: async (ctx, args): Promise<null> => {
     const job = await ctx.db.get(args.jobId);
@@ -387,6 +501,7 @@ export const failJob = internalMutation({
           ? "Agent output could not be validated."
           : "Agent task could not finish. Check provider configuration or retry.",
       finishedAt: Date.now(),
+      ...(args.modelUsage ? { modelUsage: args.modelUsage } : {}),
     });
     await recordEvent(
       ctx,
@@ -400,7 +515,12 @@ export const failJob = internalMutation({
 });
 
 export const completeExtraction = internalMutation({
-  args: { jobId: v.id("agentJobs"), attempt: v.number(), result: v.any() },
+  args: {
+    jobId: v.id("agentJobs"),
+    attempt: v.number(),
+    result: v.any(),
+    modelUsage: v.optional(agentModelUsage),
+  },
   handler: async (ctx, args): Promise<null> => {
     const job = await ctx.db.get(args.jobId);
     if (
@@ -410,6 +530,8 @@ export const completeExtraction = internalMutation({
       job.attempt !== args.attempt
     )
       return null;
+    if (args.modelUsage)
+      await ctx.db.patch(job._id, { modelUsage: args.modelUsage });
     if (!(await isCurrent(ctx, job))) {
       await markStale(ctx, job);
       return null;
@@ -474,6 +596,7 @@ export const completeTurn = internalMutation({
     attempt: v.number(),
     decision: v.any(),
     recipientResult: v.optional(v.any()),
+    modelUsage: v.optional(agentModelUsage),
   },
   handler: async (ctx, args): Promise<null> => {
     const job = await ctx.db.get(args.jobId);
@@ -484,6 +607,8 @@ export const completeTurn = internalMutation({
       job.attempt !== args.attempt
     )
       return null;
+    if (args.modelUsage)
+      await ctx.db.patch(job._id, { modelUsage: args.modelUsage });
     if (!(await isCurrent(ctx, job))) {
       await markStale(ctx, job);
       return null;
@@ -511,12 +636,34 @@ export const completeTurn = internalMutation({
     }
     const searchBrief =
       decision.intent === "search" ? decision.searchBrief : undefined;
+    const rendered =
+      decision.intent === "recommend"
+        ? renderRecommendation(decision, snapshot)
+        : null;
+    const citations: Doc<"chatMessages">["citations"] = rendered
+      ? {
+          listingIds: rendered.citations.listingIds.map((id) =>
+            ctx.db.normalizeId("productListings", id)!,
+          ),
+          publishedClueIds: rendered.citations.publishedClueIds.map((id) =>
+            ctx.db.normalizeId("publishedClues", id)!,
+          ),
+          ...(rendered.citations.researchJobId
+            ? {
+                researchJobId: ctx.db.normalizeId(
+                  "researchJobs",
+                  rendered.citations.researchJobId,
+                )!,
+              }
+            : {}),
+        }
+      : undefined;
     const stored = {
       intent: decision.intent,
       rationale: decision.rationale,
       needsFollowup: false,
       ...("chatMessage" in decision
-        ? { chatMessage: decision.chatMessage }
+        ? { chatMessage: rendered?.body ?? decision.chatMessage }
         : {}),
       ...("clarifySlot" in decision
         ? { clarifySlot: decision.clarifySlot }
@@ -553,7 +700,9 @@ export const completeTurn = internalMutation({
       const messageId = await ctx.db.insert("chatMessages", {
         roomId: job.roomId,
         authorKind: "buyer_agent",
-        body: decision.chatMessage,
+        agentJobId: job._id,
+        ...(citations ? { citations } : {}),
+        body: rendered?.body ?? decision.chatMessage,
         clientIdempotencyKey: `agent:${job._id}`,
         createdAt: Date.now(),
       });
@@ -593,6 +742,9 @@ export const completeTurn = internalMutation({
       const researchJobId = await ctx.db.insert("researchJobs", {
         roomId: job.roomId,
         knowledgeRevision: snapshot.knowledgeRevision,
+        actingParticipantId: job.actingParticipantId,
+        originatingAgentJobId: job._id,
+        latestMessageId: job.latestMessageId,
         publishedClueIds: snapshot.publishedClues.map((c) =>
           ctx.db.normalizeId("publishedClues", c.id)!,
         ),
@@ -650,10 +802,59 @@ export const completeTurn = internalMutation({
         roomId: job.roomId,
         authorKind: "buyer_agent",
         body: text,
+        agentJobId: job._id,
         clientIdempotencyKey: `agent:${job._id}`,
         createdAt: Date.now(),
       });
       await recordEvent(ctx, job, "recipient", "completed", text);
+    }
+    const statusMessage = researchStatusMessage(snapshot);
+    if (statusMessage) {
+      await ctx.db.insert("chatMessages", {
+        roomId: job.roomId,
+        authorKind: "buyer_agent",
+        agentJobId: job._id,
+        body: statusMessage,
+        clientIdempotencyKey: `agent:${job._id}`,
+        createdAt: Date.now(),
+      });
+      await recordEvent(ctx, job, "research_planner", "failed", statusMessage);
+    }
+    if (job.trigger === "knowledge_changed") {
+      const affected =
+        snapshot.excluded?.filter((row) =>
+          snapshot.previousRecommendationListingIds?.includes(row.listingId),
+        ) ?? [];
+      if (affected.length)
+        await recordEvent(
+          ctx,
+          job,
+          "buyer",
+          "completed",
+          "An earlier recommendation no longer fits the current clues or availability.",
+          {
+            listingIds: affected.map((row) =>
+              ctx.db.normalizeId("productListings", row.listingId)!,
+            ),
+            publishedClueIds: [
+              ...new Set(
+                affected.flatMap((row) =>
+                  row.clueId
+                    ? [ctx.db.normalizeId("publishedClues", row.clueId)!]
+                    : [],
+                ),
+              ),
+            ],
+            ...(snapshot.research?.poolJobId
+              ? {
+                  researchJobId: ctx.db.normalizeId(
+                    "researchJobs",
+                    snapshot.research.poolJobId,
+                  )!,
+                }
+              : {}),
+          },
+        );
     }
     await ctx.db.patch(job._id, {
       status: "succeeded",
@@ -664,9 +865,12 @@ export const completeTurn = internalMutation({
       job,
       "buyer",
       "completed",
-      decision.intent === "listen" || decision.intent === "wait"
-        ? "Listening while the group decides."
-        : "Agent turn completed.",
+      rendered
+        ? "Shared sourced options with their supporting clues."
+        : decision.intent === "listen" || decision.intent === "wait"
+          ? "Listening while the group decides."
+          : "Agent turn completed.",
+      citations,
     );
     return null;
   },

@@ -13,7 +13,7 @@ import type { Result } from "../../lib/contracts";
 import { getMembership } from "../lib/auth";
 import { err, ok } from "../lib/result";
 import { extractEvidence, fingerprint } from "./engine";
-import { configuredModel, AgentFailure } from "./model";
+import { configuredModel, AgentFailure, createUsageAccumulator } from "./model";
 
 /** Contract: extractClues → { jobId }; results land on listMyProposedClues. */
 export const extractClues = mutation({
@@ -73,12 +73,17 @@ export const runExtraction = internalAction({
       kind: "extract",
     });
     if (!work?.extraction) return null;
+    const usage = createUsageAccumulator();
     try {
-      const result = await extractEvidence(work.extraction, configuredModel());
+      const result = await extractEvidence(
+        work.extraction,
+        configuredModel(usage.add),
+      );
       await ctx.runMutation(internal.agents.runtime.completeExtraction, {
         jobId,
         attempt: work.attempt,
         result,
+        modelUsage: usage.summary,
       });
     } catch (error) {
       await ctx.runMutation(internal.agents.runtime.failJob, {
@@ -87,6 +92,7 @@ export const runExtraction = internalAction({
         timedOut:
           error instanceof AgentFailure && error.code === "provider_timeout",
         code: error instanceof AgentFailure ? error.code : "unknown",
+        modelUsage: usage.summary,
       });
     }
     return null;

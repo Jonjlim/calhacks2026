@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createModelTransport } from "./model";
+import { createModelTransport, createUsageAccumulator } from "./model";
 
 const request = {
   role: "buyer" as const,
@@ -12,6 +12,74 @@ const config = {
   model: "configured-model",
 };
 describe("model transport", () => {
+  it("caps output tokens and records usage without storing provider payloads", async () => {
+    const usage = createUsageAccumulator();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({
+          choices: [{ finish_reason: "stop", message: { content: "{}" } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 200,
+            prompt_tokens_details: { cached_tokens: 300 },
+            completion_tokens_details: { reasoning_tokens: 50 },
+          },
+        }),
+      );
+    await createModelTransport(
+      {
+        ...config,
+        maxOutputTokens: 1800,
+        reasoningEffort: "none",
+        onUsage: usage.add,
+      },
+      fetcher,
+    )(request);
+    expect(JSON.parse(String(fetcher.mock.calls[0]![1]?.body))).toMatchObject({
+      max_completion_tokens: 1800,
+      reasoning_effort: "none",
+    });
+    expect(usage.summary).toEqual({
+      calls: 1,
+      reportedCalls: 1,
+      inputTokens: 1000,
+      outputTokens: 200,
+      cachedInputTokens: 300,
+      reasoningTokens: 50,
+    });
+  });
+  it("distinguishes missing usage metadata from zero billed usage", async () => {
+    const usage = createUsageAccumulator();
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({
+          choices: [{ finish_reason: "stop", message: { content: "{}" } }],
+        }),
+      );
+    await createModelTransport(
+      { ...config, onUsage: usage.add },
+      fetcher,
+    )(request);
+    expect(usage.summary).toMatchObject({ calls: 1, reportedCalls: 0 });
+  });
+  it("rejects invalid output budgets and oversized inputs before making a request", async () => {
+    const fetcher = vi.fn();
+    await expect(
+      createModelTransport(
+        { ...config, maxOutputTokens: 999999 },
+        fetcher,
+      )(request),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(
+      createModelTransport(
+        config,
+        fetcher,
+      )({ ...request, input: "x".repeat(120001) }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("requires explicit configuration and HTTPS", async () => {
     const fetcher = vi.fn();
     await expect(
@@ -26,18 +94,16 @@ describe("model transport", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
   it("uses JSON mode, keeps the key in headers and parses complete responses", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        Response.json({
-          choices: [
-            {
-              finish_reason: "stop",
-              message: { content: '{"intent":"listen"}' },
-            },
-          ],
-        }),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      Response.json({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: '{"intent":"listen"}' },
+          },
+        ],
+      }),
+    );
     expect(await createModelTransport(config, fetcher)(request)).toEqual({
       intent: "listen",
     });

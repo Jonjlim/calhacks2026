@@ -8,6 +8,21 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Member 3 research continuation (2026-10-24)
+
+Owner: Dev 3; shared consumers: Dev 1 (message evidence/activity), Dev 2 (human messages/knowledge hooks), Dev 4 (catalog/research completion).
+
+- Shared `readCatalog(ctx, room)` in `convex/research/catalog.ts` supplies the same latest-successful candidate pool and dynamic ranking to both `listRecommendations` and buyer snapshots. Legacy stored recommendation rows are not an agent source. The helper also supplies latest-request status, excluded-listing reasons, and current active clues. Public query output stays unchanged.
+- `ResearchJob` storage adds optional `actingParticipantId`, `originatingAgentJobId`, `latestMessageId`, and `continuationAgentJobId`. Public and agent-started research capture the acting member and latest human message. Every terminal current research request may enqueue **one** continuation atomically; a duplicate callback, newer request, changed knowledge, removed member, or newer human message cannot start another or post an obsolete response. Old jobs without an actor have no automatic continuation.
+- `AgentJob` gains optional `trigger: "human" | "research_completed" | "knowledge_changed"` and `researchJobId`. Continuations use the existing evaluate-thread worker, independent of quiet-mode mentions. Non-human turns may recommend, clarify, listen, or wait; they may not search or query the recipient agent. No recursive/paid-provider loop is introduced. Failed/uncertain research yields a fixed, truthful status message without another model call. Research retry remains an explicit new research request.
+- Publication/withdrawal/source deletion bumps knowledge and schedules a debounced, cached-candidate re-evaluation when a prior candidate pool exists. No automatic paid retrieval occurs. The server rechecks current catalog/version/membership at commit. Selection and proposals still change only through their existing deterministic operations.
+- Recommendation chat is rendered from validated listing/clue IDs, observed price/status, and source observations; the model chooses the shortlist but cannot author purchase facts. Chat storage/`ChatMessage` gains optional `agentJobId`, `citations: { listingIds, publishedClueIds, researchJobId? }`, and `responseAgentJobId`. Activity events may carry the same room-visible citations. No private source IDs or recipient preference IDs are included.
+- `sendMessage` adds optional `replyToSlot`; it closes that exact open question atomically with the submitted human message. `answerQuestion` retries return the original message/job pair, even after later chat, rather than scheduling another turn. Untargeted ordinary chat does not silently resolve a question or publish a preference.
+- Activity projection adds bounded owner-safe job status/retry eligibility and model-configuration presence flags (booleans only). No secret values, provider payloads, or private job details are returned.
+- Model calls include a configurable output-token cap (default 2,400, allowed 256–8,192) and optional configured reasoning effort. `AgentJob.modelUsage` optionally records `{ calls, reportedCalls, inputTokens, outputTokens, cachedInputTokens, reasoningTokens }`, including retries and returned recipient-role usage. Counts are attempt-local and exposed only to the acting member. Missing provider usage is explicitly distinguished by `reportedCalls`; counts are diagnostics, not a settled bill. No model price is hardcoded.
+
+Migration: additive optional fields; existing fixtures and old records remain readable. Research completion and knowledge-revision hooks are narrow cross-workstream changes. Frontend remains a separate integration task.
+
 ### Member 3 implementation additions (2026-10-24)
 
 Owner: Dev 3; consumers: Dev 1 (agent controls/activity), Dev 2 (chat hook), Dev 4 (research jobs).

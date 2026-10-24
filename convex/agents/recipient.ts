@@ -21,7 +21,7 @@ import type { Id } from "../_generated/dataModel";
 import { getMembership, getUserId } from "../lib/auth";
 import { err, ok } from "../lib/result";
 import * as V from "../validators";
-import { configuredModel } from "./model";
+import { configuredModel, createUsageAccumulator, AgentFailure } from "./model";
 import { answerRecipientQuery } from "./recipientPolicy";
 
 export const createProfile = mutation({
@@ -213,6 +213,8 @@ export interface RecipientResult {
   reply: AgentReply;
   profileId?: Id<"recipientProfiles">;
   profileRevision?: number;
+  modelUsage?: import("../../lib/contracts").AgentModelUsage;
+  errorCode?: import("../../lib/contracts").AppErrorCode;
 }
 export const queryRecipientAgent = internalAction({
   args: { jobId: v.id("agentJobs"), attempt: v.number(), query: v.any() },
@@ -230,15 +232,30 @@ export const queryRecipientAgent = internalAction({
           policy: { allowed: false, reason: "out_of_policy" },
         },
       };
-    const reply = await answerRecipientQuery(
-      args.query as AgentQuery,
-      context,
-      configuredModel(),
-    );
-    return {
-      reply,
-      profileId: context.profileId,
-      profileRevision: context.revision,
-    };
+    const usage = createUsageAccumulator();
+    try {
+      const reply = await answerRecipientQuery(
+        args.query as AgentQuery,
+        context,
+        configuredModel(usage.add),
+      );
+      return {
+        reply,
+        profileId: context.profileId,
+        profileRevision: context.revision,
+        modelUsage: usage.summary,
+      };
+    } catch (error) {
+      return {
+        reply: {
+          queryId: `${args.jobId}:recipient`,
+          status: "refused",
+          usedPreferenceIds: [],
+          policy: { allowed: false, reason: "model_unavailable" },
+        },
+        errorCode: error instanceof AgentFailure ? error.code : "unknown",
+        modelUsage: usage.summary,
+      };
+    }
   },
 });

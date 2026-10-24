@@ -17,6 +17,8 @@ export interface BuyerSnapshot {
   deadlineAt?: number;
   latestMessageId?: string;
   mode: "quiet" | "auto";
+  trigger?: "human" | "research_completed" | "knowledge_changed";
+  researchJobId?: string;
   recipientAgentEnabled: boolean;
   recentMessages: Array<{
     id: string;
@@ -34,6 +36,10 @@ export interface BuyerSnapshot {
     priceMinor?: number;
     sourceUrl: string;
     retrievedAt: number;
+    priceStatus?: "observed" | "unknown";
+    availability?: "in_stock" | "limited" | "unavailable" | "unknown";
+    shippingStatus?: "observed" | "unresolved" | "unknown";
+    shippingMinor?: number;
   }>;
   recommendations: Array<{
     listingId: string;
@@ -41,6 +47,18 @@ export interface BuyerSnapshot {
     explanation: string;
   }>;
   researchRunning: boolean;
+  research?: {
+    jobId: string;
+    status: string;
+    poolJobId?: string;
+    poolKnowledgeRevision?: number;
+  };
+  excluded?: Array<{
+    listingId: string;
+    reason: "excluded_by_clue" | "unavailable" | "inactive";
+    clueId?: string;
+  }>;
+  previousRecommendationListingIds?: string[];
 }
 
 export const BASE_INSTRUCTIONS = `You are a bounded role in Unwrap, a collaborative gift studio.
@@ -52,12 +70,16 @@ export function fingerprint(parts: unknown): string {
   return JSON.stringify(parts);
 }
 export function shouldEvaluate(snapshot: BuyerSnapshot): boolean {
+  if (
+    snapshot.trigger === "research_completed" ||
+    snapshot.trigger === "knowledge_changed"
+  )
+    return true;
+  if (snapshot.mode === "auto") return true;
   const last = snapshot.recentMessages
     .filter((m) => m.author === "participant")
     .at(-1);
-  return (
-    !!last && (snapshot.mode === "auto" || /(?:^|\s)@unwrap\b/i.test(last.text))
-  );
+  return !!last && /(?:^|\s)@unwrap\b/i.test(last.text);
 }
 
 export function validateDecision(
@@ -69,6 +91,18 @@ export function validateDecision(
     rationale,
     needsFollowup: false,
   });
+  if (
+    snapshot.trigger === "research_completed" &&
+    ["failed", "uncertain"].includes(snapshot.research?.status ?? "")
+  )
+    return silent("Report research status without a model-written response.");
+  if (
+    snapshot.trigger &&
+    snapshot.trigger !== "human" &&
+    (decision.intent === "search" || decision.intent === "query_recipient")
+  ) {
+    return silent("Automatic continuation cannot start external work.");
+  }
   if (decision.intent === "clarify") {
     // One open question at a time; do not silently mark a human answer as confirmed.
     if (
@@ -114,23 +148,30 @@ export function validateDecision(
     };
   }
   if (decision.intent === "recommend") {
+    const recommendation = {
+      ...decision,
+      citations: {
+        ...decision.citations,
+        listingIds: [...new Set(decision.citations.listingIds)].slice(0, 3),
+      },
+    };
     const listings = new Set(snapshot.listings.map((l) => l.id));
     const clues = new Set(snapshot.publishedClues.map((c) => c.id));
     if (
-      decision.citations.listingIds.some((id) => !listings.has(id)) ||
-      decision.citations.publishedClueIds.some((id) => !clues.has(id))
+      recommendation.citations.listingIds.some((id) => !listings.has(id)) ||
+      recommendation.citations.publishedClueIds.some((id) => !clues.has(id))
     ) {
       throw new AgentFailure(
         "validation_failed",
         "Recommendation referenced unavailable evidence.",
       );
     }
-    for (const id of decision.citations.listingIds) {
+    for (const id of recommendation.citations.listingIds) {
       const rec = snapshot.recommendations.find((r) => r.listingId === id);
       if (
         !rec ||
         !rec.publishedClueIds.some((clueId) =>
-          decision.citations.publishedClueIds.includes(clueId),
+          recommendation.citations.publishedClueIds.includes(clueId),
         )
       ) {
         throw new AgentFailure(
@@ -139,6 +180,20 @@ export function validateDecision(
         );
       }
     }
+    const supported = new Set(
+      recommendation.citations.listingIds.flatMap(
+        (id) =>
+          snapshot.recommendations.find((row) => row.listingId === id)!
+            .publishedClueIds,
+      ),
+    );
+    return {
+      ...recommendation,
+      citations: {
+        ...recommendation.citations,
+        publishedClueIds: [...supported],
+      },
+    };
   }
   if (decision.intent === "query_recipient") {
     if (!snapshot.recipientAgentEnabled)
@@ -157,12 +212,48 @@ export async function decideBuyer(
   snapshot: BuyerSnapshot,
   model: ModelTransport,
 ): Promise<ModelDecision> {
+  if (
+    snapshot.trigger === "research_completed" &&
+    ["failed", "uncertain"].includes(snapshot.research?.status ?? "")
+  ) {
+    return {
+      intent: "listen",
+      rationale: "Report the research outcome without another model call.",
+      needsFollowup: false,
+    };
+  }
   if (!shouldEvaluate(snapshot))
     return {
       intent: "listen",
       rationale: "Quiet mode; no direct mention.",
       needsFollowup: false,
     };
+  if (
+    snapshot.trigger &&
+    snapshot.trigger !== "human" &&
+    !snapshot.recommendations.some((rec) => rec.publishedClueIds.length > 0)
+  ) {
+    const blocked = snapshot.askedSlots.some(
+      (slot) =>
+        slot.status === "open" ||
+        (slot.slot === "direction" && slot.status === "answered"),
+    );
+    return blocked
+      ? {
+          intent: "listen",
+          rationale:
+            "No grounded candidates; waiting for the existing question.",
+          needsFollowup: false,
+        }
+      : {
+          intent: "clarify",
+          clarifySlot: "direction",
+          chatMessage:
+            "The existing options do not match the confirmed clues. Would you like to try a different gift direction?",
+          rationale: "No supported candidate remains in the retrieved pool.",
+          needsFollowup: false,
+        };
+  }
   const decision = await validatedModelCall(
     model,
     {
@@ -170,7 +261,7 @@ export async function decideBuyer(
       input: { snapshot, outputSchema: z.toJSONSchema(agentDecisionSchema) },
       instructions:
         BASE_INSTRUCTIONS +
-        `\nYou are the buyer facilitator. Listen when humans are talking to each other. Ask at most one useful, short question. Never repeat an open or answered slot. Search only from published clues. Recommend only supplied listings and cite their existing evidence connections. query_recipient asks a separate permissioned agent; do not ask for private messages. needsFollowup must be false. Extracting imports is a separate user-triggered workflow. Match outputSchema exactly.`,
+        `\nYou are the buyer facilitator. Listen when humans are talking to each other. Ask at most one useful, short question. Never repeat an open or answered slot. Search only from published clues. Recommend at most three supplied listings with real evidence connections; prefer reusing suitable cached candidates over another search. When knowledge changes, inspect excluded and previousRecommendationListingIds to understand what no longer fits. A research_completed or knowledge_changed trigger is an automatic continuation: recommend or clarify, or listen/wait when needed; NEVER search or query_recipient. Never recommend a listing without supporting published clues. query_recipient on a human turn asks a separate permissioned agent; do not ask for private messages. needsFollowup must be false. Extracting imports is a separate user-triggered workflow. Match outputSchema exactly.`,
     },
     agentDecisionSchema,
   );

@@ -15,7 +15,7 @@ import { getMembership } from "../lib/auth";
 import { err, ok } from "../lib/result";
 import { enqueueBuyerTurn } from "./runtime";
 import { decideBuyer } from "./engine";
-import { configuredModel, AgentFailure } from "./model";
+import { configuredModel, AgentFailure, createUsageAccumulator } from "./model";
 import type { RecipientResult } from "./recipient";
 
 export const requestTurn = mutation({
@@ -65,10 +65,20 @@ export const answerQuestion = mutation({
       )
       .first();
     if (prior) {
-      const turn = await enqueueBuyerTurn(ctx, args.roomId, member._id, "auto");
-      return turn.ok
-        ? ok({ messageId: prior._id, jobId: turn.value.jobId })
-        : turn;
+      if (
+        prior.body !== args.body.trim() ||
+        (prior.replyToSlot && prior.replyToSlot !== args.slot)
+      )
+        return err(
+          "validation_failed",
+          "Use a new key for a different answer.",
+        );
+      return prior.responseAgentJobId
+        ? ok({ messageId: prior._id, jobId: prior.responseAgentJobId })
+        : err(
+            "invalid_revision",
+            "This older answer has no retryable response reference.",
+          );
     }
     const question = await ctx.db
       .query("askedSlots")
@@ -85,6 +95,7 @@ export const answerQuestion = mutation({
       body: args.body.trim(),
       createdAt: Date.now(),
       clientIdempotencyKey: `answer:${member._id}:${args.clientIdempotencyKey}`,
+      replyToSlot: args.slot,
     });
     await ctx.db.patch(args.roomId, { latestMessageId: messageId });
     await ctx.db.patch(question._id, {
@@ -92,6 +103,8 @@ export const answerQuestion = mutation({
       answeredByMessageId: messageId,
     });
     const turn = await enqueueBuyerTurn(ctx, args.roomId, member._id, "auto");
+    if (turn.ok)
+      await ctx.db.patch(messageId, { responseAgentJobId: turn.value.jobId });
     return turn.ok ? ok({ messageId, jobId: turn.value.jobId }) : turn;
   },
 });
@@ -101,6 +114,8 @@ export const abandonQuestion = mutation({
   handler: async (ctx, args) => {
     const member = await getMembership(ctx, args.roomId);
     if (!member) return err("unauthorized", "Room membership required.");
+    if (!questionSlotSchema.safeParse(args.slot).success)
+      return err("validation_failed", "Unknown question slot.");
     const question = await ctx.db
       .query("askedSlots")
       .withIndex("by_room_slot", (q) =>
@@ -134,24 +149,56 @@ export const listActivity = query({
       .withIndex("by_room_slot", (q) => q.eq("roomId", roomId))
       .filter((q) => q.eq(q.field("status"), "open"))
       .take(10);
+    const jobs = await ctx.db
+      .query("agentJobs")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .filter((q) =>
+        q.or(
+          q.neq(q.field("kind"), "extract"),
+          q.eq(q.field("actingParticipantId"), member._id),
+        ),
+      )
+      .order("desc")
+      .take(25);
     return ok({
-      events: events
-        .reverse()
-        .map((e) => ({
-          id: e._id,
-          roomId: e.roomId,
-          jobId: e.jobId,
-          actor: e.actor,
-          kind: e.kind,
-          summary: e.summary,
-          createdAt: e.createdAt,
-        })),
+      events: events.reverse().map((e) => ({
+        id: e._id,
+        roomId: e.roomId,
+        jobId: e.jobId,
+        actor: e.actor,
+        kind: e.kind,
+        summary: e.summary,
+        createdAt: e.createdAt,
+        ...(e.citations ? { citations: e.citations } : {}),
+      })),
       questions: questions.map((q) => ({
         slot: q.slot,
         messageId: q.messageId,
         status: q.status,
         askedAt: q.askedAt,
       })),
+      jobs: jobs.map((job) => ({
+        id: job._id,
+        kind: job.kind,
+        status: job.status,
+        trigger: job.trigger ?? "human",
+        createdAt: job.createdAt,
+        canRetry:
+          job.actingParticipantId === member._id &&
+          ["failed", "uncertain"].includes(job.status) &&
+          job.attempt < 2,
+        ...(job.actingParticipantId === member._id && job.modelUsage
+          ? { modelUsage: job.modelUsage }
+          : {}),
+      })),
+      capabilities: {
+        modelConfigured:
+          !!process.env.LLM_BASE_URL &&
+          !!process.env.LLM_API_KEY &&
+          !!process.env.LLM_MODEL,
+        recipientDemoEnabled:
+          process.env.RECIPIENT_AGENT_DEMO_ENABLED === "true",
+      },
     });
   },
 });
@@ -198,8 +245,12 @@ export const evaluateThread = internalAction({
       kind: "evaluate_thread",
     });
     if (!work?.snapshot) return null;
+    const usage = createUsageAccumulator();
     try {
-      const decision = await decideBuyer(work.snapshot, configuredModel());
+      const decision = await decideBuyer(
+        work.snapshot,
+        configuredModel(usage.add),
+      );
       let recipientResult: RecipientResult | undefined;
       if (decision.intent === "query_recipient") {
         recipientResult = await ctx.runAction(
@@ -215,11 +266,18 @@ export const evaluateThread = internalAction({
             },
           },
         );
+        if (recipientResult.modelUsage) usage.add(recipientResult.modelUsage);
+        if (recipientResult.errorCode)
+          throw new AgentFailure(
+            recipientResult.errorCode,
+            "Recipient agent could not finish.",
+          );
       }
       await ctx.runMutation(internal.agents.runtime.completeTurn, {
         jobId,
         attempt: work.attempt,
         decision,
+        modelUsage: usage.summary,
         ...(recipientResult ? { recipientResult } : {}),
       });
     } catch (error) {
@@ -229,6 +287,7 @@ export const evaluateThread = internalAction({
         timedOut:
           error instanceof AgentFailure && error.code === "provider_timeout",
         code: error instanceof AgentFailure ? error.code : "unknown",
+        modelUsage: usage.summary,
       });
     }
     return null;
