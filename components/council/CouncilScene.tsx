@@ -8,7 +8,7 @@ import { InkOutline } from "@/components/world/painterly/InkOutline";
 import { paint } from "@/components/world/painterly/materials";
 import { giftPaperTexture, stoneTexture } from "@/components/world/painterly/textures";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilMemberState, type DecorationSpec } from "@/lib/council/contracts";
-import { CouncilMember } from "./CouncilMember";
+import { CouncilSpirit } from "./CouncilSpirit";
 import { Decoration } from "./Decoration";
 
 /**
@@ -231,7 +231,7 @@ export default function CouncilScene({ members, decorations, freshIds, note }: C
           <Jar key={k} kind={k} />
         ))}
         {COUNCIL_ACTORS.map((a) => (
-          <CouncilMember key={a} state={members[a]} position={MEMBER_POS[a].p} rotationY={MEMBER_POS[a].r} scale={0.62} />
+          <CouncilSpirit key={a} state={members[a]} position={MEMBER_POS[a].p} rotationY={MEMBER_POS[a].r} scale={AVATAR_WORLD_SCALE} />
         ))}
         <Garden decorations={decorations} freshIds={freshIds} />
         {note && <MemoryNote jar={note.jar} settled={note.settled} />}
