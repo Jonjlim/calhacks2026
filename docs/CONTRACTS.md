@@ -1079,11 +1079,11 @@ interface FashionDiscovery {
 }
 ```
 
-Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to documented denim garment patterns for this spike. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
+Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to the reviewed category tables in `lib/research/styleCategories.ts`; a sample is matched only against the category of its own seed. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
 
 Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
 
-The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
+The bounded caption vocabulary covers five reviewed categories. Denim: baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. Jewelry: hoop and huggie earrings, ear cuffs, pearl and layered necklaces, charm and tennis bracelets, stacking and signet rings. Sneakers: chunky, platform, retro, suede, slim, white and high-top. Knitwear: cable, chunky and fair isle knits, quarter-zips, turtlenecks, sweater vests, cardigans. Bags: tote, crossbody, shoulder, bucket, baguette, hobo, saddle and mini bags. Adding a category requires a reviewed table entry and tests. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
 ### `giftWorlds` (opt-in zoom-out summaries)
 
 | | |
@@ -1306,8 +1306,11 @@ workers refuse rooms marked `deletedAt` and members who have left, so late
 provider responses cannot recreate data after access revocation.
 
 - `research/fashion.startDiscovery({roomId, idempotencyKey})` is a membership-checked
-  mutation. It derives only `denim outfit` or `vintage denim outfit` from active,
-  confirmed published interest/wish clues. Raw private evidence, names and arbitrary
+  mutation. It derives one fixed seed (`denim outfit`, `jewelry outfit`, `sneaker outfit`,
+  `sweater outfit` or `handbag outfit`, optionally prefixed `vintage `) from active,
+  confirmed published interest/wish clues. When several categories match, the one with the
+  most confirmed clues wins (ties keep table order); one request is still one paid run.
+  The provider refuses any seed outside this allowlist. Raw private evidence, names and arbitrary
   user queries never reach the social provider. It persists pending before scheduling
   one bounded Actor start. Same-key retries reuse the job; same-seed open/uncertain
   jobs block duplicate paid starts. A current succeeded sample is reused for 24 hours.

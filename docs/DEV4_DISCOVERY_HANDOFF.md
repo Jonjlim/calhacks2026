@@ -7,7 +7,9 @@ No room UI or Alan agent files were modified.
 
 ## Consumer sequence
 
-1. Publish a confirmed interest/wish containing denim (and vintage if applicable).
+1. Publish a confirmed interest/wish naming a reviewed style category: denim/jeans,
+   jewelry/earrings/necklaces/bracelets, sneakers, sweaters/cardigans/knitwear, or
+   handbags/purses/totes/crossbody (plus vintage if applicable).
 2. Call `api.research.fashion.startDiscovery({roomId, idempotencyKey})` from an
    explicit human action. At most 20 posts, one fixed public query, cap $0.50.
 3. Subscribe to `api.research.fashion.getDiscovery({roomId})`. Display the current
@@ -24,8 +26,8 @@ No room UI or Alan agent files were modified.
    existing run. This starts no new paid run. Unknown-start outcomes require
    operator review in Apify, not a new request key/repeated start.
 
-The current bounded vocabulary supports denim garments. Other clothing categories
-need a reviewed seed/vocabulary extension; arbitrary names, accounts and private
+The bounded vocabulary (`lib/research/styleCategories.ts`) supports denim, jewelry,
+sneakers, knitwear and bags. Other categories need a reviewed table entry; arbitrary names, accounts and private
 evidence cannot become social search terms. Empty suggestions are legitimate.
 Style mentions do not establish garment age, size, stock or recipient ownership.
 

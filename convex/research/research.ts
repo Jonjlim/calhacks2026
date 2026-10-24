@@ -88,10 +88,12 @@ export const startResearch = mutation({
     if (previous) return previous.inputHash === inputHash
       ? ok({ jobId: previous._id })
       : err("validation_failed", "Use a new request key when search inputs change.");
-    const recent = await ctx.db.query("researchJobs")
-      .withIndex("by_room", q => q.eq("roomId", room._id)).order("desc").take(50);
-    const duplicate = recent.find(job => job.inputHash === inputHash
-      && ["pending", "running", "uncertain"].includes(job.status));
+    // No recency cap: an older open or uncertain start may already be billable.
+    const duplicate = await ctx.db.query("researchJobs")
+      .withIndex("by_room", q => q.eq("roomId", room._id)).order("desc")
+      .filter(q => q.and(q.eq(q.field("inputHash"), inputHash), q.or(
+        q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain"))))
+      .first();
     if (duplicate) return ok({ jobId: duplicate._id });
     // Explicit persistence adapter for existing Dev 2 validator: roomId lives on the job.
     // Full SearchBrief is restored when calling the provider. No silent schema change.

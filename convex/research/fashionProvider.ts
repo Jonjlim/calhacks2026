@@ -2,6 +2,7 @@
 import { z } from "zod";
 import type { ProviderResult } from "./provider";
 import { PROVIDER_MAX_RESPONSE_BYTES } from "./provider";
+import { STYLE_SEED_TERMS } from "../../lib/research/styleCategories";
 
 export const FASHION_ACTOR = "xmolodtsov~tiktok-search-scraper";
 export const FASHION_BUILD = "0.1.39";
@@ -45,7 +46,7 @@ export function createFashionProvider(token: string, fetcher: typeof fetch = fet
   }
   return {
     start(seedTerm: string): Promise<ProviderResult<FashionRun>> {
-      if (!["vintage denim outfit", "denim outfit"].includes(seedTerm)) return Promise.resolve({ kind: "failed", message: "Only supported public denim style searches are enabled." });
+      if (!STYLE_SEED_TERMS.has(seedTerm)) return Promise.resolve({ kind: "failed", message: "Only reviewed public style searches are enabled." });
       return run(`acts/${FASHION_ACTOR}/runs?build=${FASHION_BUILD}&timeout=180&memory=1024&maxTotalChargeUsd=0.50`, {
         keywords: [seedTerm], maxItems: 20, maxItemsPerKeyword: 20, sortType: "DATE_POSTED",
         uniqueAuthors: true, expansion: [], commentsPerPost: 0, includeAuthorProfile: false,
