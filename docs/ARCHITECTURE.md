@@ -30,7 +30,7 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | Next.js + React + TS + Tailwind | Confirmed starting point. One app for solo and group. |
 | Convex | Confirmed. Authoritative room state, reactive queries, membership. |
 | One tool-capable LLM + Zod | Confirmed. Provider and model ID are **unverified** until Phase 0. |
-| Apify as first product source | **Unverified.** Need one actor that returns purchasable listings. A supported shopping search API may replace it. |
+| Apify as first product source | **Conditional go for discovery.** RC-002: `johnvc/google-shopping-api-google-shopping-products-prices-deals`, build `0.0.142`, passed two live searches (40 products each). Links are Google Shopping URLs; direct merchant navigation and final prices remain unverified. Results and limitations: [DEV4_SOURCE_SPIKE.md](DEV4_SOURCE_SPIKE.md). |
 | React Flow | Proposed for the map. P0 may ship a simpler graph or list if it threatens the critical path. |
 | Motion / CSS | Confirmed for lightweight, state-honest animation. |
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
@@ -321,3 +321,11 @@ Dev 3 can run extraction and agent decisions in actions that write the documente
 Dev 4 can normalize one live search into `ProductListing` and score against fixture published clues.
 
 Integration checkpoints are in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
+## Dev 4 research integration (RC-004 / RC-006)
+
+The research mutation uses Dev 2's membership and job-insertion helpers. Pure brief/ranking functions are provided by the parallel Dev 4 workstream. Provider start/poll/dataset calls run in Convex actions with APIFY_TOKEN from deployment environment variables. Durable scheduled polls retain provider run IDs; a watchdog marks stranded workers uncertain.
+
+A completion transaction validates current knowledge and request order before writing listings. The recommendations query re-ranks the latest successful candidate pool against current room clues. No extra services or queues are introduced. The existing brief validator remains unchanged: research explicitly stores the brief without duplicated roomId and restores it at the provider boundary.
+
+Local tests mock paid provider traffic. This checkout still needs the team's Convex deployment configuration and its APIFY_TOKEN before a deployed end-to-end test. Do not create a competing team deployment just for Dev 4. Anonymous-auth setup belongs to Dev 2 / frontend integration.

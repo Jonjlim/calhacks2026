@@ -1,0 +1,64 @@
+{
+  "description": "Reviewed public-product sample from two authenticated Apify runs; historical observation, not live inventory.",
+  "actor": "johnvc/google-shopping-api-google-shopping-products-prices-deals",
+  "buildNumber": "0.0.142",
+  "retrievedAt": 1792826186205,
+  "pages": [
+    {
+      "search_parameters": {
+        "q": "pottery tools",
+        "gl": "us",
+        "hl": "en"
+      },
+      "shopping_results": [
+        {
+          "title": "Kemper Pottery Tool Kit",
+          "product_id": "15880180745021885161",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=pottery tools&prds=catalogid:15880180745021885161,productid:8197101604806129419,headlineOfferDocid:729396793675904315,imageDocid:11862049384944296873,rds:PC_6330918819433641834|PROD_PC_6330918819433641834,gpcid:6330918819433641834,mid:576462304413439309,pvt:hg&hl=en&gl=us&udm=28",
+          "source": "Blick Art Materials",
+          "price": "$22.30",
+          "extracted_price": 22.3,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcQ3azAdUw0QBr2ZEfKzOJFF7vHRtAAQCxlSmgVrYAv_wR_Sd7zxqRTh00fGXfAqFwGfIQnEpzVL2ZSZcpHv0vP279_2jAEBfg",
+          "delivery": "Free delivery on $89+"
+        },
+        {
+          "title": "Amaco Pottery Tool Kit",
+          "product_id": "1628078928887113553",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=pottery tools&prds=catalogid:1628078928887113553,productid:16576497757987938328,headlineOfferDocid:10180015747319326657,imageDocid:18073980371725606181,rds:PC_2292992348646781051|PROD_PC_2292992348646781051,gpcid:2292992348646781051,mid:576462333065727019,pvt:hg&hl=en&gl=us&udm=28",
+          "source": "Michaels Stores",
+          "price": "$37.49",
+          "extracted_price": 37.49,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcS9a1_R-VXyobrpswpXyyqSaKs2l5xqvYkSPhPOLEExWODkUmLGVrUII8n_HTM-gVc3nDd3zJcUbu4Wfv2V-l5dIdWlvaVg5jqjyScSc3oeVzjbtJKK73v2",
+          "delivery": "Free delivery on $50+"
+        },
+        {
+          "title": "Mudtools Do All Trim Tool",
+          "product_id": "5753842161676726219",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=pottery tools&prds=catalogid:5753842161676726219,productid:18124197131090799808,headlineOfferDocid:372255356719889417,imageDocid:10629872770809624142,rds:PC_6727819769238587569|PROD_PC_6727819769238587569,gpcid:6727819769238587569,mid:576462807119191940,pvt:hg&hl=en&gl=us&udm=28",
+          "source": "The Ceramic Shop",
+          "price": "$21.25",
+          "extracted_price": 21.25,
+          "thumbnail": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcSTsv6oGMyXxoYZpwG3Y29EJoCb4YHdN-0HEYs0I9koEr-N5FPES7B-DA7rrUX5dZQkVoHFyhWBPqEAyTYdCOLaUaBz8KGp9g"
+        }
+      ]
+    },
+    {
+      "search_parameters": {
+        "q": "ceramic coffee mug",
+        "gl": "us",
+        "hl": "en"
+      },
+      "shopping_results": [
+        {
+          "title": "(4 pack) Zak Designs 15oz Harry Potter Marauders Map Color Change Ceramic Modern Mug, Size: 15 oz, Multicolor",
+          "product_id": "2827468611352362435",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=ceramic coffee mug&prds=productid:2827468611352362435,headlineOfferDocid:2827468611352362435,imageDocid:11007153971897375266,rds:PC_5965992333635210803|PROD_PC_5965992333635210803,pvt:hg&hl=en&gl=us&udm=28",
+          "source": "Walmart",
+          "price": "$35.52",
+          "extracted_price": 35.52,
+          "thumbnail": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcRcLvs6cp8-RVbIx66zE7XuzZSyRlZ1AuGGG-x88MrWBL0Paa9j5l39nF7DvkJ2_eCfa5tlKkl-"
+        }
+      ]
+    }
+  ]
+}

@@ -82,7 +82,7 @@ Solo mode is a one-participant room, not a second product.
 
 ## Current status
 
-Baseline scaffold only. The Next.js app, Convex schema, and every endpoint in [docs/CONTRACTS.md](docs/CONTRACTS.md) exist as typed stubs that return `{ ok: false, error: { code: "unknown" } }` until their owner implements them. The room UI renders from in-memory mocks in `lib/mocks/`. No product API, LLM, or payment provider is integrated. Do not demo this repository as a working product.
+Backend P0 and Dev 4 research integration are implemented: anonymous-auth configuration, room membership, private evidence/clues, proposals/approvals, and scheduled Apify research with normalized listings and reactive ranking. The product source passed two standalone live searches; the integrated Convex workflow is covered with mocked provider tests and still needs a live test on the team deployment. The room UI still renders in-memory mocks. Agent workflows are implemented with mocked-model tests; live model calls, shared-deployment validation, frontend subscriptions and payments remain outstanding. This is not yet a working end-to-end app.
 
 ## Development
 
