@@ -141,3 +141,50 @@ describe("confirmed visual preferences → gift candidates", () => {
   });
 
 });
+
+describe("AI-018 handoff: confirmed photo-derived clue shapes", () => {
+  it("cites the pottery wheel and classes for a confirmed wheel-throwing clue", () => {
+    const results = rank([clue("wt", "Likes wheel throwing")], [
+      item("wheel", "Beginner Pottery Wheel"),
+      item("class", "Wheel Throwing Pottery Class"),
+      item("vase", "Handmade Ceramic Vase"),
+    ]);
+    expect(results.find(r => r.listingId === "wheel")?.publishedClueIds).toEqual(["wt"]);
+    expect(results.find(r => r.listingId === "class")?.publishedClueIds).toEqual(["wt"]);
+    expect(results.find(r => r.listingId === "vase")?.publishedClueIds).toEqual([]);
+  });
+
+  it("keeps the wheel-throwing search phrase intact for the provider", () => {
+    expect(brief([clue("wt", "Likes wheel throwing")]).queryTerms).toEqual(["wheel throwing"]);
+  });
+
+  it("matches a confirmed minimalist style clue to minimalist goods only", () => {
+    const results = rank([clue("min", "Likes minimalist style")], [
+      item("mug_min", "Minimalist Ceramic Mug"),
+      item("vase", "Handmade Ceramic Vase"),
+    ]);
+    expect(brief([clue("min", "Likes minimalist style")]).queryTerms).toEqual(["minimalist"]);
+    expect(results.find(r => r.listingId === "mug_min")?.publishedClueIds).toEqual(["min"]);
+    expect(results.find(r => r.listingId === "vase")?.publishedClueIds).toEqual([]);
+  });
+
+  it("runs the photo demo beat: two clues raise the wheel, the owned kit hides, brands do not cite", () => {
+    const clues = [
+      clue("pottery", "Maya likes pottery"),
+      clue("wt", "Likes wheel throwing"),
+      clue("owned", "Maya already owns a pottery starter kit", "ownership"),
+    ];
+    const results = rank(clues, [
+      item("kit", "Sculpd Beginner Pottery Starter Kit"),
+      item("wheel", "Speedball Beginner Pottery Wheel"),
+      item("class", "Wheel Throwing Pottery Class"),
+      item("vase", "Blue Rose Polish Pottery Vase"),
+      item("barn", "Pottery Barn Ceramic Vase"),
+    ]);
+    expect(results.map(r => r.listingId)).toEqual(["class", "wheel", "vase", "barn"]);
+    expect(results[0]?.publishedClueIds).toEqual(["pottery", "wt"]);
+    expect(results[1]?.publishedClueIds).toEqual(["pottery", "wt"]);
+    expect(results[1]?.score).toBeGreaterThan(results[2]?.score ?? 0);
+    expect(results.find(r => r.listingId === "barn")?.publishedClueIds).toEqual([]);
+  });
+});
