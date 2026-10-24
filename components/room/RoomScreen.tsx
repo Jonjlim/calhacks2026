@@ -71,7 +71,7 @@ function LiveRoomGate({ roomId, surface }: { roomId: string; surface: RoomSurfac
   }
   if (session.status !== "ready") return <RoomMessage title="Opening the room…" />;
   return (
-    <ErrorBoundary fallback={<RoomAccessError error={NOT_A_ROOM} />}>
+    <ErrorBoundary fallback={<RoomMessage title="The room could not load"><p>A backend request failed. Reload to try again; this does not mean the room was deleted.</p></RoomMessage>}>
       <LiveRoom roomId={roomId as Id<"rooms">} surface={surface} />
     </ErrorBoundary>
   );
@@ -94,7 +94,6 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const votesRes = useQuery(api.votes.listVotes, args);
   const inviteRes = useQuery(api.rooms.getInvite, args);
   const activityRes = useQuery(api.agents.buyer.listActivity, args);
-  const councilRes = useQuery(api.councilRoom.state, args);
   const jobsRes = useQuery(api.jobs.listRoomJobs, args);
 
   const sendMessage = useMutation(api.messages.sendMessage);
@@ -175,9 +174,23 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     evidence: value(evidenceRes, []).map(withId),
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
-    council: councilRes?.ok ? councilRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
   };
+  const unavailable = <RoomSurfaceView surface={surface} data={{ ...data, councilUnavailable: true }} actions={actions} />;
+  return (
+    <ErrorBoundary fallback={unavailable}>
+      <RoomWithCouncil roomId={roomId} data={data} actions={actions} surface={surface} />
+    </ErrorBoundary>
+  );
+}
+
+/** An optional council query must not turn a valid gift room into “not found”. */
+function RoomWithCouncil({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
+  const result = useQuery(api.councilRoom.state, { roomId });
+  return <RoomSurfaceView surface={surface} data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
+}
+
+function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {
   return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
 }
 

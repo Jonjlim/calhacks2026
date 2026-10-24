@@ -13,6 +13,7 @@ import type { Result } from "../../lib/contracts";
 import { LIMITS, questionSlotSchema } from "../../lib/validation";
 import { getMembership } from "../lib/auth";
 import { err, ok } from "../lib/result";
+import * as V from "../validators";
 import { enqueueBuyerTurn } from "./runtime";
 import { decideBuyer } from "./engine";
 import { configuredModel, AgentFailure, createUsageAccumulator } from "./model";
@@ -27,6 +28,19 @@ export const requestTurn = mutation({
     const member = await getMembership(ctx, args.roomId);
     if (!member) return err("unauthorized", "Room membership required.");
     return enqueueBuyerTurn(ctx, args.roomId, member._id, args.mode ?? "quiet");
+  },
+});
+
+/** Organizer-only. chatty lets the buyer join the conversation unprompted; code still bounds it. */
+export const setChatMode = mutation({
+  args: { roomId: v.id("rooms"), mode: V.agentChatMode },
+  handler: async (ctx, args): Promise<Result<{ mode: "quiet" | "chatty" }>> => {
+    const member = await getMembership(ctx, args.roomId);
+    if (!member) return err("unauthorized", "Room membership required.");
+    if (member.role !== "organizer")
+      return err("unauthorized", "Only the organizer can change this.");
+    await ctx.db.patch(args.roomId, { agentChatMode: args.mode });
+    return ok({ mode: args.mode });
   },
 });
 
@@ -192,6 +206,11 @@ export const listActivity = query({
           : {}),
       })),
       capabilities: {
+        chatMode:
+          (await ctx.db.get(roomId))?.agentChatMode === "chatty"
+            ? ("chatty" as const)
+            : ("quiet" as const),
+        canSetChatMode: member.role === "organizer",
         modelConfigured:
           !!process.env.LLM_BASE_URL &&
           !!process.env.LLM_API_KEY &&

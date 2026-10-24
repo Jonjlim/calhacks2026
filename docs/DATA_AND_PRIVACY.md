@@ -18,7 +18,7 @@ This document is the access-control spec. Contracts are in [CONTRACTS.md](CONTRA
 | Class | Examples | Default visibility |
 | --- | --- | --- |
 | `public_room` | Room title, occasion, chat, published clues, listings, selection, public proposal totals | Room members |
-| `contributor_private` | Evidence sources, private messages, proposed clues, contribution caps | Owning participant + specifically authorized server actions |
+| `contributor_private` | Evidence sources, private messages, proposed clues, contribution caps, uploaded photos, screenshots, and voice notes until they are read | Owning participant + specifically authorized server actions |
 | `recipient_authorized` | Recipient preference records | Recipient-agent tools after policy grant |
 | `recipient_raw` | Recipient mailbox, private chats, unapproved notes | **Not stored in P0/P1.** Do not ingest. |
 | `secret` | API keys, webhook secrets | Environment only; never in documents clients subscribe to |
@@ -29,6 +29,7 @@ This document is the access-control spec. Contracts are in [CONTRACTS.md](CONTRA
 | Form | Store | Publishable? |
 | --- | --- | --- |
 | Raw pasted / imported text | `EvidenceSource`, `PrivateMessage` | No, unless the contributor attaches a short excerpt to a published clue |
+| Uploaded photo (P0), screenshot (P1-C), or voice note (P2) | Convex file storage, owner-only, EXIF/GPS stripped before upload, deleted right after reading | Never. Only the observation or transcript text can be excerpted |
 | Extracted structured clue | `ProposedClue` | Not yet |
 | Human-confirmed room knowledge | `PublishedClue` | Yes |
 | Recipient-authorized structured preference | `RecipientPreference` | Never into the buyer room automatically |
@@ -72,7 +73,7 @@ Demo operators may type recipient preferences into Flow B by hand. That is still
 
 ## Provenance and evidence
 
-Every `ProposedClue` and `PublishedClue` stores `sourceMessageIds` and `sourceKind` (`paste` | `import` | `chat` | `manual`).
+Every `ProposedClue` and `PublishedClue` stores `sourceMessageIds` and `sourceKind` (`paste` | `import` | `chat` | `manual` | `photo` | `screenshot` | `voice_note`).
 
 Every `Recommendation` stores `publishedClueIds` and `listingIds`.
 
@@ -110,7 +111,8 @@ Organizer is not a superuser over private imports or caps.
 
 ## Permission revocation
 
-- Leave room → lose `public_room` reads. Private rows remain until deletion.
+- Leave room (`rooms.leaveRoom`) → participant row, cap, and votes are deleted, so every `public_room` read returns `unauthorized`. The proposal is recomputed without their share and prior approvals are invalidated. Their published clues and chat stay room-visible. Private rows remain unless they pass `deletePrivateData`, which hard-deletes their evidence, private messages, stored files, and proposed clues and tombstones published clues derived from that evidence. The organizer cannot leave; they delete the room. Leaving is refused while payment is frozen.
+- Delete chat message (`messages.deleteMessage`) → author-only; the body is overwritten and the row stays as a tombstone. Buyer-agent messages are not deletable.
 - Withdraw published clue → hidden from future snapshots; recommendations that solely depended on it should be rescored.
 - Delete import → tombstone source, proposed clues, and any published clue that opted to include the excerpt from that source.
 - Revoke recipient category grant → further `AgentQuery`s of that category return `refused`; do not retro-edit chat history, but do not reuse cached replies for new recommendations without a refresh.
@@ -123,8 +125,10 @@ Hackathon default: delete-with-the-room.
 | Event | Behavior |
 | --- | --- |
 | Contributor deletes an import | Immediate tombstone; no undelete required |
-| Participant leaves | Membership ended; optional delete of their private rows |
-| Room deleted by organizer | Cascade all room-scoped documents |
+| Photo, screenshot, or voice note is read | File deleted from storage immediately, whether reading succeeded or failed |
+| Uploaded file never imported, or imported but never read | Unimported files are deleted after one hour; imported files still unread after 24 hours are deleted and the source is marked `failed` (`cleanup.sweepStaleUploads`) |
+| Participant leaves | Membership ended; optional delete of their private rows (`deletePrivateData`) |
+| Room deleted by organizer | Access ends in the same transaction (`deletedAt`); open jobs are canceled; `purgeRoomBatch` deletes all room-scoped documents and stored files in batches. Refused while payment is frozen or attempts are unsettled |
 | After the hackathon | Tear down the Convex deployment; do not keep demo imports |
 
 No long-term retention policy is required for the weekend. Do not export private tables to sponsor tools or notebooks.
@@ -179,6 +183,12 @@ The buyer agent may see `AgentReply.guidance`, which is already policy-filtered.
 | --- | --- |
 | Member opens Convex dashboard query in DevTools | Queries must filter; do not expose private tables without args + owner check |
 | Member pastes someone else’s screenshots | Only that member’s extraction sees it; publishing is their responsibility. Demo uses synthetic data |
+| Screenshot shows other people’s faces, names, or messages | Transcriber reads visible text only, never identifies faces; file deleted after reading; clues about non-recipients become `uncertain` |
+| Photo shows the recipient with other people | Only the uploader-marked person is described; no face recognition; bystanders ignored; file deleted after reading; unmarked photos yield scene-only observations |
+| Photo EXIF carries GPS or device data | Client strips location metadata before upload; nothing persists beyond the image bytes, and those are deleted after reading |
+| Model infers a sensitive attribute (age, appearance, health) | Forbidden by instruction and by the closed `PhotoObservation` shape; residual sensitive lines drop in the validator; photo clues are `uncertain` and human-gated |
+| Instructions hidden inside a screenshot or photo | Treated as data like pasted text; no extra tools; human publish gate |
+| Voice note records someone else | UI says “record yourself only”; one 60-second note; audio deleted after transcription |
 | Model asked to “summarize everyone’s imports” | No tool can load them |
 | Buyer agent asked to “just read the recipient’s DMs” | `recipient_raw` is not stored; query type rejected |
 | Prompt injection in a pasted email | Untrusted data; no extra tools; human publish gate |

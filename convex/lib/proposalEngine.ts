@@ -12,13 +12,22 @@ import type { ProposalStatus } from "../../lib/contracts";
 import { allocate, sharesEqual } from "../allocations";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { syncRevisionPayments } from "../payments/sync";
 
-/** Statuses that a recompute may supersede. P1 payment states are frozen. */
+/**
+ * Statuses that a recompute may supersede. Pre-capture payment states stay
+ * editable (superseding unwinds their authorizations); capturing, test_funded,
+ * and recovery_pending are frozen. A canceled revision is always replaced.
+ */
 export const EDITABLE_STATUSES: readonly ProposalStatus[] = [
   "draft",
   "awaiting_approval",
   "approved_pledged",
   "infeasible",
+  "authorizing",
+  "ready_to_capture",
+  "blocked",
+  "canceled",
 ];
 
 export function isEditable(status: ProposalStatus): boolean {
@@ -131,9 +140,12 @@ function sameDeal(current: Doc<"proposalRevisions">, draft: Draft): boolean {
   return true;
 }
 
-/** Marks a revision superseded and invalidates its live approvals. */
+/**
+ * Marks a revision superseded (a canceled one keeps its status), invalidates
+ * its live approvals, and records unwind intents for any payment attempts.
+ */
 async function supersede(ctx: MutationCtx, revision: Doc<"proposalRevisions">, now: number) {
-  await ctx.db.patch(revision._id, { status: "superseded" });
+  if (revision.status !== "canceled") await ctx.db.patch(revision._id, { status: "superseded" });
   const approvals = await ctx.db
     .query("approvals")
     .withIndex("by_revision", (q) => q.eq("revisionId", revision._id))
@@ -143,6 +155,7 @@ async function supersede(ctx: MutationCtx, revision: Doc<"proposalRevisions">, n
       await ctx.db.patch(approval._id, { status: "invalidated", updatedAt: now });
     }
   }
+  await syncRevisionPayments(ctx, revision._id, now);
 }
 
 export type RecomputeResult =
@@ -168,7 +181,7 @@ export async function recomputeProposal(ctx: MutationCtx, roomId: Id<"rooms">): 
   }
 
   const draft = await draftRevision(ctx, roomId, selection);
-  if (current && sameDeal(current, draft)) {
+  if (current && current.status !== "canceled" && sameDeal(current, draft)) {
     return { kind: "unchanged", revision: current, infeasibleReason: draft.infeasibleReason };
   }
 

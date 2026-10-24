@@ -6,6 +6,26 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D14 — Reviewed catalog evidence for missing hobby terms (2026-10-24)
+
+Some real tool titles omit their hobby, and the shopping Actor returns no category/description field. Dev 4 adds a small, reviewed manufacturer catalog (two initial model identities) for derived category matching at read time. Exact title/model identity is required; seller names, search queries and social popularity are insufficient. Ownership remains literal; explicit exclusions can use the verified category/manufacturer, with source-bearing explanations for derived positive matches. No state, provider, money authority or shared endpoint changes. This bounded catalog does not solve arbitrary product classification. See “Reviewed catalog matching” in CONTRACTS.md and [DEV4_CATALOG_MATCHING.md](DEV4_CATALOG_MATCHING.md).
+
+### D13 — Public TikTok fashion discovery experiment (2026-10-24)
+
+Dev 4 evaluated `clockworks/tiktok-scraper` build `0.0.620` as a local public fashion-context source. One public style query, at most 20 requested posts, normalized captions/hashtags/URLs/timestamps and engagement snapshots only. No recipient accounts, private messages, profile crawling, downloads, vision provider, or deployed changes. Recent sampled posts are not a platform-wide trend chart; a single engagement snapshot cannot establish growth. Existing shopping remains the only product source. Results: [DEV4_TIKTOK_SPIKE.md](DEV4_TIKTOK_SPIKE.md).
+
+The first source timed out at device registration with zero posts: **no-go for this configuration**. The second candidate, `xmolodtsov/tiktok-search-scraper` build `0.1.39`, returned 19 posts in 11.322s with a global 20-result cap and no expansion pools or author-profile/comment add-ons. Six passed the independent 30-day date check; three creators supported one loose-fit-jeans discovery, which fed 40 shopping results. **Conditional go for local caption-based inspiration; production reliability and platform-wide trend coverage remain unverified.** Regional scope remains unknown. Provider default author metadata is not used for preference inference; normalized observations retain only the minimal documented fields.
+
+### D12 — Local trend discovery experiment (2026-10-24)
+
+Dev 4 evaluated `apify/google-trends-scraper` build `0.0.141` as a public category-context source. This is a standalone script, not a second product catalog or a deployed service. It sends public search terms only, retains source/time-range/geo provenance, and cannot publish clues or change recommendation scores. Existing shopping retrieval remains unchanged. Production integration requires a separate reviewed contract/job change. See [DEV4_TRENDS_SPIKE.md](DEV4_TRENDS_SPIKE.md).
+
+The first candidate timed out with zero completed pages at 180 seconds: **no-go for this configuration**. The second candidate, `agenscrape/google-trends-scraper` build `1.0.21`, passed two live related-search runs (about 14s and 12s; no browser-based topics): **conditional go for local category discovery**, not verified production reliability. One discovered query successfully fed the existing shopping Actor. Both use Apify; neither replaces the product source. Shared additive `TrendContext` / `TrendObservation` types are consumed only by local scripts/tests; no database migration or production scoring change.
+
+### D11 — Photo clues as P0 evidence input (2026-10-24)
+
+Product cards show real source photos (P0). Photo clues (P0), screenshot clues (P1-C), and voice notes (P2) are read once by the vision-capable model into private text or observation rows; the uploaded file is deleted. No face recognition — the uploader taps who the recipient is. Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline with one human gate is easier to secure than three. Rejected: storing raw images or audio; a separate image-clue pipeline; face recognition or identity inference; AI-generated product images. Contracts: “Photo observation” in [CONTRACTS.md](CONTRACTS.md).
+
 ### D10 — Bounded research feedback and cached replanning (2026-10-24)
 
 Member 3 and member 4 share one database/catalog projection for ranking and evidence. Each research request captures its requester/message context and at most one persisted continuation pointer. Completion/failure/timeout and continuation scheduling are one transaction. The follow-up is a distinct, version-fenced job; it cannot start research or call another recipient agent. Confirmed knowledge changes can re-evaluate the existing pool after a short debounce, but cannot authorize another paid provider run. Purchase facts in recommendation messages are rendered by application code from current observations, not model prose. Question replies require an explicit slot. No new service/provider is added.
@@ -26,7 +46,7 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | D6 | Price and availability require a source URL and `retrievedAt`. | Judges and buyers must be able to check. | Model-invented products or stale remembered prices. |
 | D7 | Contracts first; every workstream mocks the others. | Four people, 36 hours. | Implementing against implicit types. |
 | D8 | A working demo beats feature count and sponsor count. | Hackathon scoring happens on what runs. | Building every track integration. |
-
+| D9 | P1-B payment state (BE-015) lives in Convex documents behind `PAYMENTS_SANDBOX_ENABLED=true`. Pre-capture revisions stay editable and unwind their authorizations when superseded; from `capturing` until `test_funded` or completed recovery, edits are refused rather than queued as drafts. | Keeps P0 unchanged when the flag is off, and avoids a second pending-edit model during the riskiest window. | Freezing at first authorization (blocks normal edits); queuing draft edits during capture (more state, no demo value). |
 ### Stack evaluation
 
 | Choice | Verdict |
@@ -40,6 +60,9 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
 | Vercel + Convex | Confirmed hosting. No extra worker host in P0. |
 | Bitdeer / Factory / Bright Data | Conditional sponsor options. Adopt only after a spike shows a real product role. |
+| Convex file storage | P0 (photo clues), P1-C, P2. Holds photos, screenshots, and voice notes until they are read, then deletes them. |
+| Vision input on the chosen LLM | P0 (photo clues) and P1-C. **Unverified until the Phase 0 spike.** Must work on the same provider; no second LLM SDK. If it fails, photo clues demote to the text-only spine. |
+| Speech-to-text API | P2. **Unverified** new provider. Spike before any code depends on it. |
 
 ## Component diagram
 
@@ -62,7 +85,7 @@ flowchart TB
   end
 
   subgraph external [External providers]
-    LLM[Tool-capable LLM]
+    LLM[Tool- and vision-capable LLM]
     Shop[Apify or shopping API]
     Trends[Trend source - P2]
     Stripe[Stripe test mode - P1]
@@ -267,7 +290,7 @@ Each has `status`, `attempt`, `idempotencyKey`, `inputHash`, and `lastError`. Ac
 - Client mutations that create revisions, jobs, or payment attempts require an idempotency key.
 - Optimistic concurrency: mutations that depend on `currentRevisionId` fail with `invalid_revision` if the pointer moved.
 - Two clients cannot approve different revisions into one purchase: approval writes check `room.currentRevisionId === approval.revisionId`.
-- Capture (P1) flips the room to `capturing` before any Stripe call. Further edits queue as drafts.
+- Capture (P1) flips the current revision to `capturing` before any Stripe call. Edits are refused with `invalid_revision` until the revision is `test_funded` or recovery ends in `canceled` (see D9).
 
 ## Error handling and recovery
 
@@ -342,3 +365,52 @@ Local tests mock paid provider traffic. This checkout still needs the team's Con
 One Python uAgent in `fetch-agent/` (`uagents==0.25.5`, AgentChatProtocol 0.3.0) is the only Fetch.ai registration. It runs five roles — Archivist, Muse, Scout, Keeper, Courier — as real functions and replies in ASI:One without needing the website. It is a new external API (Agentverse / ASI:One), not a second app: Convex stays authoritative for state, and the Scout's product research reuses the existing Apify pipeline through a secret-gated Convex HTTP action rather than a new provider.
 
 Flow: ASI:One or `/council` page → coordinator → `POST /council/events` (Bearer `COUNCIL_INGEST_SECRET`) → Convex `councilEvents` / `giftDecorations` → `council.demoState` subscription → avatars animate locally. Products and raw memories never travel in events. The language model (ASI:One `asi1`) may only add clues; products, prices and links come only from research. Rejected: five separately registered agents (no new capability, five times the setup); runtime 3D generation for charms (slow, unbounded; a fixed library is rendered locally instead).
+
+### D15 — Recorded fashion evidence in the existing buyer snapshot (2026-10-24)
+
+The first Dev 4/Dev 3 discovery bridge reuses Alan's buyer snapshot and search decision,
+under the existing demo flag only. A confirmed vintage-denim interest can receive the
+recorded source-backed directions from the verified spike, with original dates and a
+24-hour expiry. It creates no service, paid call, schema migration or preference. The
+existing shopping worker still receives one chosen query and owns product facts. This
+validates the handoff without turning the standalone TikTok spike into an automatic paid
+pipeline. Live refresh and displayed social provenance remain pending.
+
+### D16 — Begin isolated Stripe sandbox adapter work (2026-10-24)
+
+Alex requested advancing P1 alongside final P0 acceptance. Dev 4 starts server-only
+Stripe REST transport and raw-body webhook verification against mocks. Stripe hosted Checkout create/retrieve/expire is **verified in sandbox** by
+the October 24 Dev 4 spike. Card authorization, capture, actual webhook delivery
+and application-state integration remain **unverified**. No extra SDK, database, public endpoint, capture scheduler or payment UI
+is enabled. P0 stays usable without Stripe; the current product still ends at
+pledges. Dev 2 retains payment state, current-revision approval checks, freeze rules
+and durable event idempotency. API requests pin `2025-06-30.basil` for reproducibility.
+Official API references: https://docs.stripe.com/api/checkout/sessions/create,
+https://docs.stripe.com/api/checkout/sessions/expire,
+https://docs.stripe.com/api/payment_intents/capture,
+https://docs.stripe.com/api/refunds/create and https://docs.stripe.com/webhooks.
+
+### D17 — Explicit persisted public-style discovery (2026-10-24)
+
+Dev 4 adds a research-owned `fashionJobs` table through `research/fashionSchema.ts`;
+`schema.ts` only includes that additive fragment. Existing rows and money/agent
+state are unchanged. Membership-checked mutations explicitly start one pinned
+GoFetch TikTok search (`xmolodtsov~tiktok-search-scraper`, build `0.1.39`, max20
+posts, cap $0.50). Pending is stored before any external call; uncertain starts
+are not retried. Known runs can resume GET polling. Current confirmed denim clues
+produce a fixed public seed; private imports and arbitrary queries are excluded.
+Only sanitized derived style directions, source links and original provenance are
+persisted. A 24-hour cache and current-knowledge fence apply at reads and shopping.
+`startResearch` accepts an optional discovery job reference; old callers are unchanged.
+UI cards and Alan's optional tool use remain consumer integration work.
+
+The Actor/input combination had one successful standalone spike. The persisted
+pipeline also completed one personal-dev run on cool-bat-724: 20 returned posts,
+8 valid recent posts, zero corroborated garment directions. Provider start/poll,
+completion and the member query were verified live; no live discovery-to-shopping
+direction was established by that empty sample. Empty samples preserve the
+ordinary published-clue search. Fixture tests do not establish production provider
+reliability or platform-wide trends. No new product
+source, AI provider or database is added. The fixed Stripe adapter additionally
+supports canceling a zero-capture manual hold, per current official API docs;
+actual hosted-Checkout hold cancellation remains **unverified live**.

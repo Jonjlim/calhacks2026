@@ -2,9 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChatPanel } from "@/components/chat/ChatPanel";
-import { EvidenceImport } from "@/components/clues/EvidenceImport";
-import { ProposedClueReview } from "@/components/clues/ProposedClueReview";
+import { RoomAgentTools } from "./RoomAgentTools";
 import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
@@ -21,6 +19,7 @@ import { avatarFor, portraitUrl } from "@/lib/room/avatars";
 import { PHASE_LABEL, roomPhase } from "@/lib/room/phase";
 import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
+import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
 import type { RoomActions, RoomData } from "./types";
 
@@ -109,7 +108,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   let primary: ReactNode = null;
   if (phase === "collect") {
     primary = isOrganizer ? (
-      <button className="btn-primary h-11 px-5" disabled={!activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
+      <button className="btn-primary h-11 px-5" disabled={data.councilUnavailable || !activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
         {activeClues.length ? "Wake the council" : "Waiting for memories…"}
       </button>
     ) : (
@@ -141,6 +140,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
+      {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
       {/* Identity */}
@@ -169,6 +169,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
 
+      {/* The memory game floats over the tower while the room is still gathering. */}
+      {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
+        <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
+      )}
+
       {/* Phase bar */}
       <div className="pointer-events-auto absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)]">
         <span className="flex gap-1" aria-hidden>
@@ -182,6 +187,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}
+          {!preview && <a className="btn-secondary h-11 px-4 text-[14px]" href={`/room/${room.id}/map`}>Gift map</a>}
           <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
             {stage === "tower" ? "Garden" : "Tower"}
           </button>
@@ -189,7 +195,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}
           {!preview && actions && (
-            <button className="btn-secondary h-11 w-11 text-[20px]" aria-label="Notes and room tools" title="Notes and room tools" onClick={() => setDrawer({ kind: "notes" })}>✎</button>
+            <button className="btn-secondary h-11 px-4 text-[14px]" aria-label="Backstage: notes, agents and sharing" title="Backstage: notes, agents and sharing" onClick={() => setDrawer({ kind: "notes" })}>Backstage</button>
           )}
         </div>
       </div>
@@ -266,11 +272,7 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
     <>
       {actions && <ShareMemory roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} />}
       <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
-      <details className="paper-card rounded-[18px] p-4"><summary className="cursor-pointer font-display text-xl">Bring in a conversation</summary><div className="mt-3 flex flex-col gap-4">
-        <EvidenceImport evidence={data.evidence} latestJob={data.activity?.jobs.find((j) => j.kind === "extract")} modelConfigured={data.activity?.capabilities.modelConfigured} actions={actions} />
-        <ProposedClueReview clues={data.myProposedClues} actions={actions} />
-      </div></details>
-      <ChatPanel messages={data.messages} participants={participants} me={me} activity={data.activity} actions={actions} />
+      <RoomAgentTools data={data} actions={actions} />
     </>
   );
 }

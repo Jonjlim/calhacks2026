@@ -6,7 +6,8 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { RoomCouncilPanel } from "@/components/council/RoomCouncilPanel";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
-import { ShareMemory } from "@/components/room/ShareMemory";
+import { RoomAgentTools } from "@/components/room/RoomAgentTools";
+import { MemoryQuest } from "@/components/room/MemoryQuest";
 import type { RoomActions, RoomData } from "@/components/room/types";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { PublishedClue } from "@/lib/contracts";
@@ -89,7 +90,11 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
           </motion.section>
         </AnimatePresence>
 
-        <p className="mt-6 text-center text-[12px] text-dusk/45">Everything you add appears on the big screen.</p>
+        <details className="paper-card mt-5 rounded-[22px] p-4">
+          <summary className="cursor-pointer font-display text-xl">Clue review and room chat</summary>
+          <div className="mt-4 flex flex-col gap-4"><RoomAgentTools data={data} actions={actions} /></div>
+        </details>
+        <p className="mt-6 text-center text-[12px] text-dusk/45">Shared memories appear on the big screen. Private imports stay yours until you publish their clues.</p>
       </div>
     </main>
   );
@@ -134,7 +139,7 @@ function CollectScreen({ data, actions, mine, allActive, isOrganizer, onBack, ph
         <p className="font-hand text-[22px] leading-tight text-dusk/60">a little magic starts with a memory</p>
         <h2 className="font-display text-[32px] leading-[1.05]">What do you remember about {room.recipientDisplayName}?</h2>
       </div>
-      <ShareMemory roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} variant="phone" />
+      <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} variant="phone" />
       <MyNotes mine={mine} />
       {isOrganizer && allActive > 0 && phase === "collect" && (
         <Card className="flex flex-col gap-3">

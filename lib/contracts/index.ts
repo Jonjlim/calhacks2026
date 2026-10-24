@@ -8,6 +8,78 @@
 
 export type Currency = "USD";
 
+export interface FashionSampleContext {
+  seedTerm: string;
+  windowStart: number;
+  windowEnd: number;
+  retrievedAt: number;
+}
+
+export interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+
+export interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;
+}
+
+export interface FashionDiscoverySample {
+  mode: "live_sample";
+  label: string;
+  actor: string;
+  build: string;
+  providerRunId: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+  evidenceSummary?: { returnedRows: number; validRecentPosts: number; excludedAdvertisingPosts: number };
+}
+export interface FashionDiscoveryJobView {
+  id: string;
+  status: JobStatus;
+  createdAt: number;
+  lastError?: string;
+  canResume: boolean;
+}
+export interface FashionDiscoveryView {
+  latestJob: FashionDiscoveryJobView | null;
+  sample: (FashionDiscoverySample & { jobId: string }) | null;
+}
+
+/** RC-014 local experiment; term-level evidence, not product popularity. */
+export interface TrendContext {
+  seedTerm: string;
+  geo: "US";
+  timeRange: "today 3-m";
+  retrievedAt: number;
+}
+
+export type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;
+  query: string;
+} & (
+  | { kind: "top_search"; popularityIndex: number }
+  | { kind: "rising_search"; growthPercent: number }
+  | { kind: "breakout_search" }
+);
+
 // ---------- Errors / results ----------
 
 export type AppErrorCode =
@@ -70,6 +142,8 @@ export interface ChatMessage {
   responseAgentJobId?: string;
   replyToSlot?: string;
   citations?: AgentCitations;
+  /** Author deleted the message; body is "" and the row is a tombstone. */
+  deletedAt?: number;
 }
 
 export interface AgentCitations {
@@ -80,7 +154,7 @@ export interface AgentCitations {
 
 // ---------- Evidence and clues ----------
 
-export type EvidenceKind = "paste" | "text_export";
+export type EvidenceKind = "paste" | "text_export" | "photo" | "screenshot";
 
 export interface EvidenceSource {
   id: string;
@@ -89,6 +163,12 @@ export interface EvidenceSource {
   kind: EvidenceKind;
   label: string;
   sourceRevision: number;
+  /** photo / screenshot only. The uploaded file is deleted once read. */
+  media?: {
+    count: number;
+    recipientMarkers?: { x: number; y: number }[];
+    status: "uploaded" | "read" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -99,6 +179,8 @@ export interface PrivateMessage {
   body: string;
   saidAt?: number;
   speakerHint?: string;
+  /** Which uploaded file (0-based) the row came from; photo and screenshot sources only. */
+  mediaIndex?: number;
 }
 
 export type ClueKind =
@@ -133,7 +215,7 @@ export interface ProposedClue {
   createdAt: number;
 }
 
-export type ClueSourceKind = "paste" | "import" | "chat" | "manual";
+export type ClueSourceKind = "paste" | "import" | "chat" | "manual" | "photo" | "screenshot";
 
 export interface PublishedClue {
   id: string;
@@ -207,7 +289,8 @@ export type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply";
 
 export interface AgentDecision {
   jobId: string;
@@ -353,6 +436,20 @@ export type VoteValue = "up" | "down" | "flag_duplicate";
 
 // ---------- Payments (P1-B) ----------
 
+export type PaymentAttemptStatus =
+  | "not_started"
+  | "authorization_pending"
+  | "authorized"
+  | "authorization_failed"
+  | "capture_pending"
+  | "captured"
+  | "cancellation_pending"
+  | "canceled"
+  | "refund_pending"
+  | "refunded"
+  | "action_required"
+  | "uncertain";
+
 export interface PaymentAttempt {
   id: string;
   roomId: string;
@@ -361,22 +458,41 @@ export interface PaymentAttempt {
   provider: "stripe_test";
   providerObjectId?: string;
   idempotencyKey: string;
-  status:
-    | "not_started"
-    | "authorization_pending"
-    | "authorized"
-    | "authorization_failed"
-    | "capture_pending"
-    | "captured"
-    | "cancellation_pending"
-    | "canceled"
-    | "refund_pending"
-    | "refunded"
-    | "action_required"
-    | "uncertain";
+  /** Frozen share from the revision, integer cents. */
+  amountMinor: number;
+  currency: Currency;
+  status: PaymentAttemptStatus;
+  /** UI-safe message from the adapter; never raw provider payloads. */
+  lastError?: string;
   createdAt: number;
+  updatedAt: number;
 }
 
+/** Owner view of their own attempt. Provider IDs and idempotency keys stay server-side. */
+export type MyPaymentAttemptView = Pick<
+  PaymentAttempt,
+  "id" | "revisionId" | "status" | "amountMinor" | "currency" | "lastError" | "createdAt" | "updatedAt"
+>;
+
+/** Merchant fulfillment is not implemented; never derive it from payment status. */
+export type MerchantOrderStatus = "not_implemented";
+
+export interface PaymentStatusView {
+  enabled: boolean;
+  mode: "stripe_test";
+  revisionId: string | null;
+  /** The current revision's status (group payment status during P1-B). */
+  groupStatus: ProposalStatus | null;
+  /** True once capture has started; gift/cap/selection edits are refused. */
+  frozen: boolean;
+  payerCount: number;
+  authorizedCount: number;
+  capturedCount: number;
+  /** Payers whose latest attempt failed, needs action, or is uncertain. */
+  attentionCount: number;
+  myAttempt: MyPaymentAttemptView | null;
+  merchantOrder: { status: MerchantOrderStatus };
+}
 // ---------- Jobs ----------
 
 export type JobStatus =
@@ -476,4 +592,94 @@ export interface ProposalView {
   approvals: Approval[];
   feasible: boolean;
   myLimit?: ContributionLimit;
+}
+
+/** Bounded source context for the buyer; never a published recipient preference. */
+export interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+
+// Server-only Stripe transport DTOs; never payment authorization or browser success signals.
+export interface StripeCheckoutInput {
+  roomId: string;
+  revisionId: string;
+  participantId: string;
+  attemptId: string;
+  amountMinor: number;
+  currency: "USD";
+  mode: "authorize" | "collect";
+  idempotencyKey: string;
+}
+export type StripePaymentBinding = Pick<StripeCheckoutInput, "roomId" | "revisionId" | "participantId" | "attemptId">;
+export interface StripeTestSession {
+  id: string;
+  binding: StripePaymentBinding;
+  checkoutUrl?: string;
+  status: "open" | "complete" | "expired";
+  paymentStatus: "paid" | "unpaid" | "no_payment_required";
+  paymentIntentId?: string;
+  amountMinor: number;
+  currency: "USD";
+}
+export interface StripeTestIntent {
+  id: string;
+  binding: StripePaymentBinding;
+  status: "requires_payment_method" | "requires_confirmation" | "requires_action" | "processing" | "requires_capture" | "canceled" | "succeeded";
+  amountMinor: number;
+  amountCapturableMinor: number;
+  amountReceivedMinor: number;
+  currency: "USD";
+  captureMethod: "automatic" | "automatic_async" | "manual";
+}
+export interface StripeTestRefund {
+  id: string;
+  paymentIntentId: string;
+  amountMinor: number;
+  status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled";
+}
+export interface StripeTestEvent {
+  id: string;
+  type: string;
+  objectId: string;
+  objectType: string;
+}
+export type StripeAdapterResult<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "failed" | "uncertain"; message: string };
+
+/** Server-only durable worker port. Implementations enforce human/revision policy in Convex. */
+export interface OrganizerCheckoutClaim {
+  claimId: string;
+  input: StripeCheckoutInput;
+  checkoutSessionId?: string;
+}
+export interface OrganizerCheckoutStore {
+  claim(): Promise<StripeAdapterResult<OrganizerCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+
+export interface StripePaymentExpectation {
+  binding: StripePaymentBinding;
+  amountMinor: number;
+  mode: "authorize" | "collect";
+  paymentIntentId?: string;
+}
+export interface StripePaymentObservation {
+  status: PaymentAttempt["status"];
+  paymentIntentId?: string;
+  checkoutSessionId?: string;
+  capturedMinor: number;
+  refundedMinor: number;
+  reason: string;
+}
+
+export interface StripePaymentReadInput {
+  expected: StripePaymentExpectation;
+  checkoutSessionId?: string;
+  paymentIntentId?: string;
+  refundIds?: string[];
 }

@@ -17,7 +17,20 @@ export const participantRole = v.union(v.literal("organizer"), v.literal("contri
 
 export const chatAuthorKind = v.union(v.literal("participant"), v.literal("buyer_agent"));
 
-export const evidenceKind = v.union(v.literal("paste"), v.literal("text_export"));
+export const evidenceKind = v.union(
+  v.literal("paste"),
+  v.literal("text_export"),
+  v.literal("photo"),
+  v.literal("screenshot"),
+);
+
+/** Media sources only. The uploaded files are deleted once read. */
+export const mediaStatus = v.union(
+  v.literal("uploaded"),
+  v.literal("read"),
+  v.literal("failed"),
+  v.literal("deleted"),
+);
 
 export const clueKind = v.union(
   v.literal("interest"),
@@ -47,6 +60,8 @@ export const clueSourceKind = v.union(
   v.literal("import"),
   v.literal("chat"),
   v.literal("manual"),
+  v.literal("photo"),
+  v.literal("screenshot"),
 );
 
 export const publishedClueStatus = v.union(
@@ -63,7 +78,10 @@ export const agentIntent = v.union(
   v.literal("recommend"),
   v.literal("query_recipient"),
   v.literal("wait"),
+  v.literal("reply"),
 );
+
+export const agentChatMode = v.union(v.literal("quiet"), v.literal("chatty"));
 
 export const listingSource = v.union(
   v.literal("apify"),
@@ -92,6 +110,14 @@ export const listingStatus = v.union(
   v.literal("stale"),
 );
 
+export const budgetBand = v.union(
+  v.literal("under_25"),
+  v.literal("25_50"),
+  v.literal("50_100"),
+  v.literal("100_plus"),
+  v.literal("unknown"),
+);
+
 export const selectionStatus = v.union(v.literal("active"), v.literal("cleared"));
 
 export const allocationShare = v.object({
@@ -115,6 +141,22 @@ export const proposalStatus = v.union(
   v.literal("canceled"),
 );
 
+export const paymentAttemptStatus = v.union(
+  v.literal("not_started"),
+  v.literal("authorization_pending"),
+  v.literal("authorized"),
+  v.literal("authorization_failed"),
+  v.literal("capture_pending"),
+  v.literal("captured"),
+  v.literal("cancellation_pending"),
+  v.literal("canceled"),
+  v.literal("refund_pending"),
+  v.literal("refunded"),
+  v.literal("action_required"),
+  v.literal("uncertain"),
+);
+
+export const paymentProvider = v.literal("stripe_test");
 export const approvalStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),

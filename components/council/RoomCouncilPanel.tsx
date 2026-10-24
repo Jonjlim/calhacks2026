@@ -18,10 +18,10 @@ export function RoomCouncilPanel({ data, actions, compact = false }: { data: Roo
   const clues = data.publishedClues.filter(c => c.status === "active");
   const interrupted = run?.status === "running" && now - run.updatedAt > 120000;
   const busy = run?.status === "running" || run?.status === "uncertain";
-  const label = !connection.isWebSocketConnected ? "Reconnecting to your room…" : interrupted ? "The council was interrupted" : run?.status === "completed" ? "The gifts are ready to explore" : run?.status === "partial" ? "A charm is ready; the search needs attention" : run?.status === "uncertain" ? "Checking an interrupted request" : run?.status === "failed" ? "The council needs another try" : busy ? "A little thoughtfulness, in motion" : "Let’s find something that feels like them";
+  const label = data.councilUnavailable ? "The council is unavailable on this backend. Your room has not been deleted." : !connection.isWebSocketConnected ? "Reconnecting to your room…" : interrupted ? "The council was interrupted" : run?.status === "completed" ? "The gifts are ready to explore" : run?.status === "partial" ? "A charm is ready; the search needs attention" : run?.status === "uncertain" ? "Checking an interrupted request" : run?.status === "failed" ? "The council needs another try" : busy ? "A little thoughtfulness, in motion" : "Let’s find something that feels like them";
   const action = run?.status === "uncertain"
     ? <button className="btn-primary h-11 px-5 text-[15px]" disabled={resume.pending || !connection.isWebSocketConnected} onClick={() => resume.run(run.runId)}>Resume</button>
-    : <button className="btn-primary h-11 px-5 text-[15px]" disabled={busy || ask.pending || clues.length === 0 || !connection.isWebSocketConnected} onClick={() => ask.run(clues.map(c => c.id))}>{busy ? "Working…" : "Ask the council"}</button>;
+    : <button className="btn-primary h-11 px-5 text-[15px]" disabled={data.councilUnavailable || busy || ask.pending || clues.length === 0 || !connection.isWebSocketConnected} onClick={() => ask.run(clues.map(c => c.id))}>{busy ? "Working…" : "Ask the council"}</button>;
   if (compact) return <section className="paper-card rounded-[22px] p-4" aria-label="AI Council">
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">

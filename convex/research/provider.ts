@@ -8,14 +8,16 @@ import type { SearchBrief } from "../../lib/contracts";
 export const VERIFIED_ACTOR = "johnvc~google-shopping-api-google-shopping-products-prices-deals";
 export const VERIFIED_BUILD = "0.0.142";
 export const PROVIDER_DEADLINE_MS = 180_000;
+export const PROVIDER_MAX_RESPONSE_BYTES = 750_000;
 export type ProviderResult<T> =
   | { kind: "ok"; value: T }
   | { kind: "failed" | "uncertain"; message: string };
 
+const providerId = z.string().regex(/^[a-zA-Z0-9]{1,100}$/);
 const runSchema = z.object({
-  id: z.string().regex(/^[a-zA-Z0-9]+$/),
+  id: providerId,
   status: z.string(),
-  defaultDatasetId: z.string().regex(/^[a-zA-Z0-9]+$/).optional(),
+  defaultDatasetId: providerId.optional(),
 });
 export type ProviderRun = z.infer<typeof runSchema>;
 const envelopeSchema = z.object({ data: runSchema });
@@ -23,9 +25,10 @@ const envelopeSchema = z.object({ data: runSchema });
 export function createProvider(token: string, fetcher: typeof fetch = fetch) {
   async function request(path: string, method = "GET", body?: unknown): Promise<ProviderResult<unknown>> {
     if (!token.trim()) return { kind: "failed", message: "Product source credentials are not configured." };
+    if (!/^[\x21-\x7e]{1,1024}$/.test(token)) return { kind: "failed", message: "Product source credentials are invalid." };
     try {
       const response = await fetcher("https://api.apify.com/v2/" + path, {
-        method,
+        method, redirect: "error",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(20_000),
@@ -34,7 +37,21 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
         kind: response.status >= 500 || response.status === 408 ? "uncertain" : "failed",
         message: "Product source returned HTTP " + response.status + ".",
       };
-      try { return { kind: "ok", value: await response.json() }; }
+      const reader = response.body?.getReader();
+      if (!reader) return { kind: "uncertain", message: "Product source returned an empty response." };
+      const decoder = new TextDecoder();
+      let size = 0, text = "";
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        size += part.value.byteLength;
+        if (size > PROVIDER_MAX_RESPONSE_BYTES) {
+          await reader.cancel();
+          return { kind: "uncertain", message: "Product source response exceeded its supported size." };
+        }
+        text += decoder.decode(part.value, { stream: true });
+      }
+      try { return { kind: "ok", value: JSON.parse(text + decoder.decode()) as unknown }; }
       catch { return { kind: "uncertain", message: "Product source response could not be decoded." }; }
     } catch {
       return { kind: "uncertain", message: "Product source request timed out or lost its connection." };
@@ -60,11 +77,16 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
           ? { max_price: brief.budgetMinor / 100 } : {}),
       });
     },
-    getRun(runId: string): Promise<ProviderResult<ProviderRun>> {
-      return runRequest("actor-runs/" + encodeURIComponent(runId));
+    async getRun(runId: string): Promise<ProviderResult<ProviderRun>> {
+      if (!providerId.safeParse(runId).success) return { kind: "failed", message: "Invalid product source run ID." };
+      const result = await runRequest("actor-runs/" + runId);
+      return result.kind === "ok" && result.value.id !== runId
+        ? { kind: "uncertain", message: "Product source returned a different run." }
+        : result;
     },
     getDataset(datasetId: string): Promise<ProviderResult<unknown>> {
-      return request("datasets/" + encodeURIComponent(datasetId) + "/items?clean=true&limit=50");
+      if (!providerId.safeParse(datasetId).success) return Promise.resolve({ kind: "failed", message: "Invalid product source dataset ID." });
+      return request("datasets/" + datasetId + "/items?clean=true&limit=50");
     },
   };
 }
