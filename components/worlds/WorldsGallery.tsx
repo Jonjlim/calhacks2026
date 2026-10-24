@@ -70,7 +70,7 @@ export function WorldsGallery() {
           Back to Unwrap
         </Link>
         <h1 className="text-3xl font-semibold text-plum">Other gift worlds</h1>
-        <p className="text-sm text-plum-soft">Shared by organizers. Names, chats and budgets are never shown.</p>
+        <p className="text-sm text-plum-soft">Shared by organizers. Names and chats are never shown, and budgets appear only as a range.</p>
       </header>
 
       {result === undefined && <p className="text-plum-soft">Loading shared worlds…</p>}
