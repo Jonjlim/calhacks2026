@@ -272,6 +272,17 @@ interface ProductListing {
 }
 ```
 
+### Product normalization helpers (RC-001 / RC-003)
+
+**Owner:** Dev 4. **Consumers:** Dev 4 research action; Dev 1/2/3 receive the unchanged ProductListing shape.
+
+- `normalizeListing(raw, retrievedAt, context?)` returns ProductListing fields without IDs/status, or null. Context is trusted server-side US query localization (`{ country: "us" }`), never model-provided currency.
+- `normalizeDataset(raw, retrievedAt)` reads the verified Actor's page envelopes, accepts only `search_parameters.gl === "us"`, skips malformed rows, and deduplicates identical product/seller/title observations within one dataset.
+- No schema migration or client endpoint changes. USD must be established by explicit currency, explicit USD price label, or validated US query context. Explicit foreign currency is rejected.
+- Exact nonnegative prices become safe integer cents. Ambiguous, conflicting or invalid prices remain unknown with no amount. Stock and shipping stay unknown for this provider.
+- Preserve bundle/size text. Source links remain the observed Google Shopping URLs; they are not merchant checkout links.
+- Provider-only fields, opaque page tokens, and helper URLs never enter normalized listings.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.
