@@ -41,6 +41,7 @@ export interface RoomData {
   invitePath?: string;
   activity?: ActivityView;
   latestResearch?: ResearchJobRow | null;
+  councilUnavailable?: boolean;
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
 }
 

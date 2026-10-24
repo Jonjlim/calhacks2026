@@ -1,0 +1,58 @@
+{
+  "provenance": {
+    "actor": "johnvc~google-shopping-api-google-shopping-products-prices-deals",
+    "runId": "1GPbd4koX44ifV9M9",
+    "build": "0.0.142",
+    "query": "mkm pottery tools",
+    "retrievedAt": 1792836964676
+  },
+  "data": [
+    {
+      "search_parameters": {
+        "gl": "us"
+      },
+      "shopping_results": [
+        {
+          "title": "MKM Sticker",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=mkm pottery tools&prds=productid:2118592923225207753,headlineOfferDocid:2118592923225207753,imageDocid:2717955534188363444,pvt:hg&hl=en&gl=us&udm=28",
+          "price": "$1.00",
+          "extracted_price": 1,
+          "thumbnail": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcS5Y1MVWQnE-UZVbyOZVWRF-8CcfcOj7sTzm3f1FPFNhF_GfYxuj6LiI3Ub6xZCYL8iVQYtEtKmH8aoF3c0xTx5pF_sc1iWBNYtALcCSOK798KNF9pY-aA6tw",
+          "source": "MKM Pottery Tools"
+        },
+        {
+          "title": "BHR-051 Big Hand Roller – Zig Zag Spiral",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=mkm pottery tools&prds=productid:16018476125251624787,headlineOfferDocid:16018476125251624787,imageDocid:7189162882542425825,pvt:hg&hl=en&gl=us&udm=28",
+          "price": "$20.95",
+          "extracted_price": 20.95,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcQpkknKmR6-vCl4WNJK-9NOBYAxIcuB0ZCvF-wlU4VbOpZV4v8lhJVWF4J7AM0NbfzCY0TaEU4GESd1r5myP9mazz2D6L9Mig",
+          "source": "MKM Pottery Tools"
+        },
+        {
+          "title": "DD-10 MKM Decorating Disk - 10 inch (25.4 cm) diameter",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=mkm pottery tools&prds=productid:10415192903106433921,headlineOfferDocid:10415192903106433921,imageDocid:16972729036937537781,pvt:hg&hl=en&gl=us&udm=28",
+          "price": "$27.95",
+          "extracted_price": 27.95,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcTICXN1Ey6SzYCwb9nm6X7QC1gRklItU7httxjfpJ2u3LMRNUTJ3zwNbAFq6IY38VWRgsx0Kxesvj8JQRrVlM5s-XqoSlZGQQ",
+          "source": "MKM Pottery Tools"
+        },
+        {
+          "title": "MKM Tools Scl002 Large Round Stamp",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=mkm pottery tools&prds=catalogid:8355815772837925018,productid:16454878651160768665,headlineOfferDocid:11425314391828341488,imageDocid:4094267717113837579,gpcid:17831430293358304912,mid:576462834658262094,pvt:hg&hl=en&gl=us&udm=28",
+          "price": "$10.15",
+          "extracted_price": 10.15,
+          "thumbnail": "https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcTxtMfOst4dTehY_sg_3AOO2Bqa0a5hb79MHj1Lgznke7-NklTw52xL_x2npCmIsx3K0DhgqIrf5y3pE1IV3YblzF1-MHOKvw",
+          "source": "Clay-King"
+        },
+        {
+          "title": "Nicexmas Clay Sculpting Tool Wooden Throwing Stick for Pottery Workshops Khaki, Size: 23.00X3.00X2.50 cm/9.04X1.18X0.98in",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=mkm pottery tools&prds=productid:16023301869170290226,headlineOfferDocid:16023301869170290226,imageDocid:2960448834640556065,pvt:hg&hl=en&gl=us&udm=28",
+          "price": "$10.76",
+          "extracted_price": 10.76,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcTZmnd0ECOEmY6YmPFR1huc_n57BSVDtbeXk5lHvYBPjQ580ra1INsmGHxqFnbqnOcg6lobUzn5I0giw1Og4ugq31FM8opeoL8Se7LDcRddgz4BgXpxJI4PLA",
+          "source": "Walmart - Haoma"
+        }
+      ]
+    }
+  ]
+}

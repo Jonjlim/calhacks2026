@@ -10,10 +10,22 @@ export class AgentFailure extends Error {
   }
 }
 export type ModelRole = "buyer" | "extractor" | "recipient";
+export const IMAGE_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
+export interface ModelImage {
+  mediaType: ImageMediaType;
+  /** Raw base64, no data: prefix. */
+  base64: string;
+}
+/** Per-image and per-request caps keep a photo read inside the action and response budgets. */
+export const MAX_IMAGE_BASE64_CHARS = 3_000_000;
+export const MAX_IMAGES_PER_REQUEST = 3;
 export interface ModelRequest {
   role: ModelRole;
   instructions: string;
   input: unknown;
+  /** Only the extractor role may send images; they are attached after the JSON input. */
+  images?: ModelImage[];
 }
 export type ModelTransport = (request: ModelRequest) => Promise<unknown>;
 
@@ -107,6 +119,18 @@ export function createModelTransport(
         "validation_failed",
         "Model input exceeded the supported context budget.",
       );
+    const images = request.images ?? [];
+    if (
+      images.length > MAX_IMAGES_PER_REQUEST ||
+      (images.length > 0 && request.role !== "extractor") ||
+      images.some(
+        (image) =>
+          !IMAGE_MEDIA_TYPES.includes(image.mediaType) ||
+          !/^[A-Za-z0-9+/]+={0,2}$/.test(image.base64) ||
+          image.base64.length > MAX_IMAGE_BASE64_CHARS,
+      )
+    )
+      throw new AgentFailure("validation_failed", "Unsupported image input.");
     const usage: AgentModelUsage = {
       calls: 1,
       reportedCalls: 0,
@@ -135,7 +159,22 @@ export function createModelTransport(
             : {}),
           messages: [
             { role: "system", content: request.instructions },
-            { role: "user", content: serialized },
+            {
+              role: "user",
+              content:
+                images.length === 0
+                  ? serialized
+                  : [
+                      { type: "text", text: serialized },
+                      ...images.map((image) => ({
+                        type: "image_url",
+                        image_url: {
+                          url: `data:${image.mediaType};base64,${image.base64}`,
+                          detail: "low",
+                        },
+                      })),
+                    ],
+            },
           ],
         }),
       });

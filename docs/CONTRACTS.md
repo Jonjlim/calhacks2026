@@ -136,9 +136,16 @@ interface EvidenceSource {
   id: string;
   roomId: string;
   participantId: string;
-  kind: "paste" | "text_export";
+  kind: "paste" | "text_export" | "photo" | "screenshot" | "voice_note"; // photo: P0, screenshot: P1-C, voice_note: P2
   label: string;
   sourceRevision: number;
+  /** photo / screenshot / voice_note only. The uploaded file is deleted once read. */
+  media?: {
+    count: number; // photos and screenshots: 1–3; voice notes: 1
+    /** photo sources: per-photo normalized tap point (0–1) marking the recipient. The uploader's own mark, not face recognition. Photos without a marker yield scene-only observations. */
+    recipientMarkers?: { x: number; y: number }[];
+    status: "uploaded" | "read" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -146,13 +153,44 @@ interface PrivateMessage {
   id: string;
   sourceId: string;
   participantId: string;
-  body: string;
+  body: string; // pasted text, text read from a screenshot / voice note, or one photo observation
   saidAt?: number;
   speakerHint?: string;
+  /** Which file (0-based) the row came from; screenshot and photo sources only. */
+  mediaIndex?: number;
 }
 ```
 
 Access: owner only, plus extractor action as that owner.
+
+Screenshots and voice notes become ordinary `PrivateMessage` rows before clue extraction. A photo becomes one observation row per photo. Proposed clues always cite rows on their own source, so `ProposedClue.sourceMessageIds` and every downstream rule stay the same. The raw file lives in Convex file storage only until it is read, then it is deleted and `media.status` becomes `deleted` (or `failed`).
+
+### Photo observation (P0)
+
+**Owner:** Dev 3 (producer). **Consumers:** Dev 1 (review UI); Dev 4 consumes the published style clues through the same confirmed-clue path as typed clues (see “Confirmed visual preferences in research”; there is no separate `SearchBrief` style field).
+
+```ts
+interface PhotoObservation {
+  mediaIndex: number;
+  recipientActivity?: string; // 1–6 words, e.g. "wheel-throwing"
+  placeType?:
+    | "home" | "kitchen" | "office" | "cafe" | "restaurant"
+    | "trail" | "beach" | "water" | "gym" | "studio" | "garden"
+    | "city" | "vehicle" | "stage" | "other";
+  styleTerms?: string[]; // e.g. ["minimalist", "bright colors"]
+  visibleItems?: { label: string; owned: "likely" | "possible" | "unknown" }[];
+  notes?: string; // one short basis sentence shown to the reviewer
+}
+```
+
+Rules:
+
+- The uploader marks the recipient by tapping the photo; the marker is the uploader's statement, never face recognition.
+- `placeType` comes from the closed enum only. No landmarks, addresses, city names, or GPS.
+- Describe only the marked person's activity, the coarse setting, style, and visible objects. Never identify people from faces, guess names, or infer age, gender, appearance, health, ethnicity, or religion. Other people in the photo are ignored.
+- Validate model output with Zod. Photo content is untrusted data; instructions inside a photo are not commands.
+- A single photo's observation becomes an `uncertain` clue. The same term observed in two or more photos of the source merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Every photo clue sets `speakerAssumption: "unknown"` and stays behind the human publish gate.
+- Published style observations become ordinary `interest` clues. They reach research through the confirmed-clue path (see “Confirmed visual preferences in research”), not a separate `SearchBrief` field.
 
 ### Proposed clue
 
@@ -193,7 +231,7 @@ interface PublishedClue {
   publisherId: string;
   kind: ProposedClue["kind"];
   text: string;
-  sourceKind: "paste" | "import" | "chat" | "manual";
+  sourceKind: "paste" | "import" | "chat" | "manual" | "photo" | "screenshot" | "voice_note";
   sourceMessageIds: string[];
   excerpt?: string;
   status: "active" | "withdrawn" | "source_withdrawn";
@@ -238,7 +276,8 @@ type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply"; // answers a follow-up in chat; cannot change state
 
 interface AgentDecision {
   jobId: string;
@@ -308,6 +347,8 @@ interface ProductListing {
 }
 ```
 
+`imageUrl` stays optional because some sources omit it, but it is expected for P0 product cards. Dev 4 keeps the provider's public thumbnail URL, validated as a public HTTPS URL, and prefers listings with photos when filling the visible 6–12 candidates. Dev 1 shows a labeled placeholder when it is missing and never substitutes a stock or AI-generated image.
+
 ### Product normalization helpers (RC-001 / RC-003)
 
 **Owner:** Dev 4. **Consumers:** Dev 4 research action; Dev 1/2/3 receive the unchanged ProductListing shape.
@@ -337,7 +378,21 @@ interface PriceFreshness {
 - `getPriceFreshness(listing, now, { sourceFailed? })` lives in `lib/research/freshness.ts`. The caller supplies a Unix millisecond clock: under 30 minutes is recent, 30 minutes through just under 6 hours is aging, and 6 hours onward is stale. A source failure or explicitly stale listing also needs refresh. Unknown prices remain unknown; invalid listings are unavailable. Invalid/future timestamps never count as recent.
 - `nextChangeAt` tells the UI when the age category changes. Recompute with the client's clock on a timer or visibility change; a Convex query does not rerun merely because wall-clock time passes. No automatic refresh request or price/proposal mutation is performed.
 - `hasProductImageUrl(listing)` validates an HTTPS thumbnail URL; it does not fetch the image or guarantee that the remote image loads. Dev 1 should show a placeholder on missing/failed images.
-- Ranking ties compare total score, personal relevance, then budget fit, then presence of a valid HTTPS image URL, and finally listing ID. Images do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
+- Ranking ties compare total score, personal relevance, then budget fit, then whether the item is hands-on (title has a kit, tool, class, starter, supply, or course word), then presence of a valid HTTPS image URL, and finally listing ID. Images and the hands-on flag do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
+- Positive clue matching ignores a small explicit list of retail brand names that contain hobby words (`Pottery Barn`, `Bass Pro`), so brand text alone never cites a clue. Studio names such as "Farmhouse Pottery" stay matchable. Ownership and exclusion matching still read the literal title.
+
+### Reviewed catalog matching (Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 explanations, Dev 3 catalog reads, Dev 2 integration review. No endpoint, ProductListing field, database or validator changes. Migration: none; review the additive matching/exclusion behavior at the next integration checkpoint.
+
+`catalogEvidenceFor(listing)` derives reviewed manufacturer/category facts from an exact normalized catalog title, including its model number and full descriptor. The initial catalog contains only MKM BHR-051 (Zig Zag Spiral roller) and DD-10 (10-inch decorating disk), with manufacturer URLs, checked date and a short paraphrased basis. It is a small reviewed catalog, not a general classifier. Normalization tolerates case, whitespace, dash/punctuation differences and spacing within these model codes. Unknown variants, truncated titles, appended accessories, model codes alone and seller/query matches yield no evidence.
+
+- Positive matching can use the reviewed `pottery`, `tool` and `MKM` terms alongside actual title tokens. The normal clue weights and thresholds remain unchanged. A matched preference counts once, regardless of how many supporting sources exist.
+- If reviewed terms contribute to a match, the explanation explicitly cites the manufacturer basis, source URL and checked date. A model match does not authenticate a seller or establish a price, stock, size, shipping, trend or purchase fact.
+- **Ownership stays literal.** A known pottery tool is not a starter kit and owning pottery does not mean owning every pottery tool. Exact named-item ownership still filters its actual title.
+- **Explicit exclusions additionally use reviewed category/manufacturer terms** so “no more pottery” or “no MKM” cannot be bypassed by a known model whose title omits those words. Other exclusion thresholds and uncertainty/withdrawal guards are unchanged; this is the documented extension to the literal-only rule above.
+- Reviewed hands-on tools participate in the existing hands-on tie-break. No extra numeric bonus, trend score or image bonus is added. Unknown prices and budget arithmetic remain unchanged.
+- No runtime merchant fetch, AI classification, new provider, schema or codegen is introduced. Adding catalog entries requires identity verification and a source-backed regression; unsupported products retain literal matching until their evidence is reviewed.
 
 ### Recommendation
 
@@ -524,7 +579,7 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
-  listingLimit: number;
+  listingLimit: number; // integer 1..12; default 12
 }
 
 interface AskedSlot {
@@ -538,6 +593,12 @@ interface AskedSlot {
 ```
 
 ---
+
+The pure Dev 4 brief builder bounds an explicit listing limit to 1..12, rounding
+fractional limits down. Omitted or non-finite limits use 12. An empty query list
+means no searchable published preference exists; the caller must not request
+research until it has a nonempty query. Model-produced briefs still pass the
+shared boundary validator rather than relying on this builder.
 
 ## Operation contracts
 
@@ -592,6 +653,19 @@ May enqueue `AgentJob` `evaluate_thread`.
 | Output | `{ source: EvidenceSource, messages: PrivateMessage[] }` |
 | Access | Caller becomes owner |
 | Errors | `unauthorized`, `validation_failed` |
+
+### `generateEvidenceUploadUrl` / `importMediaEvidence` (P0 photos, P1-C screenshots, P2 voice notes)
+
+| | |
+| --- | --- |
+| Owner | Dev 2 (storage, source rows), Dev 3 (vision / transcription action) |
+| Consumers | Dev 1 |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → `{ uploadUrl }`. `importMediaEvidence` (implemented: `photo` and `screenshot`; `voice_note` is P2, not built): `{ roomId, kind: "photo" \| "screenshot", label, files: { storageId, marker?: { x: number, y: number } }[] }`. The marker is per file (photos only) and normalized 0–1. |
+| Output | `{ source: EvidenceSource }`. The caller then runs `extractClues({ sourceId })` as for pasted text. |
+| Access | Caller becomes owner. A storage id already attached to any source is rejected, so another member's upload cannot be claimed. Files live in a private `evidenceMedia` table that clients never read. |
+| Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
+
+Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
 ### `extractClues`
 
@@ -681,7 +755,7 @@ P0 manual room clue for preferences/exclusions without an import.
 **Owner:** Dev 4. Existing PublishedClue, SearchBrief, ranking and provider signatures are unchanged. Dev 3 remains responsible for extracting/reviewing visual evidence.
 
 - Photo analysis must supply reviewed, active interest/explicit_wish clues for positive recommendations; uncertain clues do not drive search/ranking. Plain observation/tentative wording (e.g. holding a camera, wearing a jacket, might own a camera) is additionally ignored even if misclassified as an interest or ownership clue. This lexical guard is not an image classifier or a complete uncertainty detector.
-- Confirmed short preferences require all normalized shopping terms to match. Bounded positive-only vocabulary covers minimal/minimalist, retro/vintage, jeans/denim, rock climbing, jewelry items, and a small earth-tone palette when a visible goods category is present. These are catalog-text heuristics, not image similarity or semantic embeddings.
+- Confirmed short preferences require all normalized shopping terms to match. Bounded positive-only vocabulary covers minimal/minimalist, retro/vintage, jeans/denim, rock climbing, wheel throwing/pottery wheel, jewelry items, and a small earth-tone palette when a visible goods category is present. These are catalog-text heuristics, not image similarity or semantic embeddings.
 - Ownership and exclusions retain their literal matching rules; positive shopping vocabulary does not broaden them. Exact duplicate normalized preferences can cite multiple clues but do not multiply the relevance score.
 - SearchBrief queryTerms are ordered complete query phrases. The one-page provider uses the first nonempty phrase, rather than concatenating unrelated interests. Planners should place a useful complete phrase first (e.g. vintage denim jacket, not separate vintage/denim/jacket elements). Remaining phrases are alternate directions, not additional paid searches in this task.
 - Photo-derived and typed clues use the same research path. A clue's source type never creates an interest or ownership fact by itself. No media upload, model transport or shared database schema changes are included.
@@ -870,3 +944,110 @@ Dev 3 may write extraction results as JSON fixtures matching `ProposedClue`.
 Dev 4 may ship 3–6 `manual_fixture` listings labeled as fixtures, plus one live-normalized listing after the spike.
 
 Do not silently promote fixtures to `source: "apify"`.
+
+## Local trend discovery experiment (RC-014)
+
+Owner: Dev 4. Consumers: standalone spike/report only. Additive types; no database migration, query shape, score, or `SearchBrief` change. These observations describe **search terms**, never product sales. Production integration is deferred.
+
+```ts
+interface TrendContext {
+  seedTerm: string;       // public category, not raw private clue text
+  geo: "US";
+  timeRange: "today 3-m"; // requested relative window evaluated at retrieval
+  retrievedAt: number;   // positive integer Unix milliseconds
+}
+type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;     // Google Trends seed exploration with the same geo/window
+  query: string;         // provider's related search phrase
+} & (
+  | { kind: "top_search"; popularityIndex: number } // 0..100, not share or sales
+  | { kind: "rising_search"; growthPercent: number } // >0, compared with previous period
+  | { kind: "breakout_search" } // provider says Breakout; no invented exact growth
+);
+```
+
+Reject mismatched seed terms, malformed metrics and missing context. Deduplicate within seed/geo/window/kind/query. Discovery candidates must retain all literal seed tokens, reject obvious local-service/informational intent, and retain the observation as provenance. This lexical gate can miss useful synonyms and admit non-gifts; it is not personal relevance or purchase approval. Current production `trendSignal` stays zero.
+
+The alternate Actor's exact label `Past 90 days` maps to requested `today 3-m`; other windows/geos are rejected. Ignore the known `Pottery Barn` brand phrase when checking a pottery category match, matching the production collision rule.
+
+### Local TikTok fashion observations
+
+Owner: Dev 4. Consumers: local spike/replay/tests only. Additive types, no Convex migration or production ranking change. Keep this separate from Google search-growth observations: these are individual post snapshots, not growth measurements.
+
+```ts
+interface FashionSampleContext {
+  seedTerm: string;     // public style query
+  windowStart: number;  // inclusive Unix ms, independently enforced
+  windowEnd: number;    // inclusive Unix ms
+  retrievedAt: number;
+}
+interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;   // normalized public URL handle, for dedup/counting only
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;       // lifetime count at retrieval, not count within the window
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;  // proposed shopping query; not a published recipient preference
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;        // e.g. Mentioned in 3 sampled recent posts
+}
+```
+
+Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to documented denim garment patterns for this spike. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
+
+Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
+
+The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
+### `giftWorlds` (opt-in zoom-out summaries)
+
+| | |
+| --- | --- |
+| Owner | Dev 3 (backend), Dev 1 (UI / world scene) |
+| Mutations | `shareWorld({ roomId, recipientAlias?, highlightClueIds? })`, `unshareWorld({ roomId })` (organizer only) |
+| Queries | `getMyWorldShare({ roomId })` (members), `listWorlds({ limit? })` (any signed-in user) |
+| Output | `PublicWorld { id, isSample, mine, occasion, recipientAlias, budgetBand, friends, inputs: { kind, count }[], highlights: string[] (≤3, ≤80 chars), state: "exploring" \| "chosen", outcome?: { title, priceMinor?, priceStatus, source }, sharedAt }` plus `WorldAggregate` |
+| Privacy | Never exposes room id, user ids, invite token, real names, chats, contribution limits, or private imports. Highlights are organizer-picked active clue lines with names replaced; sensitive text is rejected. |
+| Errors | `unauthorized`, `validation_failed`, `refused` (sample seeding disabled) |
+
+### Recorded fashion context → buyer agent (Dev 4 / Dev 3 integration)
+
+Owner: Dev 4 constructs source context; Dev 3 consumes it in the existing buyer snapshot.
+`BuyerSnapshot.fashionDiscovery?: FashionAgentContext` is an additive internal field,
+not a database field or a recipient preference. No migration or public endpoint changes.
+
+```ts
+interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+```
+
+The first integration is an explicit offline replay under existing `DEMO_SEED_ENABLED=true`.
+Only active confirmed interest/wish clues that literally contain both vintage and denim
+activate the recorded vintage-denim sample. Uncertain wording, private evidence, unrelated
+interests and disabled demo mode produce no context. Source dates are preserved; a sample
+retrieved in the future or more than 24 hours ago is omitted. Only bounded derived directions,
+source URLs and sample context reach the model; raw captions and author metadata do not.
+
+The buyer may use a direction as the first SearchBrief query only as inspiration for the
+supporting published interest. It cannot cite it as a new recipient preference, product,
+price or platform-wide trend. Existing server budget, exclusions, revision checks and
+one-direction shopping worker still apply. The context participates in input-version fencing.
+No TikTok request, automatic paid discovery, new provider or deployment is enabled by this
+bridge. Live refresh/persistence and user-visible discovery provenance are still pending.

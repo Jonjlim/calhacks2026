@@ -2,9 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChatPanel } from "@/components/chat/ChatPanel";
-import { EvidenceImport } from "@/components/clues/EvidenceImport";
-import { ProposedClueReview } from "@/components/clues/ProposedClueReview";
+import { RoomAgentTools } from "./RoomAgentTools";
 import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
@@ -108,7 +106,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   let primary: ReactNode = null;
   if (phase === "collect") {
     primary = isOrganizer ? (
-      <button className="btn-primary h-11 px-5" disabled={!activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
+      <button className="btn-primary h-11 px-5" disabled={data.councilUnavailable || !activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
         {activeClues.length ? "Wake the council" : "Waiting for memories…"}
       </button>
     ) : (
@@ -140,6 +138,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
+      {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
       {/* Identity */}
@@ -265,11 +264,7 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
     <>
       {actions && <ShareMemory roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} />}
       <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
-      <details className="paper-card rounded-[18px] p-4"><summary className="cursor-pointer font-display text-xl">Bring in a conversation</summary><div className="mt-3 flex flex-col gap-4">
-        <EvidenceImport evidence={data.evidence} latestJob={data.activity?.jobs.find((j) => j.kind === "extract")} modelConfigured={data.activity?.capabilities.modelConfigured} actions={actions} />
-        <ProposedClueReview clues={data.myProposedClues} actions={actions} />
-      </div></details>
-      <ChatPanel messages={data.messages} participants={participants} me={me} activity={data.activity} actions={actions} />
+      <RoomAgentTools data={data} actions={actions} />
     </>
   );
 }

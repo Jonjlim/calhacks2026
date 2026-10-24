@@ -10,6 +10,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
+import { discardSourceMedia } from "./media";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
 import { err, memberError, ok } from "./lib/result";
@@ -111,6 +112,8 @@ export const deleteEvidence = mutation({
       .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
       .collect();
     for (const m of messages) await ctx.db.delete(m._id);
+    // Unread uploads are deleted with the source.
+    await discardSourceMedia(ctx, sourceId, "deleted");
 
     let publishedChanged = false;
     const proposed = await ctx.db
@@ -387,7 +390,12 @@ export const publishClue = mutation({
       publisherId: member.me._id,
       kind: clue.kind,
       text: clue.text,
-      sourceKind: source.kind === "text_export" ? "import" : "paste",
+      sourceKind:
+        source.kind === "text_export"
+          ? "import"
+          : source.kind === "photo" || source.kind === "screenshot"
+            ? source.kind
+            : "paste",
       sourceMessageIds: clue.sourceMessageIds,
       excerpt,
       status: "active",

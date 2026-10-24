@@ -8,6 +8,55 @@
 
 export type Currency = "USD";
 
+export interface FashionSampleContext {
+  seedTerm: string;
+  windowStart: number;
+  windowEnd: number;
+  retrievedAt: number;
+}
+
+export interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+
+export interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;
+}
+
+/** RC-014 local experiment; term-level evidence, not product popularity. */
+export interface TrendContext {
+  seedTerm: string;
+  geo: "US";
+  timeRange: "today 3-m";
+  retrievedAt: number;
+}
+
+export type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;
+  query: string;
+} & (
+  | { kind: "top_search"; popularityIndex: number }
+  | { kind: "rising_search"; growthPercent: number }
+  | { kind: "breakout_search" }
+);
+
 // ---------- Errors / results ----------
 
 export type AppErrorCode =
@@ -80,7 +129,7 @@ export interface AgentCitations {
 
 // ---------- Evidence and clues ----------
 
-export type EvidenceKind = "paste" | "text_export";
+export type EvidenceKind = "paste" | "text_export" | "photo" | "screenshot";
 
 export interface EvidenceSource {
   id: string;
@@ -89,6 +138,12 @@ export interface EvidenceSource {
   kind: EvidenceKind;
   label: string;
   sourceRevision: number;
+  /** photo / screenshot only. The uploaded file is deleted once read. */
+  media?: {
+    count: number;
+    recipientMarkers?: { x: number; y: number }[];
+    status: "uploaded" | "read" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -99,6 +154,8 @@ export interface PrivateMessage {
   body: string;
   saidAt?: number;
   speakerHint?: string;
+  /** Which uploaded file (0-based) the row came from; photo and screenshot sources only. */
+  mediaIndex?: number;
 }
 
 export type ClueKind =
@@ -133,7 +190,7 @@ export interface ProposedClue {
   createdAt: number;
 }
 
-export type ClueSourceKind = "paste" | "import" | "chat" | "manual";
+export type ClueSourceKind = "paste" | "import" | "chat" | "manual" | "photo" | "screenshot";
 
 export interface PublishedClue {
   id: string;
@@ -207,7 +264,8 @@ export type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply";
 
 export interface AgentDecision {
   jobId: string;
@@ -476,4 +534,13 @@ export interface ProposalView {
   approvals: Approval[];
   feasible: boolean;
   myLimit?: ContributionLimit;
+}
+
+/** Bounded source context for the buyer; never a published recipient preference. */
+export interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
 }

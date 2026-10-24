@@ -18,10 +18,19 @@ import {
 } from "./engine";
 import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
 import { readCatalog } from "../research/catalog";
-import { renderRecommendation, researchStatusMessage } from "./presentation";
+import { recordedFashionContext } from "../../lib/research/fashionContext";
+import {
+  renderRecommendation,
+  renderReply,
+  researchStatusMessage,
+} from "./presentation";
 import { agentModelUsage } from "../validators";
+import type { MediaWork } from "./mediaRuntime";
+import { discardSourceMedia } from "../media";
 
 type AgentJob = Doc<"agentJobs">;
+const clipText = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
 export async function recordEvent(
   ctx: MutationCtx,
   job: AgentJob,
@@ -69,8 +78,14 @@ export async function readBuyerSnapshot(
     .filter((q) => q.eq(q.field("intent"), "recommend"))
     .order("desc")
     .first();
+  const lastAgentMessage = messages.find((m) => m.authorKind === "buyer_agent");
   const chronological = messages.reverse();
+  const fashionDiscovery = recordedFashionContext({
+    enabled: process.env.DEMO_SEED_ENABLED === "true",
+    clues: catalog.clues, now: Date.now(),
+  });
   return {
+    ...(fashionDiscovery ? { fashionDiscovery } : {}),
     roomId: room._id,
     jobId: job._id,
     recipientDisplayName: room.recipientDisplayName,
@@ -83,6 +98,15 @@ export async function readBuyerSnapshot(
       .at(-1)?._id,
     mode: job.mode ?? "quiet",
     trigger: job.trigger ?? "human",
+    chatty: room.agentChatMode === "chatty",
+    ...(lastAgentMessage
+      ? {
+          secondsSinceAgentMessage: Math.max(
+            0,
+            Math.floor((Date.now() - lastAgentMessage.createdAt) / 1000),
+          ),
+        }
+      : {}),
     ...(job.researchJobId ? { researchJobId: job.researchJobId } : {}),
     recipientAgentEnabled:
       !!room.recipientProfileId &&
@@ -101,6 +125,7 @@ export async function readBuyerSnapshot(
     listings: catalog.listings.map((l) => ({
       id: l.id,
       title: l.title,
+      currency: l.currency,
       ...(l.priceMinor !== undefined ? { priceMinor: l.priceMinor } : {}),
       sourceUrl: l.sourceUrl,
       retrievedAt: l.retrievedAt,
@@ -147,6 +172,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
   return fingerprint({
     roomId: snapshot.roomId,
     mode: snapshot.mode,
+    chatty: snapshot.chatty ?? false,
     trigger: snapshot.trigger ?? "human",
     researchJobId: snapshot.researchJobId,
     recipient: snapshot.recipientDisplayName,
@@ -164,6 +190,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
     researchRunning: snapshot.researchRunning,
     recipientEnabled: snapshot.recipientAgentEnabled,
     research: snapshot.research,
+    fashionDiscovery: snapshot.fashionDiscovery,
     excluded: snapshot.excluded,
   });
 }
@@ -178,6 +205,35 @@ export function buyerInputHash(snapshot: BuyerSnapshot): string {
     second = Math.imul(second ^ version.charCodeAt(i), 2246822519);
   }
   return `${first >>> 0}:${second >>> 0}`;
+}
+
+/** Per-room ceiling on model-backed agent jobs per rolling hour, so a chatty room or a loop cannot drain provider credit. */
+export const DEFAULT_MODEL_JOBS_PER_ROOM_HOUR = 60;
+
+export async function modelBudgetExceeded(
+  ctx: QueryCtx,
+  roomId: Id<"rooms">,
+): Promise<boolean> {
+  const configured = Number(process.env.AGENT_MAX_JOBS_PER_ROOM_HOUR);
+  const limit =
+    Number.isInteger(configured) && configured > 0
+      ? configured
+      : DEFAULT_MODEL_JOBS_PER_ROOM_HOUR;
+  const since = Date.now() - 60 * 60 * 1000;
+  const recent = await ctx.db
+    .query("agentJobs")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .order("desc")
+    .take(limit * 3 + 50);
+  // A job counts once it reached the model (usage recorded) or is still in flight.
+  const spent = recent.filter(
+    (job) =>
+      job.createdAt >= since &&
+      ((job.modelUsage?.calls ?? 0) > 0 ||
+        job.status === "pending" ||
+        job.status === "running"),
+  ).length;
+  return spent >= limit;
 }
 
 /** Dev 2 may call this after storing a human chat message in the same transaction. */
@@ -196,6 +252,11 @@ export async function enqueueBuyerTurn(
   const member = await ctx.db.get(participantId);
   if (!room || !member || member.roomId !== roomId)
     return err("unauthorized", "Room membership required.");
+  if (await modelBudgetExceeded(ctx, roomId))
+    return err(
+      "refused",
+      "This room has used its agent budget for the hour. Try again later.",
+    );
   // Insert then read the exact permitted snapshot. Duplicate drafts are deleted in the same transaction.
   const jobId = await ctx.db.insert("agentJobs", {
     roomId,
@@ -371,6 +432,7 @@ export type ClaimedWork = {
   job: AgentJob;
   snapshot?: BuyerSnapshot;
   extraction?: ExtractionInput;
+  media?: MediaWork;
 };
 export const claimJob = internalMutation({
   args: {
@@ -413,6 +475,35 @@ export const claimJob = internalMutation({
     });
     if (kind === "evaluate_thread")
       return { attempt, job, snapshot: (await readBuyerSnapshot(ctx, job))! };
+    const mediaRows = await ctx.db
+      .query("evidenceMedia")
+      .withIndex("by_source", (q) => q.eq("sourceId", job.sourceId!))
+      .collect();
+    if (mediaRows.length > 0) {
+      const source = (await ctx.db.get(job.sourceId!))!;
+      const published = await ctx.db
+        .query("publishedClues")
+        .withIndex("by_room", (q) => q.eq("roomId", job.roomId))
+        .filter((q) => q.eq(q.field("status"), "active"))
+        .take(100);
+      return {
+        attempt,
+        job,
+        media: {
+          sourceId: source._id,
+          kind: source.kind === "screenshot" ? "screenshot" : "photo",
+          items: mediaRows
+            .sort((a, b) => a.mediaIndex - b.mediaIndex)
+            .map((m) => ({
+              mediaIndex: m.mediaIndex,
+              storageId: m.storageId,
+              contentType: m.contentType,
+              ...(m.marker ? { marker: m.marker } : {}),
+            })),
+          publishedClues: published.map((c) => ({ id: c._id, text: c.text, kind: c.kind })),
+        },
+      };
+    }
     const rows = await ctx.db
       .query("privateMessages")
       .withIndex("by_source", (q) => q.eq("sourceId", job.sourceId!))
@@ -472,6 +563,9 @@ export const expireJob = internalMutation({
         lastError: "Agent task did not finish in time. Retry is available.",
         finishedAt: Date.now(),
       });
+      // A read that never finished must not leave the upload behind.
+      if (job.kind === "extract" && job.sourceId)
+        await discardSourceMedia(ctx, job.sourceId, "failed");
       await recordEvent(
         ctx,
         job,
@@ -642,7 +736,9 @@ export const completeTurn = internalMutation({
     const rendered =
       decision.intent === "recommend"
         ? renderRecommendation(decision, snapshot)
-        : null;
+        : decision.intent === "reply"
+          ? renderReply(decision, snapshot)
+          : null;
     const citations: Doc<"chatMessages">["citations"] = rendered
       ? {
           listingIds: rendered.citations.listingIds.map((id) =>
@@ -661,6 +757,10 @@ export const completeTurn = internalMutation({
             : {}),
         }
       : undefined;
+    const recipientOutcome =
+      decision.intent === "query_recipient"
+        ? agentReplySchema.safeParse(recipient?.reply).data?.status
+        : undefined;
     const stored = {
       intent: decision.intent,
       rationale: decision.rationale,
@@ -675,6 +775,7 @@ export const completeTurn = internalMutation({
         ? { recipientQuery: decision.recipientQuery }
         : {}),
       ...("citations" in decision ? { citations: decision.citations } : {}),
+      ...(recipientOutcome ? { recipientOutcome } : {}),
     };
     // Drop undefined values from serialized objects passed to Convex.
     await ctx.db.insert("agentDecisions", {
@@ -699,7 +800,11 @@ export const completeTurn = internalMutation({
       roomId: job.roomId,
       createdAt: Date.now(),
     });
-    if (decision.intent === "clarify" || decision.intent === "recommend") {
+    if (
+      decision.intent === "clarify" ||
+      decision.intent === "recommend" ||
+      decision.intent === "reply"
+    ) {
       const messageId = await ctx.db.insert("chatMessages", {
         roomId: job.roomId,
         authorKind: "buyer_agent",
@@ -828,26 +933,32 @@ export const completeTurn = internalMutation({
         snapshot.excluded?.filter((row) =>
           snapshot.previousRecommendationListingIds?.includes(row.listingId),
         ) ?? [];
-      if (affected.length)
+      // One event per dropped option, naming the clue that changed the shortlist.
+      for (const row of affected.slice(0, 5)) {
+        const listingId = ctx.db.normalizeId("productListings", row.listingId);
+        const listing = listingId ? await ctx.db.get(listingId) : null;
+        const clue = row.clueId
+          ? snapshot.publishedClues.find((c) => c.id === row.clueId)
+          : undefined;
+        const title = clipText(listing?.title ?? "An earlier option", 80);
+        const why =
+          row.reason === "excluded_by_clue" && clue
+            ? `because the room confirmed: “${clipText(clue.text, 100)}”`
+            : row.reason === "unavailable"
+              ? "because it is no longer available"
+              : "because its listing is no longer valid";
         await recordEvent(
           ctx,
           job,
           "buyer",
           "completed",
-          "An earlier recommendation no longer fits the current clues or availability.",
+          `Dropped “${title}” ${why}.`,
           {
-            listingIds: affected.map((row) =>
-              ctx.db.normalizeId("productListings", row.listingId)!,
-            ),
-            publishedClueIds: [
-              ...new Set(
-                affected.flatMap((row) =>
-                  row.clueId
-                    ? [ctx.db.normalizeId("publishedClues", row.clueId)!]
-                    : [],
-                ),
-              ),
-            ],
+            listingIds: listingId ? [listingId] : [],
+            publishedClueIds:
+              row.clueId && ctx.db.normalizeId("publishedClues", row.clueId)
+                ? [ctx.db.normalizeId("publishedClues", row.clueId)!]
+                : [],
             ...(snapshot.research?.poolJobId
               ? {
                   researchJobId: ctx.db.normalizeId(
@@ -858,6 +969,7 @@ export const completeTurn = internalMutation({
               : {}),
           },
         );
+      }
     }
     await ctx.db.patch(job._id, {
       status: "succeeded",
@@ -868,7 +980,9 @@ export const completeTurn = internalMutation({
       job,
       "buyer",
       "completed",
-      rendered
+      decision.intent === "reply"
+        ? "Answered a follow-up in chat."
+        : rendered
         ? "Shared sourced options with their supporting clues."
         : decision.intent === "listen" || decision.intent === "wait"
           ? "Listening while the group decides."

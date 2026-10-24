@@ -1,0 +1,94 @@
+{
+  "provenance": {
+    "actor": "xmolodtsov~tiktok-search-scraper",
+    "build": "0.1.39",
+    "runId": "4L8Jxjsie44FQmDf7",
+    "originalSampleSize": 19,
+    "subset": true
+  },
+  "context": {
+    "seedTerm": "vintage denim outfit",
+    "windowStart": 1790245755807,
+    "windowEnd": 1792837755807,
+    "retrievedAt": 1792837767311
+  },
+  "data": [
+    {
+      "postPage": "https://www.tiktok.com/@marina50001/video/7698516106499083534",
+      "title": "Ultimate vintage blue denim, Levi’s SUPERLOW loose jeans 😍! #falloutfits #vintagedenim #lowrisebaggyjeans #y2kaesthetic ",
+      "uploadedAt": 1792450480,
+      "uploadedAtFormatted": "2026-10-19T22:54:40.000Z",
+      "hashtags": [
+        "falloutfits",
+        "vintagedenim",
+        "lowrisebaggyjeans",
+        "y2kaesthetic"
+      ],
+      "views": 833,
+      "likes": 35,
+      "shares": 4
+    },
+    {
+      "postPage": "https://www.tiktok.com/@selembutputih/video/7693444308392774918",
+      "title": "Vintage Washed Loose Fit Denim#menfashionstyle #outfit #ootdfashion ",
+      "uploadedAt": 1791269634,
+      "uploadedAtFormatted": "2026-10-06T06:53:54.000Z",
+      "hashtags": [
+        "menfashionstyle",
+        "outfit",
+        "ootdfashion"
+      ],
+      "views": 57000,
+      "likes": 203,
+      "shares": 17
+    },
+    {
+      "postPage": "https://www.tiktok.com/@rn.ashley/video/7692064065262292255",
+      "title": "Iconic really 🤌🏼 Levi’s 90s vintage loose leg denim @LEVI'S #levis501 #vintagelevis #tiktokshopfalldealsforyoudays #levis ",
+      "uploadedAt": 1790948269,
+      "uploadedAtFormatted": "2026-10-02T13:37:49.000Z",
+      "hashtags": [
+        null,
+        "levis501",
+        "vintagelevis",
+        "tiktokshopfalldealsforyoudays",
+        "levis"
+      ],
+      "views": 125100,
+      "likes": 1163,
+      "shares": 66
+    },
+    {
+      "postPage": "https://www.tiktok.com/@ben.svanda/video/7699566743999483167",
+      "title": "My take on the classic denim on denim look #ootd #outfitinspo #vintagefashion #menswear #fyp ",
+      "uploadedAt": 1792695090,
+      "uploadedAtFormatted": "2026-10-22T18:51:30.000Z",
+      "hashtags": [
+        "ootd",
+        "outfitinspo",
+        "vintagefashion",
+        "menswear",
+        "fyp"
+      ],
+      "views": 2406,
+      "likes": 321,
+      "shares": 6
+    },
+    {
+      "postPage": "https://www.tiktok.com/@latro.ch/video/7688748646283676950",
+      "title": "jeans in bio! #vintage #jeans #couple #outfit #style ",
+      "uploadedAt": 1790176302,
+      "uploadedAtFormatted": "2026-09-23T15:11:42.000Z",
+      "hashtags": [
+        "vintage",
+        "jeans",
+        "couple",
+        "outfit",
+        "style"
+      ],
+      "views": 272800,
+      "likes": 49200,
+      "shares": 4830
+    }
+  ]
+}

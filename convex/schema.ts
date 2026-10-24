@@ -34,6 +34,8 @@ export default defineSchema({
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
     recipientProfileId: v.optional(v.id("recipientProfiles")),
+    /** quiet (default): Unwrap speaks when asked. chatty: it may also join in; organizer-controlled. */
+    agentChatMode: v.optional(V.agentChatMode),
     /** Latest human chat message; part of the buyer-agent evaluate inputHash. */
     latestMessageId: v.optional(v.id("chatMessages")),
     inviteToken: v.string(),
@@ -73,9 +75,31 @@ export default defineSchema({
     kind: V.evidenceKind,
     label: v.string(),
     sourceRevision: v.number(),
+    /** photo / screenshot sources only. */
+    media: v.optional(
+      v.object({
+        count: v.number(),
+        recipientMarkers: v.optional(
+          v.array(v.object({ x: v.number(), y: v.number() })),
+        ),
+        status: V.mediaStatus,
+      }),
+    ),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_room_participant", ["roomId", "participantId"]),
+
+  /** Uploaded files awaiting one read. Rows and files are deleted after the read (or on failure/withdrawal). Owner-only, never subscribed to by clients. */
+  evidenceMedia: defineTable({
+    sourceId: v.id("evidenceSources"),
+    participantId: v.id("participants"),
+    mediaIndex: v.number(),
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    marker: v.optional(v.object({ x: v.number(), y: v.number() })),
+  })
+    .index("by_source", ["sourceId"])
+    .index("by_storage", ["storageId"]),
 
   privateMessages: defineTable({
     sourceId: v.id("evidenceSources"),
@@ -83,6 +107,8 @@ export default defineSchema({
     body: v.string(),
     saidAt: v.optional(v.number()),
     speakerHint: v.optional(v.string()),
+    /** Which uploaded file (0-based) the row came from; photo and screenshot sources only. */
+    mediaIndex: v.optional(v.number()),
   }).index("by_source", ["sourceId"]),
 
   proposedClues: defineTable({
@@ -249,6 +275,8 @@ export default defineSchema({
       subject: v.object({ kind: v.union(v.literal("category"), v.literal("product")), label: v.string(), listingId: v.optional(v.string()) }),
     })),
     citations: v.optional(v.object({ listingIds: v.array(v.string()), publishedClueIds: v.array(v.string()) })),
+    /** query_recipient only: how the recipient agent's policy resolved the question. */
+    recipientOutcome: v.optional(v.union(v.literal("answered"), v.literal("unknown"), v.literal("refused"))),
     createdAt: v.number(),
   }).index("by_room", ["roomId"]),
 
@@ -269,6 +297,36 @@ export default defineSchema({
     summary: v.string(), createdAt: v.number(),
     citations: v.optional(V.agentCitations),
   }).index("by_room", ["roomId"]),
+
+  /**
+   * Opt-in public summaries of gift sessions ("zoom out" view). Holds only what the organizer
+   * approved: coarse inputs, up to three chosen clue lines, and the final pick. No room id,
+   * names, invite token, private imports, caps, or participant ids are ever exposed to readers.
+   */
+  giftWorlds: defineTable({
+    roomId: v.optional(v.id("rooms")),
+    ownerUserId: v.optional(v.string()),
+    isSample: v.boolean(),
+    occasion: v.string(),
+    recipientAlias: v.string(),
+    budgetBand: V.budgetBand,
+    friends: v.number(),
+    inputs: v.array(v.object({ kind: V.clueKind, count: v.number() })),
+    highlights: v.array(v.string()),
+    state: v.union(v.literal("exploring"), v.literal("chosen")),
+    outcome: v.optional(
+      v.object({
+        title: v.string(),
+        priceMinor: v.optional(v.number()),
+        priceStatus: V.priceStatus,
+        source: V.listingSource,
+      }),
+    ),
+    sharedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_shared", ["sharedAt"]),
 
   recipientProfiles: defineTable({
     roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
