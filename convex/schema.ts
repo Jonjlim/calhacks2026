@@ -43,6 +43,8 @@ export default defineSchema({
     inviteToken: v.string(),
     createdBy: v.string(),
     createdAt: v.number(),
+    /** Set by rooms.deleteRoom; the room is unreachable from then on while purgeRoomBatch removes its rows. */
+    deletedAt: v.optional(v.number()),
   }).index("by_invite_token", ["inviteToken"]),
 
   participants: defineTable({
@@ -67,6 +69,8 @@ export default defineSchema({
     responseAgentJobId: v.optional(v.id("agentJobs")),
     replyToSlot: v.optional(v.string()),
     citations: v.optional(V.agentCitations),
+    /** Author deleted the message: body is overwritten with "" and the row stays as a tombstone. */
+    deletedAt: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_idempotency", ["roomId", "clientIdempotencyKey"]),
