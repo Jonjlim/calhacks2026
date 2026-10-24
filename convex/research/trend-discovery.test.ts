@@ -22,6 +22,8 @@ it("replays the recorded trend → real shopping response handoff with purchase 
   const ranked = rankListings({ listings: [...listings, ...fixtureListings], clues: [clueLikesPottery, clueOwnsStarterKit], budgetMinor: 12000, limit: 30 });
   expect(ranked.some(row => row.listingId === "fx_starter_kit")).toBe(false);
   expect(ranked.every(row => row.trendSignal === 0)).toBe(true);
-  // This exposes a real integration limitation: seller/query context is not title evidence.
-  expect(ranked.find(row => row.listingId === roller.id)?.personalRelevance).toBe(0);
+  // A reviewed manufacturer/model identity now supplies the missing category, not the search/seller.
+  expect(ranked.find(row => row.listingId === roller.id)?.personalRelevance).toBe(0.7);
+  expect(ranked.find(row => row.listingId === roller.id)?.explanation).toContain("Category evidence:");
+  expect(ranked.find(row => row.listingId === "recorded_0")?.personalRelevance).toBe(0); // MKM sticker.
 });

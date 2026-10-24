@@ -10,6 +10,7 @@
 import type { ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
 import { hasProductImageUrl } from "../../lib/research/images";
+import { catalogEvidenceFor, type CatalogEvidence } from "./catalogEvidence";
 import {
   cluePhrase, contentTokens, isHandsOnItem, isUnconfirmedObservation, shoppingMatchTokens, shoppingPhrase,
   withoutBrandPhrases,
@@ -76,7 +77,9 @@ export function filterListings(input: Pick<RankListingsInput, "listings" | "clue
   const blocking = input.clues
     .filter((c) => c.status === "active" && !isUnconfirmedObservation(c.text)
       && (c.kind === "ownership" || c.kind === "exclusion"))
-    .map((c) => ({ id: c.id, tokens: contentTokens(cluePhrase(c.text)) }))
+    .map((c) => ({ id: c.id, kind: c.kind,
+      tokens: contentTokens(c.kind === "exclusion" ? cluePhrase(c.text).replace(/^no\s+/i, "") : cluePhrase(c.text)),
+    }))
     .filter((c) => c.tokens.length > 0);
 
   const kept: ProductListing[] = [];
@@ -92,7 +95,9 @@ export function filterListings(input: Pick<RankListingsInput, "listings" | "clue
       continue;
     }
     const titleTokens = new Set(listingTokens(listing));
-    const hit = blocking.find((c) => blocks(c.tokens, titleTokens));
+    const evidence = catalogEvidenceFor(listing);
+    const exclusionTokens = new Set([...titleTokens, ...(evidence?.terms ?? [])]);
+    const hit = blocking.find((c) => blocks(c.tokens, c.kind === "exclusion" ? exclusionTokens : titleTokens));
     if (hit) {
       excluded.push({ listingId: listing.id, reason: "excluded_by_clue", clueId: hit.id });
       continue;
@@ -111,12 +116,17 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
 
   const ranked = kept.map((listing): RankedRecommendation => {
     const titleTokens = new Set(shoppingMatchTokens(withoutBrandPhrases(listing.title + " " + (listing.variant ?? ""))));
+    const evidence = catalogEvidenceFor(listing);
+    const matchTokens = new Set([...titleTokens, ...(evidence?.terms ?? [])]);
+    let usedCatalogEvidence = false;
     const supporting: PublishedClue[] = [];
     const matchedPreferences = new Map<string, number>();
     for (const { clue, tokens } of positive) {
-      const share = tokens.filter((t) => titleTokens.has(t)).length / tokens.length;
+      const directShare = tokens.filter((t) => titleTokens.has(t)).length / tokens.length;
+      const share = tokens.filter((t) => matchTokens.has(t)).length / tokens.length;
       const threshold = tokens.length <= 3 ? 1 : SUPPORT_THRESHOLD;
       if (share >= threshold) {
+        if (share > directShare) usedCatalogEvidence = true;
         supporting.push(clue);
         // Repeated photos/phrases are not independent preference evidence.
         const key = [...tokens].sort().join("|");
@@ -133,12 +143,13 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
       publishedClueIds: supporting.map((c) => c.id),
       score: round(combineScore(parts)),
       ...parts,
-      explanation: explain(supporting, budget.note),
+      explanation: explain(supporting, budget.note, usedCatalogEvidence ? evidence : undefined),
     };
   });
 
   const images = new Map(kept.map(listing => [listing.id, hasProductImageUrl(listing)]));
-  const handsOn = new Map(kept.map(listing => [listing.id, isHandsOnItem(`${listing.title} ${listing.variant ?? ""}`)]));
+  const handsOn = new Map(kept.map(listing => [listing.id,
+    isHandsOnItem(`${listing.title} ${listing.variant ?? ""}`) || catalogEvidenceFor(listing)?.handsOn === true]));
   ranked.sort((a, b) => b.score - a.score
     || b.personalRelevance - a.personalRelevance
     || b.budgetFit - a.budgetFit
@@ -191,12 +202,13 @@ function budgetFitFor(
   };
 }
 
-function explain(supporting: PublishedClue[], budgetNote: string | undefined): string {
+function explain(supporting: PublishedClue[], budgetNote: string | undefined, evidence?: CatalogEvidence): string {
   const base =
     supporting.length > 0
       ? `Matches: ${supporting.map((c) => `"${c.text}"`).join(", ")}`
       : "No published clue matches this directly";
-  return budgetNote ? `${base} (${budgetNote})` : base;
+  const withBudget = budgetNote ? `${base} (${budgetNote})` : base;
+  return evidence ? `${withBudget}. Category evidence: ${evidence.basis} (checked ${evidence.checkedOn}; ${evidence.sourceUrl})` : withBudget;
 }
 
 function round(n: number): number {

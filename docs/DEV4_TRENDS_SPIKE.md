@@ -41,6 +41,8 @@ Broad categories can produce brand collisions. The candidate gate ignores the kn
 
 The shopping source returned **MKM Sticker** first and several listings from other brands. Query association alone must never become a per-product “trending” badge. Specific MKM tool titles also omit the word pottery; the existing title-based ranker correctly does not invent a personal clue match for them. Before production integration, design evidence-backed product/category matching that handles those cases without blindly trusting seller names or search position.
 
+Follow-up: [reviewed catalog matching](DEV4_CATALOG_MATCHING.md) now supplies manufacturer-backed terms for two exact known model identities (BHR-051 and DD-10), fixing their recorded misses. Unreviewed titles remain literal-only. This does not turn the original trend observation into an item popularity score.
+
 The useful demo is **published pottery interest → category discovery → sourced MKM query → observed tools**, while existing ownership, exclusions and money rules remain intact. The experiment demonstrates retrieval feasibility; it does not establish better end-to-end ranking yet.
 
 ## Fixtures and validation

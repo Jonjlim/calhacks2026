@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D14 — Reviewed catalog evidence for missing hobby terms (2026-10-24)
+
+Some real tool titles omit their hobby, and the shopping Actor returns no category/description field. Dev 4 adds a small, reviewed manufacturer catalog (two initial model identities) for derived category matching at read time. Exact title/model identity is required; seller names, search queries and social popularity are insufficient. Ownership remains literal; explicit exclusions can use the verified category/manufacturer, with source-bearing explanations for derived positive matches. No state, provider, money authority or shared endpoint changes. This bounded catalog does not solve arbitrary product classification. See “Reviewed catalog matching” in CONTRACTS.md and [DEV4_CATALOG_MATCHING.md](DEV4_CATALOG_MATCHING.md).
+
 ### D13 — Public TikTok fashion discovery experiment (2026-10-24)
 
 Dev 4 evaluated `clockworks/tiktok-scraper` build `0.0.620` as a local public fashion-context source. One public style query, at most 20 requested posts, normalized captions/hashtags/URLs/timestamps and engagement snapshots only. No recipient accounts, private messages, profile crawling, downloads, vision provider, or deployed changes. Recent sampled posts are not a platform-wide trend chart; a single engagement snapshot cannot establish growth. Existing shopping remains the only product source. Results: [DEV4_TIKTOK_SPIKE.md](DEV4_TIKTOK_SPIKE.md).

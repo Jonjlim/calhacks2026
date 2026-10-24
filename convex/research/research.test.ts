@@ -6,6 +6,7 @@ import type { Result } from "../../lib/contracts";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import fixture from "./fixtures/johnvc-shopping.json";
+import catalogFixture from "../../lib/research/fixtures/trend-shopping.json";
 
 const modules = Object.fromEntries(Object.entries(
   import.meta.glob(["../**/*.{ts,js}", "!../**/*.test.ts", "!../**/*.d.ts"]),
@@ -113,6 +114,29 @@ describe("research pipeline", () => {
     expect(after.listings.some(listing => listing.title === "Amaco Pottery Tool Kit")).toBe(true);
     expect(after.listings.some(listing => listing.title === "Mudtools Do All Trim Tool")).toBe(true);
     expect(await t.run(ctx => ctx.db.query("researchJobs").collect())).toHaveLength(1);
+  });
+
+  it("serves reviewed model matches and removes explicitly excluded categories without another provider call", async () => {
+    const { t, alex, input } = await setup();
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    await t.mutation(research.completeJob, { jobId, raw: catalogFixture.data, retrievedAt: catalogFixture.provenance.retrievedAt });
+    const before = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    const roller = before.listings.find(listing => listing.title.startsWith("BHR-051"))!;
+    const recommendation = before.recommendations.find(row => row.listingId === roller.id)!;
+    expect(recommendation.publishedClueIds).toEqual(input.publishedClueIds);
+    expect(recommendation.personalRelevance).toBe(0.7);
+    expect(recommendation.explanation).toContain("https://mkmpotterytools.com/product/bhr-051");
+    await alex.mutation(api.clues.upsertManualPreference, {
+      roomId: input.roomId, kind: "exclusion", text: "No more pottery",
+    });
+    const after = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    expect(after.listings.some(listing => listing.id === roller.id)).toBe(false);
+    expect(after.listings.some(listing => listing.title.startsWith("DD-10"))).toBe(false);
+    expect(await t.run(ctx => ctx.db.query("researchJobs").collect())).toHaveLength(1);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("rejects old knowledge and older requests finishing late", async () => {

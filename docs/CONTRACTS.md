@@ -380,6 +380,19 @@ interface PriceFreshness {
 - Ranking ties compare total score, personal relevance, then budget fit, then whether the item is hands-on (title has a kit, tool, class, starter, supply, or course word), then presence of a valid HTTPS image URL, and finally listing ID. Images and the hands-on flag do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
 - Positive clue matching ignores a small explicit list of retail brand names that contain hobby words (`Pottery Barn`, `Bass Pro`), so brand text alone never cites a clue. Studio names such as "Farmhouse Pottery" stay matchable. Ownership and exclusion matching still read the literal title.
 
+### Reviewed catalog matching (Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 explanations, Dev 3 catalog reads, Dev 2 integration review. No endpoint, ProductListing field, database or validator changes. Migration: none; review the additive matching/exclusion behavior at the next integration checkpoint.
+
+`catalogEvidenceFor(listing)` derives reviewed manufacturer/category facts from an exact normalized catalog title, including its model number and full descriptor. The initial catalog contains only MKM BHR-051 (Zig Zag Spiral roller) and DD-10 (10-inch decorating disk), with manufacturer URLs, checked date and a short paraphrased basis. It is a small reviewed catalog, not a general classifier. Normalization tolerates case, whitespace, dash/punctuation differences and spacing within these model codes. Unknown variants, truncated titles, appended accessories, model codes alone and seller/query matches yield no evidence.
+
+- Positive matching can use the reviewed `pottery`, `tool` and `MKM` terms alongside actual title tokens. The normal clue weights and thresholds remain unchanged. A matched preference counts once, regardless of how many supporting sources exist.
+- If reviewed terms contribute to a match, the explanation explicitly cites the manufacturer basis, source URL and checked date. A model match does not authenticate a seller or establish a price, stock, size, shipping, trend or purchase fact.
+- **Ownership stays literal.** A known pottery tool is not a starter kit and owning pottery does not mean owning every pottery tool. Exact named-item ownership still filters its actual title.
+- **Explicit exclusions additionally use reviewed category/manufacturer terms** so “no more pottery” or “no MKM” cannot be bypassed by a known model whose title omits those words. Other exclusion thresholds and uncertainty/withdrawal guards are unchanged; this is the documented extension to the literal-only rule above.
+- Reviewed hands-on tools participate in the existing hands-on tie-break. No extra numeric bonus, trend score or image bonus is added. Unknown prices and budget arithmetic remain unchanged.
+- No runtime merchant fetch, AI classification, new provider, schema or codegen is introduced. Adding catalog entries requires identity verification and a source-backed regression; unsupported products retain literal matching until their evidence is reviewed.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.
