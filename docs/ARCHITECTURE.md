@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D11 — Photo clues as P0 evidence input (2026-10-24)
+
+Product cards show real source photos (P0). Photo clues (P0), screenshot clues (P1-C), and voice notes (P2) are read once by the vision-capable model into private text or observation rows; the uploaded file is deleted. No face recognition — the uploader taps who the recipient is. Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline with one human gate is easier to secure than three. Rejected: storing raw images or audio; a separate image-clue pipeline; face recognition or identity inference; AI-generated product images. Contracts: “Photo observation” in [CONTRACTS.md](CONTRACTS.md).
+
 ### D10 — Bounded research feedback and cached replanning (2026-10-24)
 
 Member 3 and member 4 share one database/catalog projection for ranking and evidence. Each research request captures its requester/message context and at most one persisted continuation pointer. Completion/failure/timeout and continuation scheduling are one transaction. The follow-up is a distinct, version-fenced job; it cannot start research or call another recipient agent. Confirmed knowledge changes can re-evaluate the existing pool after a short debounce, but cannot authorize another paid provider run. Purchase facts in recommendation messages are rendered by application code from current observations, not model prose. Question replies require an explicit slot. No new service/provider is added.
@@ -40,6 +44,9 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
 | Vercel + Convex | Confirmed hosting. No extra worker host in P0. |
 | Bitdeer / Factory / Bright Data | Conditional sponsor options. Adopt only after a spike shows a real product role. |
+| Convex file storage | P0 (photo clues), P1-C, P2. Holds photos, screenshots, and voice notes until they are read, then deletes them. |
+| Vision input on the chosen LLM | P0 (photo clues) and P1-C. **Unverified until the Phase 0 spike.** Must work on the same provider; no second LLM SDK. If it fails, photo clues demote to the text-only spine. |
+| Speech-to-text API | P2. **Unverified** new provider. Spike before any code depends on it. |
 
 ## Component diagram
 
@@ -62,7 +69,7 @@ flowchart TB
   end
 
   subgraph external [External providers]
-    LLM[Tool-capable LLM]
+    LLM[Tool- and vision-capable LLM]
     Shop[Apify or shopping API]
     Trends[Trend source - P2]
     Stripe[Stripe test mode - P1]
