@@ -163,3 +163,10 @@ observations; real post-authorization cancellation and group recovery still need
 acceptance. RC-014 remains recorded discovery context, not live discovery fetching;
 RC-015 (optional additional product source) is not implemented. Do not call these
 full milestones complete from adapter/unit test results.
+
+## Continued Dev 4 backend work after Alex returned
+
+- `78179b5`: fixed refund discovery after a lost create response. Captured payments now read a complete bounded refund list by PaymentIntent instead of assuming saved refund IDs describe all recovery. Truncated pages and missing tracked refunds stay uncertain. The offline transport-to-reader test simulates a refund committed before a dropped response, then observes pending → refunded using only GETs; the original POST is never repeated.
+- Product-source hardening: bound streamed response bodies to 750,000 bytes before JSON/Convex processing, refuse redirects and invalid provider IDs, and compare poll replies to the requested run ID. A foreign run cannot supply the room's dataset; the regression leaves that job uncertain without inserting listings or repeating a paid start.
+- Validation: **453 passed / 3 live-only skipped**, app and Convex TypeScript passed, and `git diff --check` passed. The added tests use synthetic responses; no live Stripe/Apify requests, provider spending, environment changes or deployments were made during this continuation.
+- Changes remain local on `dev4/alex`; no shared branch was pushed. The BE-015 state/persistence and live payment acceptance dependencies above remain open. `listIntentRefunds` is covered offline and follows the documented Stripe API, but has not been exercised against a captured sandbox payment.

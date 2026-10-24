@@ -197,6 +197,23 @@ describe("research pipeline", () => {
     expect(await t.run(ctx => ctx.db.query("productListings").collect())).toHaveLength(4);
   });
 
+  it("does not consume another run's dataset or restart an ambiguous poll", async () => {
+    const { t, alex, input } = await setup();
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    vi.stubEnv("APIFY_TOKEN", "fake-token");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      data: { id: "foreignRun", status: "SUCCEEDED", defaultDatasetId: "foreignDataset" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(research.pollResearch, { jobId, runId: "run123", startedAt: Date.now() });
+    expect((await t.run(ctx => ctx.db.get(jobId)))?.status).toBe("uncertain");
+    expect(await t.run(ctx => ctx.db.query("productListings").collect())).toEqual([]);
+    await t.action(research.runResearch, { jobId });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.apify.com/v2/actor-runs/run123");
+  });
+
   it("shows empty results as a failed search and expires a lost worker", async () => {
     const { t, alex, input } = await setup();
     const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
