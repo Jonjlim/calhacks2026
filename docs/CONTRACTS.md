@@ -276,7 +276,8 @@ type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply"; // answers a follow-up in chat; cannot change state
 
 interface AgentDecision {
   jobId: string;

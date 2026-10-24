@@ -21,6 +21,8 @@ import type * as agents_recipientPolicy from "../agents/recipientPolicy.js";
 import type * as agents_runtime from "../agents/runtime.js";
 import type * as agents_screenshot from "../agents/screenshot.js";
 import type * as agents_smoke from "../agents/smoke.js";
+import type * as agents_stats from "../agents/stats.js";
+import type * as agents_verify from "../agents/verify.js";
 import type * as allocations from "../allocations.js";
 import type * as auth from "../auth.js";
 import type * as cleanup from "../cleanup.js";
@@ -69,6 +71,8 @@ declare const fullApi: ApiFromModules<{
   "agents/runtime": typeof agents_runtime;
   "agents/screenshot": typeof agents_screenshot;
   "agents/smoke": typeof agents_smoke;
+  "agents/stats": typeof agents_stats;
+  "agents/verify": typeof agents_verify;
   allocations: typeof allocations;
   auth: typeof auth;
   cleanup: typeof cleanup;

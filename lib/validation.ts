@@ -226,6 +226,15 @@ export const agentDecisionSchema = z.discriminatedUnion("intent", [
   }),
   z.strictObject({
     ...decisionBase,
+    intent: z.literal("reply"),
+    chatMessage: z.string().trim().min(1).max(700),
+    citations: z.strictObject({
+      listingIds: z.array(ref).max(3),
+      publishedClueIds: z.array(ref).max(10),
+    }),
+  }),
+  z.strictObject({
+    ...decisionBase,
     intent: z.literal("query_recipient"),
     recipientQuery: recipientQuestionSchema,
   }),

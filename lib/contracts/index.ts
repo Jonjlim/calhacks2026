@@ -215,7 +215,8 @@ export type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply";
 
 export interface AgentDecision {
   jobId: string;

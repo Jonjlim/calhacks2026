@@ -18,12 +18,18 @@ import {
 } from "./engine";
 import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
 import { readCatalog } from "../research/catalog";
-import { renderRecommendation, researchStatusMessage } from "./presentation";
+import {
+  renderRecommendation,
+  renderReply,
+  researchStatusMessage,
+} from "./presentation";
 import { agentModelUsage } from "../validators";
 import type { MediaWork } from "./mediaRuntime";
 import { discardSourceMedia } from "../media";
 
 type AgentJob = Doc<"agentJobs">;
+const clipText = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
 export async function recordEvent(
   ctx: MutationCtx,
   job: AgentJob,
@@ -71,6 +77,7 @@ export async function readBuyerSnapshot(
     .filter((q) => q.eq(q.field("intent"), "recommend"))
     .order("desc")
     .first();
+  const lastAgentMessage = messages.find((m) => m.authorKind === "buyer_agent");
   const chronological = messages.reverse();
   return {
     roomId: room._id,
@@ -85,6 +92,15 @@ export async function readBuyerSnapshot(
       .at(-1)?._id,
     mode: job.mode ?? "quiet",
     trigger: job.trigger ?? "human",
+    chatty: room.agentChatMode === "chatty",
+    ...(lastAgentMessage
+      ? {
+          secondsSinceAgentMessage: Math.max(
+            0,
+            Math.floor((Date.now() - lastAgentMessage.createdAt) / 1000),
+          ),
+        }
+      : {}),
     ...(job.researchJobId ? { researchJobId: job.researchJobId } : {}),
     recipientAgentEnabled:
       !!room.recipientProfileId &&
@@ -103,6 +119,7 @@ export async function readBuyerSnapshot(
     listings: catalog.listings.map((l) => ({
       id: l.id,
       title: l.title,
+      currency: l.currency,
       ...(l.priceMinor !== undefined ? { priceMinor: l.priceMinor } : {}),
       sourceUrl: l.sourceUrl,
       retrievedAt: l.retrievedAt,
@@ -149,6 +166,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
   return fingerprint({
     roomId: snapshot.roomId,
     mode: snapshot.mode,
+    chatty: snapshot.chatty ?? false,
     trigger: snapshot.trigger ?? "human",
     researchJobId: snapshot.researchJobId,
     recipient: snapshot.recipientDisplayName,
@@ -674,7 +692,9 @@ export const completeTurn = internalMutation({
     const rendered =
       decision.intent === "recommend"
         ? renderRecommendation(decision, snapshot)
-        : null;
+        : decision.intent === "reply"
+          ? renderReply(decision, snapshot)
+          : null;
     const citations: Doc<"chatMessages">["citations"] = rendered
       ? {
           listingIds: rendered.citations.listingIds.map((id) =>
@@ -693,6 +713,10 @@ export const completeTurn = internalMutation({
             : {}),
         }
       : undefined;
+    const recipientOutcome =
+      decision.intent === "query_recipient"
+        ? agentReplySchema.safeParse(recipient?.reply).data?.status
+        : undefined;
     const stored = {
       intent: decision.intent,
       rationale: decision.rationale,
@@ -707,6 +731,7 @@ export const completeTurn = internalMutation({
         ? { recipientQuery: decision.recipientQuery }
         : {}),
       ...("citations" in decision ? { citations: decision.citations } : {}),
+      ...(recipientOutcome ? { recipientOutcome } : {}),
     };
     // Drop undefined values from serialized objects passed to Convex.
     await ctx.db.insert("agentDecisions", {
@@ -731,7 +756,11 @@ export const completeTurn = internalMutation({
       roomId: job.roomId,
       createdAt: Date.now(),
     });
-    if (decision.intent === "clarify" || decision.intent === "recommend") {
+    if (
+      decision.intent === "clarify" ||
+      decision.intent === "recommend" ||
+      decision.intent === "reply"
+    ) {
       const messageId = await ctx.db.insert("chatMessages", {
         roomId: job.roomId,
         authorKind: "buyer_agent",
@@ -860,26 +889,32 @@ export const completeTurn = internalMutation({
         snapshot.excluded?.filter((row) =>
           snapshot.previousRecommendationListingIds?.includes(row.listingId),
         ) ?? [];
-      if (affected.length)
+      // One event per dropped option, naming the clue that changed the shortlist.
+      for (const row of affected.slice(0, 5)) {
+        const listingId = ctx.db.normalizeId("productListings", row.listingId);
+        const listing = listingId ? await ctx.db.get(listingId) : null;
+        const clue = row.clueId
+          ? snapshot.publishedClues.find((c) => c.id === row.clueId)
+          : undefined;
+        const title = clipText(listing?.title ?? "An earlier option", 80);
+        const why =
+          row.reason === "excluded_by_clue" && clue
+            ? `because the room confirmed: “${clipText(clue.text, 100)}”`
+            : row.reason === "unavailable"
+              ? "because it is no longer available"
+              : "because its listing is no longer valid";
         await recordEvent(
           ctx,
           job,
           "buyer",
           "completed",
-          "An earlier recommendation no longer fits the current clues or availability.",
+          `Dropped “${title}” ${why}.`,
           {
-            listingIds: affected.map((row) =>
-              ctx.db.normalizeId("productListings", row.listingId)!,
-            ),
-            publishedClueIds: [
-              ...new Set(
-                affected.flatMap((row) =>
-                  row.clueId
-                    ? [ctx.db.normalizeId("publishedClues", row.clueId)!]
-                    : [],
-                ),
-              ),
-            ],
+            listingIds: listingId ? [listingId] : [],
+            publishedClueIds:
+              row.clueId && ctx.db.normalizeId("publishedClues", row.clueId)
+                ? [ctx.db.normalizeId("publishedClues", row.clueId)!]
+                : [],
             ...(snapshot.research?.poolJobId
               ? {
                   researchJobId: ctx.db.normalizeId(
@@ -890,6 +925,7 @@ export const completeTurn = internalMutation({
               : {}),
           },
         );
+      }
     }
     await ctx.db.patch(job._id, {
       status: "succeeded",
@@ -900,7 +936,9 @@ export const completeTurn = internalMutation({
       job,
       "buyer",
       "completed",
-      rendered
+      decision.intent === "reply"
+        ? "Answered a follow-up in chat."
+        : rendered
         ? "Shared sourced options with their supporting clues."
         : decision.intent === "listen" || decision.intent === "wait"
           ? "Listening while the group decides."

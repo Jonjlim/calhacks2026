@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
 import { PHOTO_PLACE_TYPES } from "../../lib/validation";
 import { PHOTO_INSTRUCTIONS } from "./photo";
+import { renderReply } from "./presentation";
 import { decideBuyer, extractEvidence, type BuyerSnapshot } from "./engine";
 import { configuredModel } from "./model";
 import { answerRecipientQuery } from "./recipientPolicy";
@@ -186,4 +187,59 @@ export const rawPhotoReading = internalAction({
       },
       images: [{ mediaType: "image/jpeg", base64 }],
     }),
+});
+
+/** Live follow-up check: the model should reply (not search), cite real ids, and the rendered body must carry record facts. */
+async function replyCheck(message: string, chatty: boolean) {
+  const snapshot = {
+    roomId: "synthetic-room",
+    jobId: "synthetic-job",
+    recipientDisplayName: "Maya",
+    occasion: "Birthday",
+    budgetMinor: 6000,
+    knowledgeRevision: 3,
+    mode: "quiet",
+    trigger: "human",
+    chatty,
+    secondsSinceAgentMessage: 300,
+    recipientAgentEnabled: false,
+    researchRunning: false,
+    askedSlots: [],
+    recentMessages: [
+      { id: "m0", author: "buyer_agent", text: "Here is a pottery class that fits." },
+      { id: "m1", author: "participant", text: message },
+    ],
+    publishedClues: [
+      { id: "c1", kind: "interest", text: "Wants to try a beginner pottery class." },
+      { id: "c2", kind: "ownership", text: "Already owns a starter pottery kit." },
+    ],
+    listings: [
+      {
+        id: "l2", title: "Beginner pottery class (2 hours)", currency: "USD", priceMinor: 5500,
+        priceStatus: "observed", availability: "in_stock", shippingStatus: "unknown",
+        sourceUrl: "https://example.com/class", retrievedAt: Date.now(),
+      },
+      {
+        id: "l3", title: "Clay sculpting workshop", currency: "USD", priceMinor: 4200,
+        priceStatus: "observed", availability: "in_stock", shippingStatus: "unknown",
+        sourceUrl: "https://example.com/workshop", retrievedAt: Date.now(),
+      },
+    ],
+    recommendations: [
+      { listingId: "l2", publishedClueIds: ["c1"], explanation: "Matches pottery interest" },
+      { listingId: "l3", publishedClueIds: ["c1"], explanation: "Hands-on clay" },
+    ],
+    excluded: [{ listingId: "l1", reason: "excluded_by_clue", clueId: "c2" }],
+    previousRecommendationListingIds: ["l1", "l2"],
+  } as unknown as BuyerSnapshot;
+  const decision = await decideBuyer(snapshot, configuredModel());
+  return {
+    intent: decision.intent,
+    decision,
+    body: decision.intent === "reply" ? renderReply(decision, snapshot).body : null,
+  };
+}
+export const replySynthetic = internalAction({
+  args: { message: v.string(), chatty: v.boolean() },
+  handler: (_ctx, { message, chatty }) => replyCheck(message, chatty),
 });

@@ -78,7 +78,10 @@ export const agentIntent = v.union(
   v.literal("recommend"),
   v.literal("query_recipient"),
   v.literal("wait"),
+  v.literal("reply"),
 );
+
+export const agentChatMode = v.union(v.literal("quiet"), v.literal("chatty"));
 
 export const listingSource = v.union(
   v.literal("apify"),

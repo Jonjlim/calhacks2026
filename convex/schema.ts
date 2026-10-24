@@ -34,6 +34,8 @@ export default defineSchema({
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
     recipientProfileId: v.optional(v.id("recipientProfiles")),
+    /** quiet (default): Unwrap speaks when asked. chatty: it may also join in; organizer-controlled. */
+    agentChatMode: v.optional(V.agentChatMode),
     /** Latest human chat message; part of the buyer-agent evaluate inputHash. */
     latestMessageId: v.optional(v.id("chatMessages")),
     inviteToken: v.string(),
@@ -273,6 +275,8 @@ export default defineSchema({
       subject: v.object({ kind: v.union(v.literal("category"), v.literal("product")), label: v.string(), listingId: v.optional(v.string()) }),
     })),
     citations: v.optional(v.object({ listingIds: v.array(v.string()), publishedClueIds: v.array(v.string()) })),
+    /** query_recipient only: how the recipient agent's policy resolved the question. */
+    recipientOutcome: v.optional(v.union(v.literal("answered"), v.literal("unknown"), v.literal("refused"))),
     createdAt: v.number(),
   }).index("by_room", ["roomId"]),
 

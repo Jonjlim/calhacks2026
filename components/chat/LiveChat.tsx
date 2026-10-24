@@ -14,6 +14,7 @@ export function LiveChat({ roomId, participants }: { roomId: Id<"rooms">; partic
   const activity = unwrap(useQuery(api.agents.buyer.listActivity, { roomId }));
   const send = useMutation(api.messages.sendMessage);
   const requestTurn = useMutation(api.agents.buyer.requestTurn);
+  const setChatMode = useMutation(api.agents.buyer.setChatMode);
   const [text, setText] = useState("");
   const [replySlot, setReplySlot] = useState<string>();
   const [error, setError] = useState<string>();
@@ -44,6 +45,16 @@ export function LiveChat({ roomId, participants }: { roomId: Id<"rooms">; partic
       setError(errorText(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function toggleChatty(on: boolean) {
+    setError(undefined);
+    try {
+      const res = await setChatMode({ roomId, mode: on ? "chatty" : "quiet" });
+      if (!res.ok) setError(res.error.message);
+    } catch (err) {
+      setError(errorText(err));
     }
   }
 
@@ -110,6 +121,23 @@ export function LiveChat({ roomId, participants }: { roomId: Id<"rooms">; partic
             Ask Unwrap
           </button>
         </div>
+        {activity.value?.capabilities.canSetChatMode && (
+          <label className="flex items-center gap-2 text-sm text-plum-soft">
+            <input
+              type="checkbox"
+              checked={activity.value.capabilities.chatMode === "chatty"}
+              onChange={(e) => toggleChatty(e.target.checked)}
+            />
+            Let Unwrap join the conversation (answers questions without @unwrap)
+          </label>
+        )}
+        {activity.value && !activity.value.capabilities.canSetChatMode && (
+          <p className="text-xs text-plum-soft">
+            {activity.value.capabilities.chatMode === "chatty"
+              ? "Unwrap is joining the conversation."
+              : "Unwrap speaks when you @mention it."}
+          </p>
+        )}
         {error && <p role="alert" className="text-sm text-coral">{error}</p>}
       </form>
     </Panel>
