@@ -1,6 +1,6 @@
 # Dev 4 morning handoff
 
-Snapshot: October 24, 2026, about 04:05 America/Los_Angeles. This is a local integration snapshot, not a deployment sign-off. Later follow-up work should update this file rather than create competing handoffs.
+Snapshot: October 24, 2026, about 04:30 America/Los_Angeles. This is a local integration snapshot, not a deployment sign-off. Later follow-up work should update this file rather than create competing handoffs.
 
 ## Branches and integration
 
@@ -17,13 +17,14 @@ The earlier homepage-mock concern applied to main at `90bb0de`. It is outdated f
 - `2f9612d`: local Google Trends spike and recorded tests.
 - `c72d991`: local TikTok caption/hashtag fashion discovery and recorded shopping handoff.
 - `5544caf`: two reviewed manufacturer/model matches for tool titles missing the pottery term. Explicit source explanations; bounded coverage, not a general category classifier.
+- Search brief limits now obey the existing shared validator: 1–12, with safe defaults for non-finite inputs. Regression cases validate actual builder output against the shared Zod schema. The previous builder allowed 24 despite the validator allowing 12; current research requests use the default, so this hardens the optional pure-function input rather than fixing a demonstrated production outage.
 - `convex/research/demo-flow.test.ts`: a two-member offline backend rehearsal from published preferences through a recorded product, selection, approved pledges, cap-change invalidation and listing recovery. Membership and private-cap views are exercised. It injects recorded data at the completion boundary and makes no provider/model calls.
 
 The discovery spikes are **not production features**. No TikTok or Google Trends context is currently fed into Alan's LLM. The reviewed model catalog is part of the current ranker; it is separate from social popularity and does not set trend scores.
 
 ## Validation so far
 
-- Integrated suite including the new demo rehearsal: **274 passed, 3 live-only skipped**. The rehearsal passed individually as well.
+- Integrated suite including the new demo rehearsal: **282 passed, 3 live-only skipped**. The rehearsal passed individually as well.
 - App and Convex TypeScript checks pass after explicitly converting the public string listing ID back to its Convex ID type at mutation calls in the test.
 - Exact locked dependencies installed with `npm ci --ignore-scripts`; the install reported zero vulnerabilities.
 - Default Turbopack build: sandbox font-network failure, then a host process/port-binding panic on retry. This is not a passing default build.
@@ -53,3 +54,7 @@ The execution document has six numbered phases (0 through 5), plus the 2B photo 
 Review the feature branch against **dev**, then merge through the team's usual review path. First review restored backend fixes and the two-model matching change; review optional source experiments separately in the diff. The catalog/exclusion behavior is documented in CONTRACTS.md for the integration checkpoint. Preserve the newer live UI during the review. Fetch again immediately before merging because teammates are active.
 
 Until Alex reviews: no deploy, no shared-branch push/merge, no production data cleanup, no secret changes, no teammate messages and no new recurring paid source runs. Local commits are the reviewable deliverable. The bounded follow-up ends around 07:05 local time or earlier when useful independent work is complete.
+
+## Overnight stop
+
+Independent scoped work is complete at this snapshot. Remaining live acceptance and agent/media integration need team coordination or deployment access, so the bounded heartbeat was stopped early rather than adding unused features. All work stays local for Alex’s review. No live providers were called during the final offline rehearsal/brief-limit follow-up.

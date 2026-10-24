@@ -578,7 +578,7 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
-  listingLimit: number;
+  listingLimit: number; // integer 1..12; default 12
 }
 
 interface AskedSlot {
@@ -592,6 +592,12 @@ interface AskedSlot {
 ```
 
 ---
+
+The pure Dev 4 brief builder bounds an explicit listing limit to 1..12, rounding
+fractional limits down. Omitted or non-finite limits use 12. An empty query list
+means no searchable published preference exists; the caller must not request
+research until it has a nonempty query. Model-produced briefs still pass the
+shared boundary validator rather than relying on this builder.
 
 ## Operation contracts
 

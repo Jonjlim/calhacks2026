@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSearchBrief } from "./brief";
+import { searchBriefSchema } from "../../lib/validation";
 import { FIXTURE_ROOM_ID, cluesAfterOwnership, clueLikesPottery } from "./fixtures/maya";
 import { cluePhrase, contentTokens } from "./text";
 
@@ -54,10 +55,19 @@ describe("buildSearchBrief", () => {
     expect(brief.queryTerms).toEqual(["pottery", "hiking", "jazz"]);
   });
 
-  it("clamps the listing limit", () => {
-    const base = { roomId: FIXTURE_ROOM_ID, knowledgeRevision: 1, clues: [] };
-    expect(buildSearchBrief({ ...base, listingLimit: 500 }).listingLimit).toBe(24);
-    expect(buildSearchBrief({ ...base, listingLimit: 0 }).listingLimit).toBe(1);
+  it.each([
+    [500, 12], [13, 12], [0, 1], [-4, 1], [2.9, 2],
+    [Number.NaN, 12], [Number.POSITIVE_INFINITY, 12],
+    [Number.NEGATIVE_INFINITY, 12], [undefined, 12],
+  ])("keeps listing limit %s within the shared boundary contract", (listingLimit, expected) => {
+    const brief = buildSearchBrief({
+      roomId: FIXTURE_ROOM_ID,
+      knowledgeRevision: 1,
+      clues: [clueLikesPottery],
+      listingLimit,
+    });
+    expect(brief.listingLimit).toBe(expected);
+    expect(searchBriefSchema.safeParse(brief).success).toBe(true);
   });
 });
 
