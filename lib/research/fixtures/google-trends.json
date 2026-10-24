@@ -1,0 +1,154 @@
+[
+  {
+    "provenance": {
+      "actor": "agenscrape~google-trends-scraper",
+      "build": "1.0.21",
+      "runId": "fcmDezvjUt1peukFk"
+    },
+    "context": {
+      "seedTerm": "pottery",
+      "geo": "US",
+      "timeRange": "today 3-m",
+      "retrievedAt": 1792836847531
+    },
+    "data": [
+      {
+        "keyword": "pottery",
+        "geo": "US",
+        "timeRange": "Past 90 days",
+        "relatedSearches": {
+          "top": [
+            {
+              "query": "pottery barn",
+              "value": 100,
+              "formattedValue": "100"
+            },
+            {
+              "query": "pottery near me",
+              "value": 8,
+              "formattedValue": "8"
+            },
+            {
+              "query": "pottery clay",
+              "value": 3,
+              "formattedValue": "3"
+            },
+            {
+              "query": "pottery wheel",
+              "value": 3,
+              "formattedValue": "3"
+            }
+          ],
+          "rising": [
+            {
+              "query": "aldi pottery barn rug dupe",
+              "value": 5150,
+              "formattedValue": "Breakout"
+            },
+            {
+              "query": "mccarty pottery",
+              "value": 60,
+              "formattedValue": "+60%"
+            },
+            {
+              "query": "east fork pottery",
+              "value": 50,
+              "formattedValue": "+50%"
+            },
+            {
+              "query": "how to make pottery",
+              "value": 50,
+              "formattedValue": "+50%"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "provenance": {
+      "actor": "agenscrape~google-trends-scraper",
+      "build": "1.0.21",
+      "runId": "zZmkrDtyr3159Dyj9"
+    },
+    "context": {
+      "seedTerm": "pottery tools",
+      "geo": "US",
+      "timeRange": "today 3-m",
+      "retrievedAt": 1792836903395
+    },
+    "data": [
+      {
+        "keyword": "pottery tools",
+        "geo": "US",
+        "timeRange": "Past 90 days",
+        "relatedSearches": {
+          "top": [
+            {
+              "query": "pottery barn",
+              "value": 100,
+              "formattedValue": "100"
+            },
+            {
+              "query": "mkm pottery tools",
+              "value": 37,
+              "formattedValue": "37"
+            },
+            {
+              "query": "pottery tools near me",
+              "value": 35,
+              "formattedValue": "35"
+            },
+            {
+              "query": "xiem pottery tools",
+              "value": 27,
+              "formattedValue": "27"
+            },
+            {
+              "query": "dirty girls pottery tools",
+              "value": 19,
+              "formattedValue": "19"
+            },
+            {
+              "query": "pottery tools and supplies",
+              "value": 19,
+              "formattedValue": "19"
+            },
+            {
+              "query": "pottery tools names",
+              "value": 17,
+              "formattedValue": "17"
+            }
+          ],
+          "rising": [
+            {
+              "query": "mkm pottery tools",
+              "value": 300,
+              "formattedValue": "+300%"
+            },
+            {
+              "query": "pottery tools and supplies",
+              "value": 250,
+              "formattedValue": "+250%"
+            },
+            {
+              "query": "pottery tools names",
+              "value": 200,
+              "formattedValue": "+200%"
+            },
+            {
+              "query": "dirty girls pottery tools",
+              "value": 150,
+              "formattedValue": "+150%"
+            },
+            {
+              "query": "pottery tools near me",
+              "value": 40,
+              "formattedValue": "+40%"
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

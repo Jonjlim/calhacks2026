@@ -8,6 +8,55 @@
 
 export type Currency = "USD";
 
+export interface FashionSampleContext {
+  seedTerm: string;
+  windowStart: number;
+  windowEnd: number;
+  retrievedAt: number;
+}
+
+export interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+
+export interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;
+}
+
+/** RC-014 local experiment; term-level evidence, not product popularity. */
+export interface TrendContext {
+  seedTerm: string;
+  geo: "US";
+  timeRange: "today 3-m";
+  retrievedAt: number;
+}
+
+export type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;
+  query: string;
+} & (
+  | { kind: "top_search"; popularityIndex: number }
+  | { kind: "rising_search"; growthPercent: number }
+  | { kind: "breakout_search" }
+);
+
 // ---------- Errors / results ----------
 
 export type AppErrorCode =
@@ -485,4 +534,13 @@ export interface ProposalView {
   approvals: Approval[];
   feasible: boolean;
   myLimit?: ContributionLimit;
+}
+
+/** Bounded source context for the buyer; never a published recipient preference. */
+export interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
 }

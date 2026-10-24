@@ -44,6 +44,7 @@ import type * as messages from "../messages.js";
 import type * as proposals from "../proposals.js";
 import type * as research_brief from "../research/brief.js";
 import type * as research_catalog from "../research/catalog.js";
+import type * as research_catalogEvidence from "../research/catalogEvidence.js";
 import type * as research_fixtures_maya from "../research/fixtures/maya.js";
 import type * as research_normalize from "../research/normalize.js";
 import type * as research_provider from "../research/provider.js";
@@ -98,6 +99,7 @@ declare const fullApi: ApiFromModules<{
   proposals: typeof proposals;
   "research/brief": typeof research_brief;
   "research/catalog": typeof research_catalog;
+  "research/catalogEvidence": typeof research_catalogEvidence;
   "research/fixtures/maya": typeof research_fixtures_maya;
   "research/normalize": typeof research_normalize;
   "research/provider": typeof research_provider;

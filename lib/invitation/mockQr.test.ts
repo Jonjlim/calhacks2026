@@ -27,3 +27,14 @@ describe("mockQrModules", () => {
     expect(mockQrModules("a")).not.toEqual(mockQrModules("b"));
   });
 });
+
+import { inviteQrModules } from "./realQr";
+
+describe("inviteQrModules", () => {
+  it("encodes a real invite URL as a square, finder-marked grid", () => {
+    const g = inviteQrModules("https://unwrap.example/join/6a7901ad5141a0e52db4e66cc6c0056d");
+    expect(g.length).toBeGreaterThanOrEqual(21);
+    expect(g.every((row) => row.length === g.length)).toBe(true);
+    expect(g[0]![0] && g[3]![3] && !g[1]![1]).toBe(true);
+  });
+});

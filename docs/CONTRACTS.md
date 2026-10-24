@@ -381,6 +381,19 @@ interface PriceFreshness {
 - Ranking ties compare total score, personal relevance, then budget fit, then whether the item is hands-on (title has a kit, tool, class, starter, supply, or course word), then presence of a valid HTTPS image URL, and finally listing ID. Images and the hands-on flag do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
 - Positive clue matching ignores a small explicit list of retail brand names that contain hobby words (`Pottery Barn`, `Bass Pro`), so brand text alone never cites a clue. Studio names such as "Farmhouse Pottery" stay matchable. Ownership and exclusion matching still read the literal title.
 
+### Reviewed catalog matching (Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 explanations, Dev 3 catalog reads, Dev 2 integration review. No endpoint, ProductListing field, database or validator changes. Migration: none; review the additive matching/exclusion behavior at the next integration checkpoint.
+
+`catalogEvidenceFor(listing)` derives reviewed manufacturer/category facts from an exact normalized catalog title, including its model number and full descriptor. The initial catalog contains only MKM BHR-051 (Zig Zag Spiral roller) and DD-10 (10-inch decorating disk), with manufacturer URLs, checked date and a short paraphrased basis. It is a small reviewed catalog, not a general classifier. Normalization tolerates case, whitespace, dash/punctuation differences and spacing within these model codes. Unknown variants, truncated titles, appended accessories, model codes alone and seller/query matches yield no evidence.
+
+- Positive matching can use the reviewed `pottery`, `tool` and `MKM` terms alongside actual title tokens. The normal clue weights and thresholds remain unchanged. A matched preference counts once, regardless of how many supporting sources exist.
+- If reviewed terms contribute to a match, the explanation explicitly cites the manufacturer basis, source URL and checked date. A model match does not authenticate a seller or establish a price, stock, size, shipping, trend or purchase fact.
+- **Ownership stays literal.** A known pottery tool is not a starter kit and owning pottery does not mean owning every pottery tool. Exact named-item ownership still filters its actual title.
+- **Explicit exclusions additionally use reviewed category/manufacturer terms** so “no more pottery” or “no MKM” cannot be bypassed by a known model whose title omits those words. Other exclusion thresholds and uncertainty/withdrawal guards are unchanged; this is the documented extension to the literal-only rule above.
+- Reviewed hands-on tools participate in the existing hands-on tie-break. No extra numeric bonus, trend score or image bonus is added. Unknown prices and budget arithmetic remain unchanged.
+- No runtime merchant fetch, AI classification, new provider, schema or codegen is introduced. Adding catalog entries requires identity verification and a source-backed regression; unsupported products retain literal matching until their evidence is reviewed.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.
@@ -566,7 +579,7 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
-  listingLimit: number;
+  listingLimit: number; // integer 1..12; default 12
 }
 
 interface AskedSlot {
@@ -580,6 +593,12 @@ interface AskedSlot {
 ```
 
 ---
+
+The pure Dev 4 brief builder bounds an explicit listing limit to 1..12, rounding
+fractional limits down. Omitted or non-finite limits use 12. An empty query list
+means no searchable published preference exists; the caller must not request
+research until it has a nonempty query. Model-produced briefs still pass the
+shared boundary validator rather than relying on this builder.
 
 ## Operation contracts
 
@@ -926,6 +945,72 @@ Dev 4 may ship 3–6 `manual_fixture` listings labeled as fixtures, plus one liv
 
 Do not silently promote fixtures to `source: "apify"`.
 
+## Local trend discovery experiment (RC-014)
+
+Owner: Dev 4. Consumers: standalone spike/report only. Additive types; no database migration, query shape, score, or `SearchBrief` change. These observations describe **search terms**, never product sales. Production integration is deferred.
+
+```ts
+interface TrendContext {
+  seedTerm: string;       // public category, not raw private clue text
+  geo: "US";
+  timeRange: "today 3-m"; // requested relative window evaluated at retrieval
+  retrievedAt: number;   // positive integer Unix milliseconds
+}
+type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;     // Google Trends seed exploration with the same geo/window
+  query: string;         // provider's related search phrase
+} & (
+  | { kind: "top_search"; popularityIndex: number } // 0..100, not share or sales
+  | { kind: "rising_search"; growthPercent: number } // >0, compared with previous period
+  | { kind: "breakout_search" } // provider says Breakout; no invented exact growth
+);
+```
+
+Reject mismatched seed terms, malformed metrics and missing context. Deduplicate within seed/geo/window/kind/query. Discovery candidates must retain all literal seed tokens, reject obvious local-service/informational intent, and retain the observation as provenance. This lexical gate can miss useful synonyms and admit non-gifts; it is not personal relevance or purchase approval. Current production `trendSignal` stays zero.
+
+The alternate Actor's exact label `Past 90 days` maps to requested `today 3-m`; other windows/geos are rejected. Ignore the known `Pottery Barn` brand phrase when checking a pottery category match, matching the production collision rule.
+
+### Local TikTok fashion observations
+
+Owner: Dev 4. Consumers: local spike/replay/tests only. Additive types, no Convex migration or production ranking change. Keep this separate from Google search-growth observations: these are individual post snapshots, not growth measurements.
+
+```ts
+interface FashionSampleContext {
+  seedTerm: string;     // public style query
+  windowStart: number;  // inclusive Unix ms, independently enforced
+  windowEnd: number;    // inclusive Unix ms
+  retrievedAt: number;
+}
+interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;   // normalized public URL handle, for dedup/counting only
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;       // lifetime count at retrieval, not count within the window
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;  // proposed shopping query; not a published recipient preference
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;        // e.g. Mentioned in 3 sampled recent posts
+}
+```
+
+Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. If valid copies of one post disagree on its source URL, creator, caption, hashtags, publication date or advertising status, omit that post from discovery regardless of input order. Engagement counter changes alone do not establish a conflict. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to documented denim garment patterns for this spike. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
+
+Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
+
+The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
 ### `giftWorlds` (opt-in zoom-out summaries)
 
 | | |
@@ -936,3 +1021,33 @@ Do not silently promote fixtures to `source: "apify"`.
 | Output | `PublicWorld { id, isSample, mine, occasion, recipientAlias, budgetBand, friends, inputs: { kind, count }[], highlights: string[] (≤3, ≤80 chars), state: "exploring" \| "chosen", outcome?: { title, priceMinor?, priceStatus, source }, sharedAt }` plus `WorldAggregate` |
 | Privacy | Never exposes room id, user ids, invite token, real names, chats, contribution limits, or private imports. Highlights are organizer-picked active clue lines with names replaced; sensitive text is rejected. |
 | Errors | `unauthorized`, `validation_failed`, `refused` (sample seeding disabled) |
+
+### Recorded fashion context → buyer agent (Dev 4 / Dev 3 integration)
+
+Owner: Dev 4 constructs source context; Dev 3 consumes it in the existing buyer snapshot.
+`BuyerSnapshot.fashionDiscovery?: FashionAgentContext` is an additive internal field,
+not a database field or a recipient preference. No migration or public endpoint changes.
+
+```ts
+interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+```
+
+The first integration is an explicit offline replay under existing `DEMO_SEED_ENABLED=true`.
+Only active confirmed interest/wish clues that literally contain both vintage and denim
+activate the recorded vintage-denim sample. Uncertain wording, private evidence, unrelated
+interests and disabled demo mode produce no context. Source dates are preserved; a sample
+retrieved in the future or more than 24 hours ago is omitted. Only bounded derived directions,
+source URLs and sample context reach the model; raw captions and author metadata do not.
+
+The buyer may use a direction as the first SearchBrief query only as inspiration for the
+supporting published interest. It cannot cite it as a new recipient preference, product,
+price or platform-wide trend. Existing server budget, exclusions, revision checks and
+one-direction shopping worker still apply. The context participates in input-version fencing.
+No TikTok request, automatic paid discovery, new provider or deployment is enabled by this
+bridge. Live refresh/persistence and user-visible discovery provenance are still pending.

@@ -8,7 +8,7 @@ import type { PublishedClue, SearchBrief } from "../../lib/contracts";
 import { cluePhrase, isUnconfirmedObservation, shoppingPhrase } from "./text";
 
 export const DEFAULT_LISTING_LIMIT = 12;
-const MAX_LISTING_LIMIT = 24;
+const MAX_LISTING_LIMIT = 12;
 const MAX_QUERY_TERMS = 3;
 
 export type BriefClue = Pick<PublishedClue, "id" | "kind" | "text" | "status">;
@@ -35,10 +35,10 @@ export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
   ];
   const negative = active.filter((c) => c.kind === "ownership" || c.kind === "exclusion");
 
-  const limit = Math.min(
-    MAX_LISTING_LIMIT,
-    Math.max(1, Math.floor(input.listingLimit ?? DEFAULT_LISTING_LIMIT)),
-  );
+  const requestedLimit = input.listingLimit;
+  const limit = requestedLimit !== undefined && Number.isFinite(requestedLimit)
+    ? Math.min(MAX_LISTING_LIMIT, Math.max(1, Math.floor(requestedLimit)))
+    : DEFAULT_LISTING_LIMIT;
 
   return {
     roomId: input.roomId,

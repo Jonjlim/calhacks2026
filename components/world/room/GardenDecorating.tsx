@@ -12,7 +12,8 @@ import { groundAt } from "../terrain";
 import type { RoomWorld } from "../IslandWorldProvider";
 import { BASE_TOP, GIFT_BOX } from "../unwrap/invitationLayout";
 import { gardenSpots, towerDoor } from "./stageLayout";
-import { avatarForIndex } from "./TowerInterior";
+import { avatarForIndex, inJoinOrder } from "@/lib/room/avatars";
+import { Jar, jarFor } from "./TowerInterior";
 
 /**
  * Outside again: the friends leave the tower and decorate the island's own
@@ -164,7 +165,7 @@ export function GardenDecorating({ world, animate, arrival }: { world: RoomWorld
   const plan = useMemo(() => {
     const spots = gardenSpots(world.participants.length);
     const door = towerDoor();
-    return world.participants.map((p, i) => {
+    return inJoinOrder(world.participants).map((p, i) => {
       const mine = world.decorations.filter((d) => (owner(d.memoryId) ?? world.participants[0]?.id) === p.id && !delivered.has(d.memoryId));
       const [sx, sz] = spots[i]!;
       const spot = onGround(sx, sz);
@@ -194,8 +195,18 @@ export function GardenDecorating({ world, animate, arrival }: { world: RoomWorld
     });
 
   const attached = world.decorations.filter((d) => delivered.has(d.memoryId) || !animate);
+  // The Garden of Memories: the same three jars, filled from the same room data as the tower's.
+  const jarCounts = { wish: 0, interest: 0, moment: 0 };
+  for (const c of world.clues) jarCounts[jarFor(c.kind)]++;
+  const jarSpots: Record<"wish" | "interest" | "moment", [number, number]> = { wish: [-1.85, 1.55], interest: [-2.45, 0.2], moment: [2.6, 1.2] };
   return (
     <group>
+      {(Object.keys(jarSpots) as ("wish" | "interest" | "moment")[]).map((k) => {
+        const [jx, jz] = jarSpots[k];
+        const x = GIFT_SPOT.x + jx;
+        const z = GIFT_SPOT.z + jz;
+        return <Jar key={k} kind={k} count={jarCounts[k]} scale={2.3} position={[x, groundAt(x, z) - 0.02, z]} onPick={() => world.onPick?.({ kind: "jar", jar: k })} />;
+      })}
       {attached.map((d) => (
         <group key={d.memoryId} position={slotWorld(d.placement)}>
           <Decoration spec={d} scale={1.9} />
