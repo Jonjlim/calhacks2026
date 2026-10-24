@@ -125,6 +125,7 @@ Hackathon default: delete-with-the-room.
 | --- | --- |
 | Contributor deletes an import | Immediate tombstone; no undelete required |
 | Photo, screenshot, or voice note is read | File deleted from storage immediately, whether reading succeeded or failed |
+| Uploaded file never imported, or imported but never read | Unimported files are deleted after one hour; imported files still unread after 24 hours are deleted and the source is marked `failed` (`cleanup.sweepStaleUploads`) |
 | Participant leaves | Membership ended; optional delete of their private rows |
 | Room deleted by organizer | Cascade all room-scoped documents |
 | After the hackathon | Tear down the Convex deployment; do not keep demo imports |
