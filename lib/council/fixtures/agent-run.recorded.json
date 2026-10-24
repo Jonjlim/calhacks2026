@@ -1,0 +1,125 @@
+[
+ {
+  "eventId": "ev_2d374e7f1c744509bf4532c8",
+  "runId": "run_e2e000000002",
+  "actor": "courier",
+  "task": "deliver_recommendations",
+  "status": "started",
+  "sequence": 0,
+  "timestamp": 1792844568841,
+  "result": {
+   "summary": "Coordinating 1 memory"
+  }
+ },
+ {
+  "eventId": "ev_a1d3296ee67745ec97436e46",
+  "runId": "run_e2e000000002",
+  "actor": "archivist",
+  "task": "analyze_memories",
+  "status": "started",
+  "sequence": 1,
+  "timestamp": 1792844568841
+ },
+ {
+  "eventId": "ev_d1ccfb1edd274eb1958f6a7b",
+  "runId": "run_e2e000000002",
+  "actor": "archivist",
+  "task": "analyze_memories",
+  "status": "completed",
+  "sequence": 2,
+  "timestamp": 1792844568842,
+  "result": {
+   "summary": "loves: pottery, handmade crafts; wants: pottery class; owns: beginner kit; budget $80",
+   "count": 4
+  }
+ },
+ {
+  "eventId": "ev_606d1f2bf95145569f327899",
+  "runId": "run_e2e000000002",
+  "actor": "muse",
+  "task": "design_decoration",
+  "status": "started",
+  "sequence": 3,
+  "timestamp": 1792844568843
+ },
+ {
+  "eventId": "ev_aaf0dcf95c564e5ab6aab95f",
+  "runId": "run_e2e000000002",
+  "actor": "muse",
+  "task": "design_decoration",
+  "status": "completed",
+  "sequence": 4,
+  "timestamp": 1792844568843,
+  "result": {
+   "summary": "Pottery charm",
+   "decorations": [
+    {
+     "memoryId": "mem_e2e_pottery1",
+     "jar": "wish",
+     "assetId": "ceramic_charm",
+     "color": "terracotta",
+     "placement": "front_ribbon",
+     "label": "Pottery"
+    }
+   ]
+  }
+ },
+ {
+  "eventId": "ev_c70969ff3a9c4f45a9e86afa",
+  "runId": "run_e2e000000002",
+  "actor": "scout",
+  "task": "research_gifts",
+  "status": "started",
+  "sequence": 5,
+  "timestamp": 1792844568843
+ },
+ {
+  "eventId": "ev_6fc9fe0c3f6b480cbae9be3e",
+  "runId": "run_e2e000000002",
+  "actor": "scout",
+  "task": "research_gifts",
+  "status": "completed",
+  "sequence": 6,
+  "timestamp": 1792844568907,
+  "result": {
+   "summary": "Found 3 real listings for pottery class, pottery",
+   "count": 3,
+   "cached": false
+  }
+ },
+ {
+  "eventId": "ev_a379667bcf7a4603a7b16f61",
+  "runId": "run_e2e000000002",
+  "actor": "keeper",
+  "task": "check_constraints",
+  "status": "started",
+  "sequence": 7,
+  "timestamp": 1792844568908
+ },
+ {
+  "eventId": "ev_e8f198bad17b4ec3a8cb6c6b",
+  "runId": "run_e2e000000002",
+  "actor": "keeper",
+  "task": "check_constraints",
+  "status": "completed",
+  "sequence": 8,
+  "timestamp": 1792844568908,
+  "result": {
+   "summary": "2 fit, 1 excluded \u00b7 Observed price at or under $80.00",
+   "count": 2
+  }
+ },
+ {
+  "eventId": "ev_6ac16aa40ee94db4b87d1322",
+  "runId": "run_e2e000000002",
+  "actor": "courier",
+  "task": "deliver_recommendations",
+  "status": "completed",
+  "sequence": 9,
+  "timestamp": 1792844568909,
+  "result": {
+   "summary": "Delivered 2 recommendations",
+   "count": 2
+  }
+ }
+]

@@ -41,14 +41,14 @@ function convexLandingActions(convex: ConvexReactClient, ensureReady: () => Prom
           displayName: parsed.data.displayName,
         }),
       );
-      return res.ok ? { ok: true, value: { roomId: res.value.room._id, source: "convex" } satisfies LandingRoomEntry } : res;
+      return res.ok ? { ok: true, value: { roomId: res.value.room._id, source: "convex", inviteToken: res.value.inviteToken } satisfies LandingRoomEntry } : res;
     },
     async joinRoom(draft) {
       const parsed = joinRoomDraftSchema.safeParse({ ...draft, inviteToken: extractInviteToken(draft.inviteToken) });
       if (!parsed.success) return invalidDraft(parsed.error);
       if (!(await ensureReady())) return NOT_CONNECTED;
       const res = await settle(convex.mutation(api.rooms.joinRoom, parsed.data));
-      return res.ok ? { ok: true, value: { roomId: res.value.room._id, source: "convex" } satisfies LandingRoomEntry } : res;
+      return res.ok ? { ok: true, value: { roomId: res.value.room._id, source: "convex", inviteToken: res.value.room.inviteToken } satisfies LandingRoomEntry } : res;
     },
   };
 }

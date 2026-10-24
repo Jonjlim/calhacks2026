@@ -333,3 +333,12 @@ The research mutation uses Dev 2's membership and job-insertion helpers. Pure br
 A completion transaction validates current knowledge and request order before writing listings. The recommendations query re-ranks the latest successful candidate pool against current room clues. No extra services or queues are introduced. The existing brief validator remains unchanged: research explicitly stores the brief without duplicated roomId and restores it at the provider boundary.
 
 Local tests mock paid provider traffic. This checkout still needs the team's Convex deployment configuration and its APIFY_TOKEN before a deployed end-to-end test. Do not create a competing team deployment just for Dev 4. Anonymous-auth setup belongs to Dev 2 / frontend integration.
+
+
+## Decision: Fetch.ai AI Council coordinator (additive)
+
+**Status:** local agent verified (Chat Protocol manifest published, Almanac API registration, full council run over HTTP). Agentverse mailbox + ASI:One chat are **unverified** until run with the team's Agentverse account.
+
+One Python uAgent in `fetch-agent/` (`uagents==0.25.5`, AgentChatProtocol 0.3.0) is the only Fetch.ai registration. It runs five roles — Archivist, Muse, Scout, Keeper, Courier — as real functions and replies in ASI:One without needing the website. It is a new external API (Agentverse / ASI:One), not a second app: Convex stays authoritative for state, and the Scout's product research reuses the existing Apify pipeline through a secret-gated Convex HTTP action rather than a new provider.
+
+Flow: ASI:One or `/council` page → coordinator → `POST /council/events` (Bearer `COUNCIL_INGEST_SECRET`) → Convex `councilEvents` / `giftDecorations` → `council.demoState` subscription → avatars animate locally. Products and raw memories never travel in events. The language model (ASI:One `asi1`) may only add clues; products, prices and links come only from research. Rejected: five separately registered agents (no new capability, five times the setup); runtime 3D generation for charms (slow, unbounded; a fixed library is rendered locally instead).

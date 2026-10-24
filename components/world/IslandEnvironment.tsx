@@ -70,7 +70,7 @@ const MUSHROOMS: [number, number][] = [
   [-6.1, -2.6],
 ];
 
-export function IslandEnvironment({ animate, quality }: { animate: boolean; quality: WorldQuality }) {
+export function IslandEnvironment({ animate, quality, showPlayers = true }: { animate: boolean; quality: WorldQuality; showPlayers?: boolean }) {
   return (
     <group>
       <GiftPlatform />
@@ -102,7 +102,7 @@ export function IslandEnvironment({ animate, quality }: { animate: boolean; qual
       <FlowerMeadow count={quality === "high" ? 420 : 220} />
       <MeadowGrass count={quality === "high" ? 460 : 220} />
 
-      <AvatarCast animate={animate} />
+      {showPlayers && <AvatarCast animate={animate} />}
     </group>
   );
 }
