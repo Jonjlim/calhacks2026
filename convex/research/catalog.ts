@@ -19,13 +19,14 @@ export async function readCatalog(
   ctx: QueryCtx,
   room: Doc<"rooms">,
 ): Promise<CatalogState> {
-  const recent = await ctx.db
-    .query("researchJobs")
-    .withIndex("by_room", (q) => q.eq("roomId", room._id))
-    .order("desc")
-    .take(50);
-  const candidatePool =
-    recent.find((job) => job.status === "succeeded") ?? null;
+  const [latestRequest, candidatePool] = await Promise.all([
+    ctx.db.query("researchJobs")
+      .withIndex("by_room", q => q.eq("roomId", room._id))
+      .order("desc").first(),
+    ctx.db.query("researchJobs")
+      .withIndex("by_room", q => q.eq("roomId", room._id))
+      .order("desc").filter(q => q.eq(q.field("status"), "succeeded")).first(),
+  ]);
   const clues = (
     await ctx.db
       .query("publishedClues")
@@ -69,7 +70,7 @@ export async function readCatalog(
     clues,
     recommendations,
     listings: pool.filter((listing) => visible.has(listing.id)),
-    latestRequest: recent[0] ?? null,
+    latestRequest,
     candidatePool,
     excluded: filterListings({ listings: pool, clues }).excluded,
   };

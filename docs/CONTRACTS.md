@@ -1191,3 +1191,14 @@ interface StripePaymentReadInput {
 }
 ```
 
+Research candidate retention fix: the room-scoped catalog query selects the newest
+successful research job independently from the latest request. It does not discard
+that pool after fifty later failed/uncertain jobs. Both reads use the existing room
+index; no global table scan or schema migration is introduced.
+
+
+A research watchdog first fences the request against the room's current knowledge
+and newest requested job. A superseded lost worker becomes `stale`, not `uncertain`;
+only an unresolved current request becomes uncertain and queues a status follow-up.
+This prevents old unresolved inputs from blocking a later explicitly requested
+search while preserving the no-automatic-paid-retry rule for current uncertainty.

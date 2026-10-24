@@ -126,10 +126,12 @@ export const expireJob = internalMutation({
   args: { jobId: v.id("researchJobs") },
   handler: async (ctx, { jobId }): Promise<null> => {
     const job = await ctx.db.get(jobId);
-    if (job?.status === "running") await ctx.db.patch(jobId, {
+    if (!job || job.status !== "running") return null;
+    if (await staleUnlessCurrent(ctx, job)) return null;
+    await ctx.db.patch(jobId, {
       status: "uncertain", lastError: "Research did not finish in time. Check the provider run before retrying.",
     });
-    if (job?.status === "running" && await isCurrent(ctx, job)) await enqueueResearchContinuation(ctx, jobId);
+    await enqueueResearchContinuation(ctx, jobId);
     return null;
   },
 });
