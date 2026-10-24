@@ -33,7 +33,7 @@ const toonCache = new Map<string, THREE.MeshToonMaterial>();
  * ramp, keeping every authored colour, vertex colour and emissive (lantern,
  * stars) exactly as painted.
  */
-function toToon(source: THREE.Material): THREE.Material {
+export function toToon(source: THREE.Material): THREE.Material {
   if (!(source instanceof THREE.MeshStandardMaterial)) return source;
   const hit = toonCache.get(source.uuid);
   if (hit) return hit;

@@ -1,0 +1,9 @@
+# Pinned to the versions in Fetch.ai's ASI-compatible uAgent guide (AgentChatProtocol 0.3.0).
+uagents==0.25.5
+openai==1.109.1
+python-dotenv==1.2.4
+httpx==0.28.1
+
+# tests
+pytest==8.4.2
+pytest-asyncio==1.2.0

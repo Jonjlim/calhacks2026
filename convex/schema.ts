@@ -340,7 +340,59 @@ export default defineSchema({
     allowedQuestionTypes: v.array(V.recipientQuestionType),
   }).index("by_profile", ["recipientProfileId"]),
 
+  // --- AI Council (Fetch.ai coordinator). Additive; see CONTRACTS.md § AI Council.
+  // Written only by the trusted HTTP ingest (convex/council.ts). Events hold
+  // display summaries and decoration specs, never products or raw memories.
+  councilRuns: defineTable({
+    runId: v.string(),
+    source: v.union(v.literal("web"), v.literal("asi1")),
+    demoKey: v.optional(v.string()),
+    roomId: v.optional(v.id("rooms")),
+    researchJobId: v.optional(v.id("researchJobs")),
+    knowledgeRevision: v.optional(v.number()),
+    idempotencyKey: v.optional(v.string()),
+    approved: v.optional(v.array(v.object({ listingId: v.id("productListings"), notes: v.array(v.string()) }))),
+    excluded: v.optional(v.array(v.object({ title: v.string(), reason: v.string() }))),
+    cached: v.optional(v.boolean()),
+    deliveredAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed"), v.literal("partial"), v.literal("uncertain")),
+    lastSequence: v.number(),
+    startedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_run", ["runId"])
+    .index("by_demo_key", ["demoKey", "startedAt"])
+    .index("by_room", ["roomId", "startedAt"])
+    .index("by_research", ["researchJobId"])
+    .index("by_room_request", ["roomId", "idempotencyKey"]),
+  councilEvents: defineTable({
+    eventId: v.string(),
+    runId: v.string(),
+    actor: V.councilActor,
+    task: v.string(),
+    status: V.councilStatus,
+    sequence: v.number(),
+    timestamp: v.number(),
+    result: v.optional(V.councilResult),
+    receivedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_run_sequence", ["runId", "sequence"]),
+  giftDecorations: defineTable({
+    demoKey: v.optional(v.string()),
+    roomId: v.optional(v.id("rooms")),
+    memoryId: v.string(),
+    runId: v.string(),
+    ...V.decorationFields,
+    createdAt: v.number(),
+  })
+    .index("by_demo_memory", ["demoKey", "memoryId"])
+    .index("by_room_memory", ["roomId", "memoryId"]),
+
   researchJobs: defineTable({
+    providerRunId: v.optional(v.string()),
+    providerStartedAt: v.optional(v.number()),
     roomId: v.id("rooms"),
     knowledgeRevision: v.number(),
     publishedClueIds: v.array(v.id("publishedClues")),

@@ -13,6 +13,9 @@ import { giftPaperTexture, ribbonTexture } from "./painterly/textures";
 import { platformTop } from "./props/Stonework";
 import { createRibbonGeometry } from "./ribbon";
 import { GIFT_SPOT } from "./sceneConfig";
+import { GiftUnwrap, LID_OPEN_ANGLE, LID_OPEN_AT } from "./unwrap/GiftUnwrap";
+import { BASE_TOP, GIFT_BOX } from "./unwrap/invitationLayout";
+import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { emitGiftPop } from "./worldEvents";
 
 const W = 1.7;
@@ -134,6 +137,8 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
   const bow = useRef<THREE.Group>(null);
   const loopL = useRef<THREE.Mesh>(null);
   const loopR = useRef<THREE.Mesh>(null);
+  const bands = useRef<THREE.Group>(null);
+  const tails = useRef<THREE.Group>(null);
   const sparkles = useRef<SparkleHandle>(null);
   const ribbons = useRibbonGeometries();
   const state = useRef({ hover: 0, hoverTarget: 0, popAt: -10, popPending: false, popCount: 0, spin: 1, sparkled: true });
@@ -151,8 +156,11 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
 
   // Handmade imperfection: soften the machined edges of the box a touch.
   const boxRef = useRef<THREE.Mesh>(null);
+  const lidRef = useRef<THREE.Mesh>(null);
+  const lidPivot = useRef<THREE.Group>(null);
   useEffect(() => {
     if (boxRef.current) wobble(boxRef.current.geometry, 0.006, 4);
+    if (lidRef.current) wobble(lidRef.current.geometry, 0.005, 9);
   }, []);
 
   useEffect(
@@ -208,18 +216,63 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       }
       flap = Math.exp(-age * 2.5) * Math.sin(age * 18) * 0.35;
     }
+    // --- Create-a-room transformation (see unwrap/GiftUnwrap). ----------
+    // Everything is a function of the sequence clock, so closing simply
+    // rewinds it. Anticipation lifts and loosens the present; it is set back
+    // down, the bow unties and drops to the pedestal, the ribbon slips off and
+    // lies flat around the box, then the lid hinges open at the back.
+    const u = unwrapClock;
+    const unwrapping = u.active && !u.staticPreview;
+    const ut = unwrapping ? u.t : 0;
+    const antic = span(ut, UNWRAP_TIMES.giftAnticipation, UNWRAP_TIMES.unwrapping);
+    const setDown = span(ut, UNWRAP_TIMES.unwrapping, UNWRAP_TIMES.unwrapping + 0.45);
+    const untie = span(ut, UNWRAP_TIMES.unwrapping, UNWRAP_TIMES.unwrapping + 0.55);
+    const slip = span(ut, UNWRAP_TIMES.unwrapping + 0.15, LID_OPEN_AT);
+    const spread = span(ut, LID_OPEN_AT, LID_OPEN_AT + 0.5);
+    if (unwrapping) {
+      sy = sxz = 1;
+      spin = 0;
+      lift = antic * (1 - setDown) * 0.35 + Math.sin(t * 2.4) * 0.03 * antic * (1 - setDown);
+    }
     g.scale.set(sxz, sy, sxz);
     r.position.y = baseY + lift;
-    r.rotation.y = -0.38 + spin + (animate ? Math.sin(t * 0.5) * 0.02 : 0);
+    r.rotation.y = -0.38 + spin + (animate && !unwrapping ? Math.sin(t * 0.5) * 0.02 : 0);
+    if (lidPivot.current) {
+      // A soft overshoot as it swings open, then it rests at ~115°.
+      const open = span(ut, LID_OPEN_AT, LID_OPEN_AT + 0.7);
+      lidPivot.current.rotation.x = -LID_OPEN_ANGLE * (1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2));
+    }
+
+    if (bands.current) {
+      // Loosen, slip down to lie flat around the box, and relax outward a little.
+      const loose = 1 + antic * 0.03 + slip * 0.06 + spread * 0.2;
+      bands.current.scale.set(loose, Math.max(0.01, 1 - slip * 0.99), loose);
+      bands.current.position.y = slip * 0.012;
+    }
+    if (tails.current) {
+      // Tails drop with the knot and lie on the floor.
+      tails.current.position.y = ribbons.top * (1 - slip) + 0.015 * slip;
+      tails.current.scale.set(1 + spread * 0.25, Math.max(0.012, 1 - slip * 0.988), 1 + spread * 0.25);
+    }
 
     const sway = animate ? Math.sin(t * 2.1) * 0.03 : 0;
-    if (loopL.current) loopL.current.rotation.z = -sway - flap - s.hover * 0.08;
-    if (loopR.current) loopR.current.rotation.z = sway + flap + s.hover * 0.08;
-    if (bow.current) bow.current.scale.setScalar(1 + s.hover * 0.04 + Math.abs(flap) * 0.15);
+    const wiggle = Math.sin(t * 13) * 0.14 * antic * (1 - untie);
+    const unfurl = untie * 0.75;
+    if (loopL.current) loopL.current.rotation.z = -sway - flap - s.hover * 0.08 - wiggle - unfurl;
+    if (loopR.current) loopR.current.rotation.z = sway + flap + s.hover * 0.08 + wiggle + unfurl;
+    if (bow.current) {
+      bow.current.scale.setScalar(1 + s.hover * 0.04 + Math.abs(flap) * 0.15);
+      // A little hop as it comes loose, then it tumbles down beside the box.
+      const hop = Math.sin(Math.min(1, untie * 1.6) * Math.PI) * 0.45;
+      const fall = span(ut, UNWRAP_TIMES.unwrapping + 0.3, UNWRAP_TIMES.unwrapping + 0.85);
+      bow.current.position.set(1.0 * fall, (ribbons.top + 0.02 + hop) * (1 - fall) + 0.05 * fall, 0.8 * fall);
+      bow.current.rotation.set(-1.25 * fall, 0.55 + fall * 1.4, 0.2 * fall);
+    }
   });
 
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    if (unwrapClock.active) return;
     state.current.hoverTarget = 1;
     document.body.style.cursor = "pointer";
     invalidate();
@@ -230,6 +283,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
   };
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    if (unwrapClock.active) return;
     const s = state.current;
     s.popPending = true;
     s.popCount++;
@@ -252,17 +306,38 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     <>
       <group ref={root} position={[GIFT_SPOT.x, baseY, GIFT_SPOT.z]} rotation={[0, -0.38, 0]} scale={GIFT_SCALE} userData={{ sketch: 4, sketchRegion: true }}>
         <group ref={body} onPointerOver={onOver} onPointerOut={onOut} onClick={onClick}>
-          <RoundedBox ref={boxRef} args={[W, H, W]} radius={0.06} smoothness={4} position={[0, H / 2, 0]} material={paperMat} castShadow receiveShadow>
+          {/* A real box and lid: the lid is what opens. */}
+          <RoundedBox ref={boxRef} args={[W, BASE_TOP + 0.02, W]} radius={0.05} smoothness={4} position={[0, (BASE_TOP + 0.02) / 2, 0]} material={paperMat} castShadow receiveShadow>
             <InkOutline weight="medium" color={INK} />
           </RoundedBox>
-          <mesh geometry={ribbons.bandX} material={ribbonMat} castShadow receiveShadow />
-          <mesh geometry={ribbons.bandZ} material={ribbonMat} castShadow receiveShadow />
-          <mesh geometry={ribbons.tailFront} material={ribbonMat} castShadow receiveShadow>
-            <InkOutline weight="fine" color={INK} />
-          </mesh>
-          <mesh geometry={ribbons.tailSide} material={ribbonMat} castShadow receiveShadow>
-            <InkOutline weight="fine" color={INK} />
-          </mesh>
+          <group ref={lidPivot} position={[0, BASE_TOP, (-W * GIFT_BOX.lidOverhang) / 2]}>
+            <RoundedBox
+              ref={lidRef}
+              args={[W * GIFT_BOX.lidOverhang, GIFT_BOX.lidHeight, W * GIFT_BOX.lidOverhang]}
+              radius={0.05}
+              smoothness={4}
+              position={[0, GIFT_BOX.lidHeight / 2, (W * GIFT_BOX.lidOverhang) / 2]}
+              material={paperMat}
+              castShadow
+              receiveShadow
+            >
+              <InkOutline weight="medium" color={INK} />
+            </RoundedBox>
+          </group>
+          <group ref={bands}>
+            <mesh geometry={ribbons.bandX} material={ribbonMat} castShadow receiveShadow />
+            <mesh geometry={ribbons.bandZ} material={ribbonMat} castShadow receiveShadow />
+          </group>
+          <group ref={tails} position={[0, ribbons.top, 0]}>
+            <group position={[0, -ribbons.top, 0]}>
+              <mesh geometry={ribbons.tailFront} material={ribbonMat} castShadow receiveShadow>
+                <InkOutline weight="fine" color={INK} />
+              </mesh>
+              <mesh geometry={ribbons.tailSide} material={ribbonMat} castShadow receiveShadow>
+                <InkOutline weight="fine" color={INK} />
+              </mesh>
+            </group>
+          </group>
           <group ref={bow} position={[0, ribbons.top + 0.02, 0]} rotation={[0, 0.55, 0]}>
             <mesh ref={loopL} geometry={ribbons.loopL} material={ribbonMat} castShadow>
               <InkOutline weight="fine" color={INK} />
@@ -282,6 +357,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
         </group>
       </group>
       <SparkleBurst ref={sparkles} />
+      <GiftUnwrap bodyRef={body} />
     </>
   );
 }

@@ -1,28 +1,22 @@
 "use client";
 
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "motion/react";
-import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useIslandWorld } from "@/components/world/IslandWorldProvider";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { StorybookIntro } from "@/components/intro/StorybookIntro";
+import { UnwrapInvitation } from "@/components/unwrap/UnwrapInvitation";
+import { unwrapClock, useUnwrapPhase } from "@/components/unwrap/unwrapTimeline";
+import type { CreateRoomDraft, LandingRoomEntry } from "@/lib/mocks/landing";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
 import { useLandingActions } from "./useLandingActions";
 
-const WorldCanvas = dynamic(() => import("@/components/world/WorldCanvas"), { ssr: false });
+
 
 const SOUND_KEY = "unwrap:sound";
 const INTRO_KEY = "unwrap:intro-seen";
 let introDecided = false;
-
-function hasWebGL(): boolean {
-  try {
-    const c = document.createElement("canvas");
-    return Boolean(c.getContext("webgl2") ?? c.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Whether the storybook intro should autoplay: once per browser session,
@@ -42,28 +36,22 @@ function shouldPlayIntro(params: URLSearchParams, reducedMotion: boolean, webgl:
 }
 
 export function LandingPage() {
-  const reducedMotion = useReducedMotion() ?? false;
-  const [webgl, setWebgl] = useState<boolean | null>(null);
-  const [ready, setReady] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [joinRequest, setJoinRequest] = useState(0);
-  const [painterlyStrength, setPainterlyStrength] = useState(0);
   const landingActions = useLandingActions();
+  const reducedMotion = useReducedMotion() ?? false;
+  const { webgl, ready, soundEnabled, toggleSound } = useIslandWorld();
+  const [joinRequest, setJoinRequest] = useState(0);
+
   const phase = useIntroPhase();
   const introActive = phase !== "landingReady";
-  const markWorldReady = useCallback(() => setReady(true), []);
+  const unwrapPhase = useUnwrapPhase();
+  const unwrapActive = unwrapPhase !== "landing";
+  const wasUnwrapping = useRef(false);
+
 
   useEffect(() => {
-    const gl = hasWebGL();
-    setWebgl(gl);
+    if (webgl === null) return;
+    const gl = webgl;
     const params = new URLSearchParams(window.location.search);
-    const painterly = Number(params.get("painterly"));
-    if (Number.isFinite(painterly)) setPainterlyStrength(Math.min(1, Math.max(0, painterly)));
-    try {
-      setSoundEnabled(localStorage.getItem(SOUND_KEY) === "on");
-    } catch {
-      // Storage can be blocked; sound simply defaults to off.
-    }
     // Decided once per page load (Strict Mode remounts must not restart or cancel it).
     if (!introDecided) {
       introDecided = true;
@@ -79,46 +67,51 @@ export function LandingPage() {
       }
     }
     // A later reduced-motion change skips via the effect below.
-  }, []);
+  }, [webgl, reducedMotion]);
 
   useEffect(() => {
     if (reducedMotion && introClock.active) introClock.finish();
   }, [reducedMotion]);
+
+  // A successful create turns the island's present into the invitation, in-world.
+  const onRoomCreated = useCallback(
+    (entry: LandingRoomEntry, draft: CreateRoomDraft) => {
+      if (introClock.active) return;
+      unwrapClock.start(
+        {
+          recipientDisplayName: draft.recipientDisplayName.trim(),
+          occasion: draft.occasion.trim(),
+          hostDisplayName: draft.displayName.trim(),
+          source: entry.source,
+          roomId: entry.roomId,
+          ...(entry.inviteToken ? { inviteToken: entry.inviteToken } : {}),
+        },
+        // Reduced motion, no WebGL, or a world that never loaded: show the stationary HTML invitation.
+        { staticPreview: reducedMotion || !webgl || !ready },
+      );
+    },
+    [reducedMotion, webgl, ready],
+  );
+
+  // Back on the island: hand focus to the room's next step.
+  useEffect(() => {
+    if (unwrapActive) {
+      wasUnwrapping.current = true;
+      return;
+    }
+    if (!wasUnwrapping.current) return;
+    wasUnwrapping.current = false;
+    window.setTimeout(() => document.querySelector<HTMLElement>("[data-entered-primary]")?.focus(), 60);
+  }, [unwrapActive]);
 
   const replayIntro = useCallback(() => {
     introClock.pauseAt = null;
     introClock.start();
   }, []);
 
-  const toggleSound = useCallback(() => {
-    setSoundEnabled((on) => {
-      try {
-        localStorage.setItem(SOUND_KEY, on ? "off" : "on");
-      } catch {
-        // ignore
-      }
-      return !on;
-    });
-  }, []);
-
   return (
     <MotionConfig reducedMotion="user">
-      <main className="relative h-dvh min-h-[640px] w-full overflow-hidden bg-sky">
-        {/* Painted sky shown while the world loads, and as the no-WebGL fallback. */}
-        <div className="world-fallback absolute inset-0" aria-hidden />
-        {webgl && (
-          <div
-            className={`absolute inset-0 transition-opacity duration-[1400ms] ease-out ${ready ? "opacity-100" : "opacity-0"} ${introActive ? "pointer-events-none" : ""}`}
-          >
-            <WorldCanvas
-              reducedMotion={reducedMotion}
-              soundEnabled={soundEnabled}
-              painterlyStrength={painterlyStrength}
-              introActive={introActive}
-              onReady={markWorldReady}
-            />
-          </div>
-        )}
+      <main className="relative h-dvh min-h-[640px] w-full overflow-hidden pointer-events-none">
         <p className="sr-only">
           A hand-painted floating island in the clouds. A large cream present tied with a coral bow sits on a stone platform, watched by
           five small hooded storybook spirits, with a tower, cottages, gardens and a bridge. Beyond it float a windmill village, a
@@ -127,21 +120,30 @@ export function LandingPage() {
 
         {/* Ivory wash keeps the editorial column legible over the world. */}
         <div
-          className={`editorial-wash pointer-events-none absolute inset-y-0 left-0 w-[58%] transition-opacity duration-[1200ms] ease-out ${introActive ? "opacity-0" : "opacity-100"}`}
+          className={`editorial-wash pointer-events-none absolute inset-y-0 left-0 w-[58%] transition-opacity duration-[1200ms] ease-out ${introActive || unwrapActive ? "opacity-0" : "opacity-100"}`}
           aria-hidden
         />
         <div className="paper-grain pointer-events-none absolute inset-0" aria-hidden />
 
         {!introActive && (
-          <div className="pointer-events-none relative z-10 flex h-full flex-col">
+          <motion.div
+            // The form recedes (but stays mounted, keeping its state) while the gift transforms.
+            animate={unwrapActive ? { opacity: 0, y: 12, filter: "blur(6px)" } : { opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{ duration: unwrapActive ? 0.4 : 0.6, delay: unwrapActive ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
+            inert={unwrapActive}
+            aria-hidden={unwrapActive || undefined}
+            className="pointer-events-none relative z-10 flex h-full flex-col"
+          >
             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}>
               <LandingHeader soundEnabled={soundEnabled} onToggleSound={toggleSound} onJoin={() => setJoinRequest((n) => n + 1)} />
             </motion.div>
             <div className="flex flex-1 items-center px-[clamp(40px,5vw,88px)] pb-16">
-              <LandingHero actions={landingActions} joinRequest={joinRequest} />
+              <LandingHero actions={landingActions} joinRequest={joinRequest} onRoomCreated={onRoomCreated} />
             </div>
-          </div>
+          </motion.div>
         )}
+
+        {unwrapActive && <UnwrapInvitation />}
 
         <AnimatePresence>
           {introActive && (
@@ -151,14 +153,14 @@ export function LandingPage() {
           )}
         </AnimatePresence>
 
-        {!introActive && webgl && !reducedMotion && (
+        {!introActive && !unwrapActive && webgl && !reducedMotion && (
           <motion.button
             type="button"
             onClick={replayIntro}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.4, duration: 0.8 }}
-            className="absolute right-6 bottom-5 z-10 rounded-full px-3 py-1.5 text-[12.5px] font-medium text-dusk/55 transition hover:bg-paper/60 hover:text-dusk"
+            className="pointer-events-auto absolute right-6 bottom-5 z-10 rounded-full px-3 py-1.5 text-[12.5px] font-medium text-dusk/55 transition hover:bg-paper/60 hover:text-dusk"
           >
             Replay intro
           </motion.button>

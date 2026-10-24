@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { type FormEvent, type InputHTMLAttributes, type ReactNode, useId, useState } from "react";
 import type { AppError } from "@/lib/contracts";
-import { type LandingActions, type LandingRoomEntry, MOCK_INVITE_TOKEN } from "@/lib/mocks/landing";
+import { type CreateRoomDraft, type LandingActions, type LandingRoomEntry, MOCK_INVITE_TOKEN } from "@/lib/mocks/landing";
 
 type View =
   | { kind: "choose" }
@@ -20,7 +20,16 @@ const swap = {
   transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] },
 } as const;
 
-export function CreateJoinPanel({ actions, joinRequest }: { actions: LandingActions; joinRequest: number }) {
+export function CreateJoinPanel({
+  actions,
+  joinRequest,
+  onRoomCreated,
+}: {
+  actions: LandingActions;
+  joinRequest: number;
+  /** Fired after a successful (validated) create, with the entered details, to play the gift-to-invitation sequence. */
+  onRoomCreated?: (entry: LandingRoomEntry, draft: CreateRoomDraft) => void;
+}) {
   const [view, setView] = useState<View>({ kind: "choose" });
   const [lastJoinRequest, setLastJoinRequest] = useState(joinRequest);
   // The header's "Join a room" link opens the join form.
@@ -59,7 +68,14 @@ export function CreateJoinPanel({ actions, joinRequest }: { actions: LandingActi
         )}
         {view.kind === "create" && (
           <motion.div key="create" {...swap}>
-            <CreateForm actions={actions} onBack={() => setView({ kind: "choose" })} onEntered={(entry) => setView({ kind: "entered", entry, via: "create" })} />
+            <CreateForm
+              actions={actions}
+              onBack={() => setView({ kind: "choose" })}
+              onEntered={(entry, draft) => {
+                setView({ kind: "entered", entry, via: "create" });
+                onRoomCreated?.(entry, draft);
+              }}
+            />
           </motion.div>
         )}
         {view.kind === "join" && (
@@ -77,7 +93,7 @@ export function CreateJoinPanel({ actions, joinRequest }: { actions: LandingActi
   );
 }
 
-function CreateForm({ actions, onBack, onEntered }: { actions: LandingActions; onBack: () => void; onEntered: (e: LandingRoomEntry) => void }) {
+function CreateForm({ actions, onBack, onEntered }: { actions: LandingActions; onBack: () => void; onEntered: (e: LandingRoomEntry, draft: CreateRoomDraft) => void }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
 
@@ -86,13 +102,14 @@ function CreateForm({ actions, onBack, onEntered }: { actions: LandingActions; o
     const data = new FormData(e.currentTarget);
     setPending(true);
     setError(null);
-    const res = await actions.createRoom({
+    const draft: CreateRoomDraft = {
       recipientDisplayName: String(data.get("recipientDisplayName") ?? ""),
       occasion: String(data.get("occasion") ?? ""),
       displayName: String(data.get("displayName") ?? ""),
-    });
+    };
+    const res = await actions.createRoom(draft);
     setPending(false);
-    if (res.ok) onEntered(res.value);
+    if (res.ok) onEntered(res.value, draft);
     else setError(res.error);
   }
 
@@ -158,7 +175,7 @@ function EnteredCard({ entry, via, onBack }: { entry: LandingRoomEntry; via: "cr
       </p>
       <div className="mt-5 flex items-center gap-4">
         <motion.span whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }} transition={spring} className="inline-flex">
-          <Link href={`/room/${entry.roomId}`} className="btn-primary">
+          <Link href={`/room/${entry.roomId}`} className="btn-primary" data-entered-primary>
             {mock ? "Open the demo room" : "Enter the room"}
             <Arrow />
           </Link>

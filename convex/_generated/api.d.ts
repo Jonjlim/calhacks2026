@@ -27,6 +27,8 @@ import type * as allocations from "../allocations.js";
 import type * as auth from "../auth.js";
 import type * as cleanup from "../cleanup.js";
 import type * as clues from "../clues.js";
+import type * as council from "../council.js";
+import type * as councilRoom from "../councilRoom.js";
 import type * as crons from "../crons.js";
 import type * as demo from "../demo.js";
 import type * as http from "../http.js";
@@ -79,6 +81,8 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   cleanup: typeof cleanup;
   clues: typeof clues;
+  council: typeof council;
+  councilRoom: typeof councilRoom;
   crons: typeof crons;
   demo: typeof demo;
   http: typeof http;

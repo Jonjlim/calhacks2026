@@ -184,3 +184,24 @@ export const searchBrief = v.object({
   occasion: v.optional(v.string()),
   listingLimit: v.number(),
 });
+
+// --- AI Council (see lib/council/contracts.ts; zod there validates first) ---
+export const councilActor = v.union(
+  v.literal("archivist"), v.literal("muse"), v.literal("scout"), v.literal("keeper"), v.literal("courier"),
+);
+export const councilStatus = v.union(v.literal("started"), v.literal("completed"), v.literal("failed"));
+export const decorationFields = {
+  jar: v.string(),
+  assetId: v.string(),
+  color: v.string(),
+  placement: v.string(),
+  label: v.string(),
+};
+export const decorationSpec = v.object({ memoryId: v.string(), ...decorationFields });
+export const councilResult = v.object({
+  summary: v.optional(v.string()),
+  count: v.optional(v.number()),
+  decorations: v.optional(v.array(decorationSpec)),
+  cached: v.optional(v.boolean()),
+  error: v.optional(v.string()),
+});

@@ -310,6 +310,9 @@ export async function enqueueResearchContinuation(
     !["succeeded", "failed", "uncertain"].includes(research.status)
   )
     return null;
+  // The council owns its completion; do not launch a competing buyer turn before Keeper delivers.
+  const council = await ctx.db.query("councilRuns").withIndex("by_research", q => q.eq("researchJobId", researchJobId)).unique();
+  if (council) return null;
   if (research.continuationAgentJobId) return research.continuationAgentJobId;
   const room = await ctx.db.get(research.roomId);
   const latest = await ctx.db

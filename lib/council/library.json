@@ -1,0 +1,31 @@
+{
+  "$comment": "Approved Garden-of-Memories decoration library. Single source of truth for the Fetch.ai coordinator (fetch-agent/council/muse.py) and the web app (lib/council/contracts.ts). Assets are configurable primitives rendered locally; nothing is generated or downloaded at runtime.",
+  "version": 1,
+  "jars": ["wish", "interest", "moment"],
+  "colors": {
+    "terracotta": "#c8664a",
+    "coral": "#e07a62",
+    "gold": "#e2bd6b",
+    "sage": "#8fae6f",
+    "lavender": "#a99bd6",
+    "sky": "#8fbfe0",
+    "cream": "#f6ecdc",
+    "plum": "#7a4a6f"
+  },
+  "placements": ["front_ribbon", "top_knot", "lid_left", "lid_right", "side_left", "side_right", "front_corner", "back_ribbon"],
+  "assets": [
+    { "id": "ceramic_charm", "label": "Pottery", "color": "terracotta", "keywords": ["pottery", "ceramic", "ceramics", "clay", "wheel", "glaze", "kiln", "throwing"] },
+    { "id": "book_charm", "label": "Reading", "color": "plum", "keywords": ["book", "books", "reading", "novel", "poetry", "library"] },
+    { "id": "music_note", "label": "Music", "color": "lavender", "keywords": ["music", "guitar", "piano", "vinyl", "record", "concert", "song", "singing"] },
+    { "id": "paintbrush", "label": "Painting", "color": "coral", "keywords": ["painting", "paint", "watercolor", "watercolour", "drawing", "sketch", "art", "illustration"] },
+    { "id": "leaf_sprig", "label": "Gardening", "color": "sage", "keywords": ["garden", "gardening", "plants", "plant", "flowers", "succulent", "botanical"] },
+    { "id": "coffee_cup", "label": "Coffee", "color": "terracotta", "keywords": ["coffee", "espresso", "latte", "tea", "cafe"] },
+    { "id": "camera_charm", "label": "Photography", "color": "sky", "keywords": ["photography", "photo", "camera", "film"] },
+    { "id": "map_pin", "label": "Travel", "color": "coral", "keywords": ["travel", "trip", "hiking", "adventure", "camping", "map"] },
+    { "id": "whisk_charm", "label": "Baking", "color": "gold", "keywords": ["baking", "bake", "cooking", "cook", "kitchen", "recipe"] },
+    { "id": "yarn_ball", "label": "Crafts", "color": "lavender", "keywords": ["knitting", "crochet", "yarn", "sewing", "embroidery", "handmade", "crafts", "craft"] },
+    { "id": "star_charm", "label": "Wonder", "color": "gold", "keywords": ["stars", "astronomy", "space", "stargazing"] },
+    { "id": "heart_charm", "label": "Memory", "color": "coral", "keywords": [] }
+  ],
+  "fallbackAsset": "heart_charm"
+}
