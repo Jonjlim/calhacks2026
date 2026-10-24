@@ -1,54 +1,60 @@
 {
+  "revision": "capsule-v2-rounded-floating",
   "assets": [
     {
       "id": "archivist",
-      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/archivist.glb",
-      "creator": "Unwrap original council collection",
-      "license": "Project-owned original asset; no third-party pack imported",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/capsule-v2/source/archivist.blend",
+      "creator": "Unwrap original capsule council, with geometry reused from previous project props",
+      "license": "Project-owned original assets; no external model pack used",
       "local": "public/ai-council/archivist.glb",
-      "bytes": 1763096,
-      "sha256": "daf7b3c07666c3eb0c07cbb1d4a2cef2a653328d5a261ee32bdf4f735dc826ae",
-      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
-    },
-    {
-      "id": "scout",
-      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/scout.glb",
-      "creator": "Unwrap original council collection",
-      "license": "Project-owned original asset; no third-party pack imported",
-      "local": "public/ai-council/scout.glb",
-      "bytes": 1433280,
-      "sha256": "631b752aa9cab2e86baec83bb9db66bc66f009bc6b6dbe945dc6503290c9195e",
-      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+      "sha256": "694844e66b3c65efa7439f1520a202f80408370694a0085e7fe453c710e370c5",
+      "bytes": 1534052,
+      "modifications": "Capsule v2 rounded update: continuous egg-shaped silhouette, softer oval faceplate, subtly narrower body, 20% shorter proportions, flippers, dark face screen, blue eye morphs and no feet. Runtime uses soft ceramic PBR, 0.67 scene-size multiplier, 0.42 hover offset and idle tool hiding.",
+      "previousVersionBackup": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/pre-capsule-v2-20261024/app-public/archivist.glb"
     },
     {
       "id": "muse",
-      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/muse.glb",
-      "creator": "Unwrap original council collection",
-      "license": "Project-owned original asset; no third-party pack imported",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/capsule-v2/source/muse.blend",
+      "creator": "Unwrap original capsule council, with geometry reused from previous project props",
+      "license": "Project-owned original assets; no external model pack used",
       "local": "public/ai-council/muse.glb",
-      "bytes": 1498564,
-      "sha256": "a967998881576dd3ef0a49ff8ec31535715375b1ba9b1a968ed09eeae50c3399",
-      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+      "sha256": "692d0adb8c07800edf6f19010907031ed1ea6c7d0b38afb8029b7d0b1b5470f7",
+      "bytes": 1663276,
+      "modifications": "Capsule v2 rounded update: continuous egg-shaped silhouette, softer oval faceplate, subtly narrower body, 20% shorter proportions, flippers, dark face screen, blue eye morphs and no feet. Runtime uses soft ceramic PBR, 0.67 scene-size multiplier, 0.42 hover offset and idle tool hiding.",
+      "previousVersionBackup": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/pre-capsule-v2-20261024/app-public/muse.glb"
+    },
+    {
+      "id": "scout",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/capsule-v2/source/scout.blend",
+      "creator": "Unwrap original capsule council, with geometry reused from previous project props",
+      "license": "Project-owned original assets; no external model pack used",
+      "local": "public/ai-council/scout.glb",
+      "sha256": "fcc36ec243282637e8f43159176c94e691b93a1e3224ebe322adec3af099fa24",
+      "bytes": 1561560,
+      "modifications": "Capsule v2 rounded update: continuous egg-shaped silhouette, softer oval faceplate, subtly narrower body, 20% shorter proportions, flippers, dark face screen, blue eye morphs and no feet. Runtime uses soft ceramic PBR, 0.67 scene-size multiplier, 0.42 hover offset and idle tool hiding.",
+      "previousVersionBackup": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/pre-capsule-v2-20261024/app-public/scout.glb"
     },
     {
       "id": "keeper",
-      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/keeper.glb",
-      "creator": "Unwrap original council collection",
-      "license": "Project-owned original asset; no third-party pack imported",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/capsule-v2/source/keeper.blend",
+      "creator": "Unwrap original capsule council, with geometry reused from previous project props",
+      "license": "Project-owned original assets; no external model pack used",
       "local": "public/ai-council/keeper.glb",
-      "bytes": 1612360,
-      "sha256": "e1d9a72e3d767901bbb150399b56a1d8d06c934ea300c3af212db2bd688da44d",
-      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+      "sha256": "95f6344193dc1fa89c5e8408f716870e9f600adc4a7de0c9b0291f72daec9e07",
+      "bytes": 1639812,
+      "modifications": "Capsule v2 rounded update: continuous egg-shaped silhouette, softer oval faceplate, subtly narrower body, 20% shorter proportions, flippers, dark face screen, blue eye morphs and no feet. Runtime uses soft ceramic PBR, 0.67 scene-size multiplier, 0.42 hover offset and idle tool hiding.",
+      "previousVersionBackup": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/pre-capsule-v2-20261024/app-public/keeper.glb"
     },
     {
       "id": "courier",
-      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/courier.glb",
-      "creator": "Unwrap original council collection",
-      "license": "Project-owned original asset; no third-party pack imported",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/capsule-v2/source/courier.blend",
+      "creator": "Unwrap original capsule council, with geometry reused from previous project props",
+      "license": "Project-owned original assets; no external model pack used",
       "local": "public/ai-council/courier.glb",
-      "bytes": 1258048,
-      "sha256": "079263c399ac1248ceccbea7b5be7cf352ffd3fa9a06d0fe167773b3b1da6ed9",
-      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+      "sha256": "b0c961530ecfdbf23a1946c211ec79ab0194ba0bd19438ad853d4ef615958fa2",
+      "bytes": 1534280,
+      "modifications": "Capsule v2 rounded update: continuous egg-shaped silhouette, softer oval faceplate, subtly narrower body, 20% shorter proportions, flippers, dark face screen, blue eye morphs and no feet. Runtime uses soft ceramic PBR, 0.67 scene-size multiplier, 0.42 hover offset and idle tool hiding.",
+      "previousVersionBackup": "/Users/ally/Github/unwrap-3d-assets/ai-council/revisions/pre-capsule-v2-20261024/app-public/courier.glb"
     }
   ]
 }
