@@ -1,0 +1,53 @@
+{
+  "$comment": "Third-party props in the tower interior. Downloaded by the team from Poly Pizza; verify each page's license before release.",
+  "assets": [
+    {
+      "id": "bookcase",
+      "name": "Bookcase with Books",
+      "creator": "Quaternius",
+      "source": "https://poly.pizza/m/tACDGJ4CGW",
+      "license": "CC0 1.0 (Public Domain) as listed for Quaternius models on Poly Pizza \u2014 confirm on the source page",
+      "local": "public/props/bookcase.glb",
+      "originalFile": "Bookcase with Books by Quaternius - tACDGJ4CGW.glb",
+      "bytes": 589464,
+      "sha256": "d2e2cd56498bec39dae1d8cf0b776bbfaaf25694a2abb845633515a248b0e5de",
+      "modifications": "File renamed only. At runtime: fitted to a target height, grounded, and re-shaded with the lobby toon ramp (authored colours kept)."
+    },
+    {
+      "id": "barrel",
+      "name": "Barrel",
+      "creator": "Quaternius",
+      "source": "https://poly.pizza/m/ONdghDBByN",
+      "license": "CC0 1.0 (Public Domain) as listed for Quaternius models on Poly Pizza \u2014 confirm on the source page",
+      "local": "public/props/barrel.glb",
+      "originalFile": "Barrel by Quaternius - ONdghDBByN.glb",
+      "bytes": 75512,
+      "sha256": "bc2fe12bd6f04492ea22d89394324c18e32c77afe85194d1319c16585777963a",
+      "modifications": "File renamed only. At runtime: fitted to a target height, grounded, and re-shaded with the lobby toon ramp (authored colours kept)."
+    },
+    {
+      "id": "crate",
+      "name": "Crate",
+      "creator": "Quaternius",
+      "source": "https://poly.pizza/m/3OEFd1AWfa",
+      "license": "CC0 1.0 (Public Domain) as listed for Quaternius models on Poly Pizza \u2014 confirm on the source page",
+      "local": "public/props/crate.glb",
+      "originalFile": "Crate by Quaternius - 3OEFd1AWfa.glb",
+      "bytes": 35776,
+      "sha256": "57031e1b6102dd9bec3e27e966655588d18c3fdede34232a6b6497ce57030a85",
+      "modifications": "File renamed only. At runtime: fitted to a target height, grounded, and re-shaded with the lobby toon ramp (authored colours kept)."
+    },
+    {
+      "id": "coin-bag",
+      "name": "Coin Bag",
+      "creator": "Quaternius",
+      "source": "https://poly.pizza/m/iUpWtNWXI7",
+      "license": "CC0 1.0 (Public Domain) as listed for Quaternius models on Poly Pizza \u2014 confirm on the source page",
+      "local": "public/props/coin-bag.glb",
+      "originalFile": "Coin Bag by Quaternius - iUpWtNWXI7.glb",
+      "bytes": 54304,
+      "sha256": "824489179cdcc3c5bd3f6cafc90b85204376450a8df1dc5cd110223dda149d1a",
+      "modifications": "File renamed only. At runtime: fitted to a target height, grounded, and re-shaded with the lobby toon ramp (authored colours kept)."
+    }
+  ]
+}

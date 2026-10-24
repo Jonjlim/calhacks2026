@@ -21,6 +21,8 @@ import type * as agents_smoke from "../agents/smoke.js";
 import type * as allocations from "../allocations.js";
 import type * as auth from "../auth.js";
 import type * as clues from "../clues.js";
+import type * as council from "../council.js";
+import type * as councilRoom from "../councilRoom.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -63,6 +65,8 @@ declare const fullApi: ApiFromModules<{
   allocations: typeof allocations;
   auth: typeof auth;
   clues: typeof clues;
+  council: typeof council;
+  councilRoom: typeof councilRoom;
   http: typeof http;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;

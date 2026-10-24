@@ -86,6 +86,7 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
   const votesRes = useQuery(api.votes.listVotes, args);
   const inviteRes = useQuery(api.rooms.getInvite, args);
   const activityRes = useQuery(api.agents.buyer.listActivity, args);
+  const councilRes = useQuery(api.councilRoom.state, args);
   const jobsRes = useQuery(api.jobs.listRoomJobs, args);
 
   const sendMessage = useMutation(api.messages.sendMessage);
@@ -100,7 +101,8 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
   const editClue = useMutation(api.clues.editProposedClue);
   const withdrawClue = useMutation(api.clues.withdrawClue);
   const addManualClue = useMutation(api.clues.upsertManualPreference);
-  const startResearch = useMutation(api.research.research.startResearch);
+  const startResearch = useMutation(api.councilRoom.start);
+  const resumeCouncil = useMutation(api.councilRoom.resume);
   const castVote = useMutation(api.votes.castVote);
   const clearVote = useMutation(api.votes.clearVote);
   const selectGift = useMutation(api.proposals.selectGift);
@@ -129,6 +131,7 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
       addManualClue: (kind, text) => addManualClue({ roomId, kind, text }),
       startResearch: (clueIds) =>
         startResearch({ roomId, publishedClueIds: clueIds as Id<"publishedClues">[], idempotencyKey: newRequestKey() }),
+      resumeCouncil: (runId) => resumeCouncil({ roomId, runId }),
       castVote: (listingId, vote) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote }),
       clearVote: (listingId) => clearVote({ roomId, listingId: listingId as Id<"productListings"> }),
       selectGift: (listingId) => selectGift({ roomId, listingId: listingId as Id<"productListings"> }),
@@ -139,7 +142,7 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
-      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, castVote, clearVote,
+      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, clearVote,
       selectGift, clearSelection, setLimit, approve, withdrawApproval,
     ],
   );
@@ -164,6 +167,7 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
     evidence: value(evidenceRes, []).map(withId),
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
+    council: councilRes?.ok ? councilRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
   };
   return <RoomLayout data={data} actions={actions} />;

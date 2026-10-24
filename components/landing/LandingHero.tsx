@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import type { LandingActions } from "@/lib/mocks/landing";
+import type { CreateRoomDraft, LandingActions, LandingRoomEntry } from "@/lib/mocks/landing";
 import { CreateJoinPanel } from "./CreateJoinPanel";
 
 const rise = (delay: number) => ({
@@ -10,7 +10,15 @@ const rise = (delay: number) => ({
   transition: { duration: 0.9, delay, ease: [0.22, 1, 0.36, 1] },
 }) as const;
 
-export function LandingHero({ actions, joinRequest }: { actions: LandingActions; joinRequest: number }) {
+export function LandingHero({
+  actions,
+  joinRequest,
+  onRoomCreated,
+}: {
+  actions: LandingActions;
+  joinRequest: number;
+  onRoomCreated?: (entry: LandingRoomEntry, draft: CreateRoomDraft) => void;
+}) {
   return (
     <section aria-labelledby="hero-title" className="pointer-events-auto flex max-w-[620px] flex-col">
       <motion.h1 id="hero-title" {...rise(0.15)} className="font-display text-[clamp(56px,5.4vw,84px)] leading-[0.98] font-medium tracking-[-0.02em] text-dusk">
@@ -22,7 +30,7 @@ export function LandingHero({ actions, joinRequest }: { actions: LandingActions;
         A little magic happens when friends put their memories together.
       </motion.p>
       <motion.div {...rise(0.45)} className="mt-10">
-        <CreateJoinPanel actions={actions} joinRequest={joinRequest} />
+        <CreateJoinPanel actions={actions} joinRequest={joinRequest} onRoomCreated={onRoomCreated} />
       </motion.div>
     </section>
   );

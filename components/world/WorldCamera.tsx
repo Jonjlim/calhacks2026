@@ -4,8 +4,19 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
+import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { CameraTour, TOUR_START } from "./cameraPath";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
+import { type InvitationFrame, invitationFrame } from "./unwrap/invitationLayout";
+import { roomStage } from "@/components/room/roomStage";
+import { doorPose, gardenPose, towerPose } from "./room/stageLayout";
+
+/** The same view, pulled back along its line of sight. */
+function pullBack(pose: CameraPose, k: number): CameraPose {
+  const [px, py, pz] = pose.position;
+  const [tx, ty, tz] = pose.target;
+  return { ...pose, position: [tx + (px - tx) * k, ty + (py - ty) * k, tz + (pz - tz) * k] };
+}
 
 /**
  * The only camera controller. During the intro it follows the shared intro
@@ -14,15 +25,16 @@ import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./s
  * view offset shifts the projection centre right so the island sits beside
  * the editorial column without changing the perspective.
  */
-export function WorldCamera({ parallax }: { parallax: boolean }) {
+export function WorldCamera({ parallax, roomActive = false, reducedMotion = false }: { parallax: boolean; roomActive?: boolean; reducedMotion?: boolean }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const size = useThree((s) => s.size);
   const pointer = useRef({ x: 0, y: 0 });
   const smoothed = useRef({ x: 0, y: 0 });
   const rest = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3() }), []);
-  const poses = useRef<{ landing: CameraPose; story: CameraPose; tour: CameraTour } | null>(null);
+  const poses = useRef<{ landing: CameraPose; story: CameraPose; tour: CameraTour; invite: InvitationFrame } | null>(null);
   const live = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3(), fov: 30, shiftX: 0, shiftY: 0 }), []);
   const applied = useRef({ fov: -1, shiftX: -1, shiftY: -1, w: 0, h: 0 });
+  const tmpPos = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
     let landing = landingPose(size.width, size.height);
@@ -32,7 +44,7 @@ export function WorldCamera({ parallax }: { parallax: boolean }) {
       landing = { position: [cam[0]!, cam[1]!, cam[2]!], target: [cam[3]!, cam[4]!, cam[5]!], fov: cam[6]!, shiftX: 0, shiftY: 0 };
     }
     const story = storybookPose(size.width, size.height);
-    poses.current = { landing, story, tour: new CameraTour(story, landing) };
+    poses.current = { landing, story, tour: new CameraTour(story, landing), invite: invitationFrame(size.width, size.height) };
     rest.position.set(...landing.position);
     rest.target.set(...landing.target);
     applied.current.fov = -1;
@@ -57,6 +69,14 @@ export function WorldCamera({ parallax }: { parallax: boolean }) {
     camera.updateProjectionMatrix();
   };
 
+  const applyPose = (a: CameraPose, b: CameraPose, k: number) => {
+    live.position.set(...a.position).lerp(tmpPos.set(...b.position), k);
+    live.target.set(...a.target).lerp(tmpPos.set(...b.target), k);
+    project(THREE.MathUtils.lerp(a.fov, b.fov, k), THREE.MathUtils.lerp(a.shiftX, b.shiftX, k), THREE.MathUtils.lerp(a.shiftY, b.shiftY, k));
+    camera.position.copy(live.position);
+    camera.lookAt(live.target);
+  };
+
   useFrame((_, dt) => {
     const p = poses.current;
     if (!p) return;
@@ -73,6 +93,47 @@ export function WorldCamera({ parallax }: { parallax: boolean }) {
         project(live.fov, live.shiftX, live.shiftY);
       }
       camera.lookAt(live.target);
+      return;
+    }
+
+    // Create-a-room: glide in to the gift, hold while it becomes the invitation, glide back.
+    if (unwrapClock.active && !unwrapClock.staticPreview) {
+      smoothed.current.x = smoothed.current.y = 0;
+      const { close, top } = p.invite;
+      // landing → close on the present → rise over it to look down on the code. Closing rewinds the clock.
+      const t = unwrapClock.t;
+      const a = span(t, UNWRAP_TIMES.approachingGift, UNWRAP_TIMES.giftAnticipation + 0.55);
+      const b = span(t, UNWRAP_TIMES.unfoldingPaper + 0.95, UNWRAP_TIMES.assemblingQR + 0.25);
+      const ea = a * a * (3 - 2 * a);
+      const eb = b * b * (3 - 2 * b);
+      live.position.set(...p.landing.position).lerp(tmpPos.set(...close.position), ea).lerp(tmpPos.set(...top.position), eb);
+      live.target.set(...p.landing.target).lerp(tmpPos.set(...close.target), ea).lerp(tmpPos.set(...top.target), eb);
+      const fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.fov, close.fov, ea), top.fov, eb);
+      const shiftX = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftX, 0, ea), top.shiftX, eb);
+      const shiftY = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftY, 0, ea), top.shiftY, eb);
+      project(fov, shiftX, shiftY);
+      camera.position.copy(live.position);
+      camera.lookAt(live.target);
+      return;
+    }
+
+    // Gift rooms: the stage clock owns the camera (doorway glide, tower, garden).
+    if (roomActive && (roomStage.shown || roomStage.target)) {
+      smoothed.current.x = smoothed.current.y = 0;
+      const w = size.width;
+      const shown = roomStage.shown;
+      const scenePose = shown === "tower" ? towerPose(w) : shown === "garden" ? gardenPose(w) : p.landing;
+      if (!shown && roomStage.target === "tower" && roomStage.transitioning && !reducedMotion) {
+        // Outside, gliding up to the tower door before the fade.
+        const k = roomStage.approachProgress;
+        applyPose(p.landing, doorPose(), k * k * (3 - 2 * k));
+      } else if (shown && roomStage.transitioning && roomStage.target === shown && !reducedMotion) {
+        // Just arrived: settle in from a little further back as the fade lifts.
+        const k = 1 - roomStage.fade;
+        applyPose(pullBack(scenePose, 1.18), scenePose, k * k * (3 - 2 * k));
+      } else {
+        applyPose(scenePose, scenePose, 1);
+      }
       return;
     }
 

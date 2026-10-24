@@ -1,0 +1,54 @@
+{
+  "assets": [
+    {
+      "id": "archivist",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/archivist.glb",
+      "creator": "Unwrap original council collection",
+      "license": "Project-owned original asset; no third-party pack imported",
+      "local": "public/ai-council/archivist.glb",
+      "bytes": 1763096,
+      "sha256": "daf7b3c07666c3eb0c07cbb1d4a2cef2a653328d5a261ee32bdf4f735dc826ae",
+      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+    },
+    {
+      "id": "scout",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/scout.glb",
+      "creator": "Unwrap original council collection",
+      "license": "Project-owned original asset; no third-party pack imported",
+      "local": "public/ai-council/scout.glb",
+      "bytes": 1433280,
+      "sha256": "631b752aa9cab2e86baec83bb9db66bc66f009bc6b6dbe945dc6503290c9195e",
+      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+    },
+    {
+      "id": "muse",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/muse.glb",
+      "creator": "Unwrap original council collection",
+      "license": "Project-owned original asset; no third-party pack imported",
+      "local": "public/ai-council/muse.glb",
+      "bytes": 1498564,
+      "sha256": "a967998881576dd3ef0a49ff8ec31535715375b1ba9b1a968ed09eeae50c3399",
+      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+    },
+    {
+      "id": "keeper",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/keeper.glb",
+      "creator": "Unwrap original council collection",
+      "license": "Project-owned original asset; no third-party pack imported",
+      "local": "public/ai-council/keeper.glb",
+      "bytes": 1612360,
+      "sha256": "e1d9a72e3d767901bbb150399b56a1d8d06c934ea300c3af212db2bd688da44d",
+      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+    },
+    {
+      "id": "courier",
+      "source": "/Users/ally/Github/unwrap-3d-assets/ai-council/models/courier.glb",
+      "creator": "Unwrap original council collection",
+      "license": "Project-owned original asset; no third-party pack imported",
+      "local": "public/ai-council/courier.glb",
+      "bytes": 1258048,
+      "sha256": "079263c399ac1248ceccbea7b5be7cf352ffd3fa9a06d0fe167773b3b1da6ed9",
+      "modifications": "None. Runtime toon shading preserves authored vertex colors and emissive intensity."
+    }
+  ]
+}

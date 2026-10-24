@@ -41,6 +41,8 @@ export interface LandingRoomEntry {
   roomId: string;
   /** `mock` means nothing was persisted; the UI must say so. */
   source: "mock" | "convex";
+  /** Real rooms only: the invite token behind `/join/<token>`. Never invented for mock rooms. */
+  inviteToken?: string;
 }
 
 export interface LandingActions {

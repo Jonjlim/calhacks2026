@@ -11,6 +11,7 @@ import { flagCloth, paint } from "../painterly/materials";
 import { cloudTexture } from "../painterly/textures";
 import { polar, terrainHeight, type IslandPalette, type IslandShape } from "../terrain";
 import type { IslandPlacement } from "../worldLayout";
+import { useScenePalette } from "../scenePalette";
 
 /** Background palette: slightly cooler and paler than the Gift Garden, for atmospheric depth. */
 export const FAR_PALETTE: IslandPalette = {
@@ -160,12 +161,13 @@ export function CloudSkirt({ radius, depth, count = 5, seed, animate, opacity = 
     });
   }, [radius, depth, count, seed, y]);
   const refs = useRef<(THREE.Sprite | null)[]>([]);
+  const tint = useScenePalette().cloudTint;
   useFrame(({ clock }) => {
     if (!animate) return;
     const t = clock.elapsedTime;
     specs.forEach((s, i) => {
       const sp = refs.current[i];
-      if (sp) sp.position.x = s.p[0] + Math.sin(t * 0.07 + s.phase) * radius * 0.25;
+      if (sp) sp.position.x = s.p[0] + Math.sin(t * 0.2 + s.phase) * radius * 0.25;
     });
   });
   return (
@@ -179,7 +181,7 @@ export function CloudSkirt({ radius, depth, count = 5, seed, animate, opacity = 
           position={s.p}
           scale={[s.w, s.w * 0.5, 1]}
         >
-          <spriteMaterial map={cloudTexture(s.tex, s.warm)} transparent depthWrite={false} opacity={opacity} />
+          <spriteMaterial map={cloudTexture(s.tex, s.warm)} color={tint} transparent depthWrite={false} opacity={opacity} />
         </sprite>
       ))}
     </>

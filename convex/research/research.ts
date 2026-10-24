@@ -179,6 +179,7 @@ export const queuePoll = internalMutation({
     const job = await ctx.db.get(args.jobId);
     if (!job || job.status !== "running") return null;
     if (await staleUnlessCurrent(ctx, job)) return null;
+    await ctx.db.patch(job._id, { providerRunId: args.runId, providerStartedAt: args.startedAt });
     await ctx.scheduler.runAfter(3_000, internal.research.research.pollResearch, args);
     return null;
   },

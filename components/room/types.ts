@@ -41,6 +41,7 @@ export interface RoomData {
   invitePath?: string;
   activity?: ActivityView;
   latestResearch?: ResearchJobRow | null;
+  council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
 }
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
@@ -59,6 +60,7 @@ export interface RoomActions {
   withdrawClue: Run<[publishedClueId: string]>;
   addManualClue: Run<[kind: ClueKind, text: string]>;
   startResearch: Run<[publishedClueIds: string[]]>;
+  resumeCouncil: Run<[runId: string]>;
   castVote: Run<[listingId: string, value: VoteValue]>;
   clearVote: Run<[listingId: string]>;
   selectGift: Run<[listingId: string]>;
