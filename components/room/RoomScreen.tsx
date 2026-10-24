@@ -2,8 +2,9 @@
 
 import { useConvex, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useSession } from "@/components/providers/ConvexClientProvider";
@@ -18,12 +19,19 @@ import {
   recommendationsQuery,
   roomQuery,
 } from "@/lib/mocks/queries";
+import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
+import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
 import { RoomLayout } from "./RoomLayout";
 import type { RoomActions, RoomData } from "./types";
 
-export function RoomScreen({ roomId }: { roomId: string }) {
+export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surface?: RoomSurface }) {
   const convex = useConvex();
-  return convex ? <LiveRoomGate roomId={roomId} /> : <PreviewRoom roomId={roomId} />;
+  const router = useRouter();
+  // A phone opening the shared-stage URL is sent to its controller (and vice versa a laptop stays on the stage).
+  useEffect(() => {
+    if (surface === "stage" && guessSurface() === "phone") router.replace(phonePath(roomId));
+  }, [surface, roomId, router]);
+  return convex ? <LiveRoomGate roomId={roomId} surface={surface} /> : <PreviewRoom roomId={roomId} />;
 }
 
 /** No backend configured: render fixtures read-only and say so. */
@@ -49,7 +57,7 @@ const ROOM_ID_SHAPE = /^[a-z0-9]{20,40}$/;
 
 const NOT_A_ROOM: AppError = { code: "not_found", message: "That link doesn't point to a gift room." };
 
-function LiveRoomGate({ roomId }: { roomId: string }) {
+function LiveRoomGate({ roomId, surface }: { roomId: string; surface: RoomSurface }) {
   const session = useSession();
   if (!ROOM_ID_SHAPE.test(roomId)) return <RoomAccessError error={NOT_A_ROOM} />;
   if (session.status === "error") {
@@ -64,7 +72,7 @@ function LiveRoomGate({ roomId }: { roomId: string }) {
   if (session.status !== "ready") return <RoomMessage title="Opening the room…" />;
   return (
     <ErrorBoundary fallback={<RoomAccessError error={NOT_A_ROOM} />}>
-      <LiveRoom roomId={roomId as Id<"rooms">} />
+      <LiveRoom roomId={roomId as Id<"rooms">} surface={surface} />
     </ErrorBoundary>
   );
 }
@@ -73,7 +81,7 @@ function value<T>(res: Result<T> | undefined, fallback: T): T {
   return res && res.ok ? res.value : fallback;
 }
 
-function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
+function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurface }) {
   const args = { roomId };
   const roomRes = useQuery(api.rooms.getRoom, args);
   const messagesRes = useQuery(api.messages.listMessages, args);
@@ -170,7 +178,7 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
     council: councilRes?.ok ? councilRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
   };
-  return <RoomLayout data={data} actions={actions} />;
+  return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {

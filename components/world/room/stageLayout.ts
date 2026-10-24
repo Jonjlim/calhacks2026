@@ -41,8 +41,9 @@ export function towerPose(width: number): CameraPose {
   const mobile = width < 768;
   // The near wall is back-face culled, so the camera can sit just beyond it and frame the whole table.
   const target = INTERIOR_ORIGIN.clone().add(new THREE.Vector3(0, 0.75, -0.2));
-  const pos = INTERIOR_ORIGIN.clone().add(new THREE.Vector3(mobile ? 0 : 0.5, 3.6, mobile ? 8.4 : 6.6));
-  return { position: v(pos), target: v(target), fov: mobile ? 46 : 40, shiftX: mobile ? 0 : 0.2, shiftY: mobile ? -0.18 : 0.04 };
+  // Centred: the stage is full-bleed now, with only small floating controls around the edges.
+  const pos = INTERIOR_ORIGIN.clone().add(new THREE.Vector3(0, 3.6, mobile ? 8.4 : 6.6));
+  return { position: v(pos), target: v(target), fov: mobile ? 46 : 40, shiftX: 0, shiftY: mobile ? -0.18 : 0.04 };
 }
 
 /** Outside again: close on the island's present, where the friends decorate it. */
@@ -50,7 +51,7 @@ export function gardenPose(width: number): CameraPose {
   const mobile = width < 768;
   const gift = new THREE.Vector3(GIFT_SPOT.x, platformTop() + 1.0, GIFT_SPOT.z);
   const pos = gift.clone().add(new THREE.Vector3(2.6, 2.3, 6.4));
-  return { position: v(pos), target: v(gift.clone().add(new THREE.Vector3(0, -0.1, 0))), fov: mobile ? 46 : 36, shiftX: mobile ? 0 : 0.2, shiftY: mobile ? -0.12 : 0.02 };
+  return { position: v(pos), target: v(gift.clone().add(new THREE.Vector3(0, -0.1, 0))), fov: mobile ? 46 : 36, shiftX: 0, shiftY: mobile ? -0.12 : 0.02 };
 }
 
 /** Where friends gather around the present, and where they step out of the tower. */

@@ -8,6 +8,7 @@ import { api } from "@/convex/_generated/api";
 import { useSession } from "@/components/providers/ConvexClientProvider";
 import { ErrorText } from "@/components/ui/ErrorText";
 import { extractInviteToken } from "@/lib/invite";
+import { guessSurface, phonePath, stagePath } from "@/lib/room/surface";
 import { useResultAction } from "@/lib/useResultAction";
 import { LIMITS } from "@/lib/validation";
 
@@ -46,7 +47,8 @@ function LiveJoin({ token }: { token: string }) {
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const res = await join.run({ inviteToken: token, displayName });
-    if (res.ok) router.push(`/room/${res.value.room._id}`);
+    // Phones go straight to their controller; laptops to the shared stage.
+    if (res.ok) router.push(guessSurface() === "phone" ? phonePath(res.value.room._id) : stagePath(res.value.room._id));
   }
 
   if (!token) return <JoinProblem message="This invite link is missing its code." />;
@@ -74,7 +76,7 @@ function LiveJoin({ token }: { token: string }) {
         </p>
       </div>
       {room.alreadyMember ? (
-        <Link href={`/room/${room.roomId}`} className="btn-primary self-start">
+        <Link href={guessSurface() === "phone" ? phonePath(room.roomId) : stagePath(room.roomId)} className="btn-primary self-start">
           You&apos;re already in. Enter the room
         </Link>
       ) : (
