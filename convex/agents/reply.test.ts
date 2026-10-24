@@ -194,6 +194,46 @@ describe("chatty mode", () => {
   });
 });
 
+describe("citation recovery", () => {
+  const recSnapshot = () =>
+    snapshot({
+      mode: "auto",
+      trigger: "knowledge_changed",
+      recommendations: [
+        { listingId: "l2", publishedClueIds: ["c1"], explanation: "x" },
+      ],
+    });
+  const bad = {
+    intent: "recommend",
+    rationale: "x",
+    needsFollowup: false,
+    chatMessage: "Here",
+    citations: { listingIds: ["l1"], publishedClueIds: ["c1"] },
+  };
+  it("corrects the model once, then builds the answer from the ranked records", async () => {
+    const model = vi.fn().mockResolvedValue(bad);
+    const result = await decideBuyer(recSnapshot(), model);
+    expect(model).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({
+      intent: "recommend",
+      citations: { listingIds: ["l2"], publishedClueIds: ["c1"] },
+    });
+  });
+  it("accepts the corrected answer without the fallback", async () => {
+    const good = { ...bad, citations: { listingIds: ["l2"], publishedClueIds: ["c1"] } };
+    const model = vi.fn().mockResolvedValueOnce(bad).mockResolvedValueOnce(good);
+    expect(await decideBuyer(recSnapshot(), model)).toMatchObject({
+      citations: { listingIds: ["l2"] },
+    });
+  });
+  it("still fails when there is nothing grounded to fall back on", async () => {
+    const model = vi.fn().mockResolvedValue(bad);
+    await expect(
+      decideBuyer({ ...recSnapshot(), trigger: "human", recommendations: [] }, model),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+});
+
 describe("recommendation verification", () => {
   it("drops an over-budget candidate and stays silent when none pass", () => {
     const base = snapshot({
@@ -345,5 +385,46 @@ describe("keep-chatting room (end to end)", () => {
     expect(said[0]!.citations?.publishedClueIds).toEqual([ids.clueId]);
 
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("room model budget", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+  it("refuses new agent turns once the hourly ceiling is reached, and recovers as jobs age out", async () => {
+    vi.stubEnv("AGENT_MAX_JOBS_PER_ROOM_HOUR", "2");
+    const t = convexTest(schema, modules);
+    const roomId = await t.run(async (ctx) => {
+      const id = await ctx.db.insert("rooms", {
+        title: "R", recipientDisplayName: "Maya", occasion: "b", currency: "USD",
+        knowledgeRevision: 0, inviteToken: "t", createdBy: "alice", createdAt: 0,
+      });
+      await ctx.db.insert("participants", { roomId: id, userId: "alice", displayName: "A", role: "organizer", joinedAt: 0 });
+      return id;
+    });
+    const alice = t.withIdentity({ subject: "alice" });
+    const spend = (createdAt: number) =>
+      t.run((ctx) =>
+        ctx.db.insert("agentJobs", {
+          roomId, kind: "evaluate_thread", status: "succeeded", attempt: 1, inputHash: String(createdAt),
+          idempotencyKey: `k${createdAt}`, createdAt,
+          modelUsage: { calls: 1, reportedCalls: 1, inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, reasoningTokens: 0 },
+        }),
+      );
+    const now = Date.now();
+    await spend(now - 1000);
+    await spend(now - 2000);
+    expect(await alice.mutation(api.agents.buyer.requestTurn, { roomId, mode: "auto" })).toMatchObject({
+      ok: false,
+      error: { code: "refused" },
+    });
+    // Spend ages out of the rolling hour.
+    vi.setSystemTime(now + 61 * 60 * 1000);
+    const again = await alice.mutation(api.agents.buyer.requestTurn, { roomId, mode: "auto" });
+    expect(again.ok).toBe(true);
   });
 });

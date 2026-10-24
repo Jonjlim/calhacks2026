@@ -12,6 +12,7 @@ import { internal } from "../_generated/api";
 import type { Result } from "../../lib/contracts";
 import { getMembership } from "../lib/auth";
 import { err, ok } from "../lib/result";
+import { modelBudgetExceeded } from "./runtime";
 import { extractEvidence, fingerprint } from "./engine";
 import {
   configuredModel,
@@ -49,6 +50,11 @@ export const extractClues = mutation({
       );
     const room = await ctx.db.get(source.roomId);
     if (!room) return err("not_found", "Room not found.");
+    if (await modelBudgetExceeded(ctx, source.roomId))
+      return err(
+        "refused",
+        "This room has used its agent budget for the hour. Try again later.",
+      );
     const inputHash = fingerprint({
       kind: "extract",
       sourceId,

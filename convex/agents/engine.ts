@@ -369,7 +369,58 @@ export async function decideBuyer(
     decision = await call(
       "You were directly invited to act and nothing is running. listen and wait are not allowed now. Choose reply, search, recommend, clarify or query_recipient.",
     );
-  return validateDecision(decision, snapshot);
+  try {
+    return validateDecision(decision, snapshot);
+  } catch (error) {
+    if (!(error instanceof AgentFailure) || error.code !== "validation_failed")
+      throw error;
+    // Bad citations are the model's mistake, not the room's: correct it once, then let code build the answer.
+    try {
+      return validateDecision(
+        await call(
+          "Your previous answer cited evidence that is not in the snapshot. Cite only listing ids from `listings`, and for each listing only the publishedClueIds listed for it in `recommendations`. Do not cite anything in `excluded`.",
+        ),
+        snapshot,
+      );
+    } catch (retryError) {
+      if (
+        !(retryError instanceof AgentFailure) ||
+        retryError.code !== "validation_failed"
+      )
+        throw retryError;
+      const fallback = groundedFallback(snapshot);
+      if (fallback) return fallback;
+      throw retryError;
+    }
+  }
+}
+
+/** Deterministic answer from the ranked records alone, used when the model cannot produce valid citations. */
+function groundedFallback(snapshot: BuyerSnapshot): ModelDecision | null {
+  const rows = snapshot.recommendations
+    .filter(
+      (rec) =>
+        rec.publishedClueIds.length > 0 &&
+        snapshot.listings.some((l) => l.id === rec.listingId),
+    )
+    .slice(0, 3);
+  if (!rows.length || (!isInvited(snapshot) && snapshot.trigger === "human"))
+    return null;
+  const candidate: ModelDecision = {
+    intent: "recommend",
+    rationale: "Built from the ranked records after the model's citations failed validation.",
+    needsFollowup: false,
+    chatMessage: "Here is the current shortlist.",
+    citations: {
+      listingIds: rows.map((r) => r.listingId),
+      publishedClueIds: [...new Set(rows.flatMap((r) => r.publishedClueIds))],
+    },
+  };
+  try {
+    return validateDecision(candidate, snapshot);
+  } catch {
+    return null;
+  }
 }
 
 // Conservative defense-in-depth filters; not a complete sensitive-data classifier.

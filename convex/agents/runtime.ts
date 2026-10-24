@@ -200,6 +200,35 @@ export function buyerInputHash(snapshot: BuyerSnapshot): string {
   return `${first >>> 0}:${second >>> 0}`;
 }
 
+/** Per-room ceiling on model-backed agent jobs per rolling hour, so a chatty room or a loop cannot drain provider credit. */
+export const DEFAULT_MODEL_JOBS_PER_ROOM_HOUR = 60;
+
+export async function modelBudgetExceeded(
+  ctx: QueryCtx,
+  roomId: Id<"rooms">,
+): Promise<boolean> {
+  const configured = Number(process.env.AGENT_MAX_JOBS_PER_ROOM_HOUR);
+  const limit =
+    Number.isInteger(configured) && configured > 0
+      ? configured
+      : DEFAULT_MODEL_JOBS_PER_ROOM_HOUR;
+  const since = Date.now() - 60 * 60 * 1000;
+  const recent = await ctx.db
+    .query("agentJobs")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .order("desc")
+    .take(limit * 3 + 50);
+  // A job counts once it reached the model (usage recorded) or is still in flight.
+  const spent = recent.filter(
+    (job) =>
+      job.createdAt >= since &&
+      ((job.modelUsage?.calls ?? 0) > 0 ||
+        job.status === "pending" ||
+        job.status === "running"),
+  ).length;
+  return spent >= limit;
+}
+
 /** Dev 2 may call this after storing a human chat message in the same transaction. */
 export async function enqueueBuyerTurn(
   ctx: MutationCtx,
@@ -216,6 +245,11 @@ export async function enqueueBuyerTurn(
   const member = await ctx.db.get(participantId);
   if (!room || !member || member.roomId !== roomId)
     return err("unauthorized", "Room membership required.");
+  if (await modelBudgetExceeded(ctx, roomId))
+    return err(
+      "refused",
+      "This room has used its agent budget for the hour. Try again later.",
+    );
   // Insert then read the exact permitted snapshot. Duplicate drafts are deleted in the same transaction.
   const jobId = await ctx.db.insert("agentJobs", {
     roomId,
