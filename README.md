@@ -82,7 +82,7 @@ Solo mode is a one-participant room, not a second product.
 
 ## Current status
 
-Backend P0 and Dev 4 research integration are implemented: anonymous-auth configuration, room membership, private evidence/clues, proposals/approvals, and scheduled Apify research with normalized listings and reactive ranking. The product source passed two standalone live searches; the integrated Convex workflow is covered with mocked provider tests and still needs a live test on the team deployment. The room UI still renders in-memory mocks; LLM extraction/facilitation and payments remain unintegrated. This is not yet a working end-to-end app.
+Backend P0 and Dev 4 research integration are implemented: anonymous-auth configuration, room membership, private evidence/clues, proposals/approvals, and scheduled Apify research with normalized listings and reactive ranking. The product source passed two standalone live searches; the integrated Convex workflow is covered with mocked provider tests and still needs a live test on the team deployment. The room UI still renders in-memory mocks. Agent workflows are implemented with mocked-model tests; live model calls, shared-deployment validation, frontend subscriptions and payments remain outstanding. This is not yet a working end-to-end app.
 
 ## Development
 
