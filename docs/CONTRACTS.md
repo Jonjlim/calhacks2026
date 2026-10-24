@@ -8,6 +8,18 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Shared memory tree integration (Dev 3 / Dev 1, October 24)
+
+The room map offers a sky-tree exploration view and an arrangement view over the same published clues, suggestions, listings, selection and approvals. Scene positions and vibe attraction are presentation only; changing a vibe never publishes a preference. A separate human confirmation is required to publish it.
+
+- Existing membership-scoped `map.getMapState`, `moveNode`, `moveCursor`, `listCursors`, `growSeed`, and `plantSprout` retain their endpoints. Suggestions stay labelled agent/preset ideas until a human confirms they are true. Growth commits and planting recheck the active seed and room membership; stale seeds cannot grow/publish branches.
+- `map.setFeedback({roomId, listingId, kind: "owned" | "price"})` creates an attributed, idempotent reaction for that member and listing. Owned explicitly publishes a room-visible manual ownership clue tied to the observed listing title, bumps knowledge, and reranks cached candidates. Price records a personal reaction only; it does not assert recipient knowledge, change a budget/private cap, or trigger paid research. `map.undoFeedback({feedbackId})` is author-only and withdraws only its own backing ownership clue when applicable. Feedback is shared with attribution; personal price reactions dim only that viewer's candidate. Additive `mapFeedback` table; no migration of existing rows.
+- `getMapState` adds `feedback`, including the attributed reaction, its ID and the observed listing needed to keep a rejected island inspectable. Other members' private contribution limits, imports and recipient records never enter this projection.
+- `map.editMemory({clueId, expectedText, text})` permits only the publisher to edit an active manual memory, rejects stale text, and bumps knowledge. Imported clues keep their source/review workflow; other members can contribute a new memory instead of rewriting someone else's evidence.
+- Gift island actions call the existing `selectGift` (organizer) or `castVote` (contributor). Real proposal revisions and approval states are subscribed to; no simulated approval enters the live map. Existing proposal permissions and private-cap projection remain authoritative.
+
+Owners/consumers: Dev 3 owns map actions and lifecycle checks; Dev 1 owns the shared room surfaces; Dev 2 owns unchanged selection/proposal operations; Dev 4 supplies unchanged sourced listings. The 3D scene is lazy loaded, bounded to a focused subset, with a button/list fallback and the arrangement view retained. Private evidence remains in the existing room tools.
+
 ### Member 3 research continuation (2026-10-24)
 
 Owner: Dev 3; shared consumers: Dev 1 (message evidence/activity), Dev 2 (human messages/knowledge hooks), Dev 4 (catalog/research completion).

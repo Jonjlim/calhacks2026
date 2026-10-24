@@ -8,7 +8,8 @@
  */
 import { v } from "convex/values";
 import { z } from "zod";
-import { action, internalMutation, internalQuery } from "../_generated/server";
+import { action, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
+import type { Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { ClueKind, Result } from "../../lib/contracts";
@@ -111,6 +112,17 @@ export const suggestIdeas = action({
   handler: async (ctx, args): Promise<Result<IdeaBoard>> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return err("unauthorized", "Sign in first.");
+    return ideasFor(ctx, userId, args);
+  },
+});
+
+/** Shared by the memory game and the gift map: the next idea cards for one category and thread of picks. */
+export async function ideasFor(
+  ctx: ActionCtx,
+  userId: string,
+  args: { roomId: Id<"rooms">; kind: ClueKind; picked: Array<{ label: string; clue: string }> },
+): Promise<Result<IdeaBoard>> {
+  {
     const room = await ctx.runQuery(internal.agents.ideas.ideaContext, { roomId: args.roomId, userId });
     if (!room) return err("unauthorized", "Room membership required.");
     const picked = args.picked.slice(-3).map((p) => ({ label: p.label.slice(0, 40), clue: p.clue.slice(0, 160) }));
@@ -142,5 +154,5 @@ export const suggestIdeas = action({
     } catch {
       return ok(preset());
     }
-  },
-});
+  }
+}

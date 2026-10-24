@@ -328,6 +328,51 @@ export default defineSchema({
     .index("by_room", ["roomId"])
     .index("by_shared", ["sharedAt"]),
 
+  /** Attributed map reactions. Price is personal feedback; ownership has an explicitly published clue. */
+  mapFeedback: defineTable({
+    roomId: v.id("rooms"),
+    listingId: v.id("productListings"),
+    participantId: v.id("participants"),
+    kind: v.union(v.literal("owned"), v.literal("price")),
+    publishedClueId: v.optional(v.id("publishedClues")),
+    active: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_room", ["roomId"]).index("by_member_listing", ["roomId", "participantId", "listingId"]),
+
+  /** Live cursor per friend on the gift map. Overwritten in place; readers ignore rows older than a few seconds. */
+  mapCursors: defineTable({
+    roomId: v.id("rooms"),
+    participantId: v.id("participants"),
+    x: v.number(),
+    y: v.number(),
+    space: v.optional(v.union(v.literal("sky"), v.literal("diagram"))),
+    updatedAt: v.number(),
+  }).index("by_room_participant", ["roomId", "participantId"]),
+
+  /** Where a friend left a node on the shared map. Layout only; no meaning is read from it server-side. */
+  mapPositions: defineTable({
+    roomId: v.id("rooms"),
+    nodeKey: v.string(),
+    x: v.number(),
+    y: v.number(),
+    movedBy: v.id("participants"),
+    updatedAt: v.number(),
+  }).index("by_room_node", ["roomId", "nodeKey"]),
+
+  /** Idea branches an agent grew off a published memory. Suggestions only: planting one is a friend's tap that publishes a clue. */
+  mapSprouts: defineTable({
+    roomId: v.id("rooms"),
+    seedClueId: v.id("publishedClues"),
+    label: v.string(),
+    emoji: v.string(),
+    clue: v.string(),
+    source: v.union(v.literal("agent"), v.literal("preset")),
+    grownBy: v.id("participants"),
+    createdAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_seed", ["seedClueId"]),
+
   /** One row per agent idea suggestion, for the per-room rate limit. No content is stored. */
   ideaCalls: defineTable({
     roomId: v.id("rooms"),

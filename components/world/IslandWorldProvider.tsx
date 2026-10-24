@@ -64,8 +64,9 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The phone controller (/room/:id/phone) never loads the 3D world.
   const phone = pathname.startsWith("/room/") && pathname.split("/")[3] === "phone";
+  const map = pathname.startsWith("/room/") && pathname.split("/")[3] === "map";
   const roomId = pathname.startsWith("/room/") && !phone ? pathname.split("/")[2] : undefined;
-  const visible = pathname === "/" || !!roomId;
+  const visible = pathname === "/" || (!!roomId && !map);
   const reducedMotion = useReducedMotion() ?? false;
   const phase = useIntroPhase();
   const unwrap = useUnwrapPhase();

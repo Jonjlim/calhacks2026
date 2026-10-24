@@ -186,6 +186,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}
+          {!preview && <a className="btn-secondary h-11 px-4 text-[14px]" href={`/room/${room.id}/map`}>Gift map</a>}
           <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
             {stage === "tower" ? "Garden" : "Tower"}
           </button>

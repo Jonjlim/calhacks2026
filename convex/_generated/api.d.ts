@@ -40,6 +40,7 @@ import type * as lib_knowledge from "../lib/knowledge.js";
 import type * as lib_proposalEngine from "../lib/proposalEngine.js";
 import type * as lib_result from "../lib/result.js";
 import type * as lib_views from "../lib/views.js";
+import type * as map from "../map.js";
 import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as proposals from "../proposals.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   "lib/proposalEngine": typeof lib_proposalEngine;
   "lib/result": typeof lib_result;
   "lib/views": typeof lib_views;
+  map: typeof map;
   media: typeof media;
   messages: typeof messages;
   proposals: typeof proposals;
