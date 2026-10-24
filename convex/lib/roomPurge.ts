@@ -76,6 +76,12 @@ const evidenceSources: Purger = async (ctx, roomId, limit) => {
   return n;
 };
 
+const mediaUploadGrants: Purger = async (ctx, roomId, limit) =>
+  deleteAll(
+    ctx,
+    await ctx.db.query("mediaUploadGrants").withIndex("by_room_participant_issued", (q) => q.eq("roomId", roomId)).take(limit),
+  );
+
 const proposedClues: Purger = async (ctx, roomId, limit) =>
   deleteAll(
     ctx,
@@ -169,6 +175,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["agentJobs", agentJobs],
   ["councilRuns", councilRuns],
   ["evidenceSources", evidenceSources],
+  ["mediaUploadGrants", mediaUploadGrants],
   ["proposedClues", proposedClues],
   ["contributionLimits", contributionLimits],
   ["recipientProfiles", recipientProfiles],

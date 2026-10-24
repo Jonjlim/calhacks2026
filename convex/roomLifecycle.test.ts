@@ -359,6 +359,7 @@ const ROOM_TABLES = [
   "recipientProfiles",
   "councilRuns",
   "giftDecorations",
+  "mediaUploadGrants",
   "paymentAttempts",
   "researchJobs",
 ] as const satisfies readonly TableNames[];
@@ -377,6 +378,7 @@ async function seedEverything(ctx: MutationCtx, roomId: Id<"rooms">, participant
     createdAt: now,
   });
   await ctx.db.insert("evidenceMedia", { sourceId, participantId, mediaIndex: 0, storageId, contentType: "image/png" });
+  await ctx.db.insert("mediaUploadGrants", { roomId, participantId, issuedAt: now, storageId });
   const messageIds = [];
   for (let i = 0; i < privateRows; i++) {
     messageIds.push(await ctx.db.insert("privateMessages", { sourceId, participantId, body: `secret ${i}` }));
