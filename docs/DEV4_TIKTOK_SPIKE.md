@@ -33,7 +33,7 @@ The alternate Actor applies `DATE_POSTED` sorting to retrieved search hits rathe
 
 ## Implementation and limits
 
-`FashionSampleContext`, `TikTokFashionPost` and `FashionDiscovery` are additive local-only contracts. `lib/research/tiktok.ts` validates dates/URLs/counters, rejects private-account flags, deduplicates post IDs, strips unrelated metadata and separates ad flags from unknown status. Caption/hashtag patterns identify a bounded English denim vocabulary; no model or image recognition is involved.
+`FashionSampleContext`, `TikTokFashionPost` and `FashionDiscovery` are additive local-only contracts. `lib/research/tiktok.ts` validates dates/URLs/counters, rejects private-account flags, deduplicates post IDs, drops conflicting copies regardless of input order, strips unrelated metadata and separates ad flags from unknown status. Caption/hashtag patterns identify a bounded English denim vocabulary; no model or image recognition is involved.
 
 This lexical approach misses garments only visible in a video, combined hashtags outside its patterns, other languages and subtle descriptions. Caption mentions do not establish endorsement or accurately measure total popularity. A `vintage` word match is not proof the garment is genuinely old. Suggestions are source-backed shopping directions for review, not new recipient preferences or ownership facts. Existing production ranking and `trendSignal` are unchanged.
 
@@ -46,3 +46,5 @@ Fixtures `lib/research/fixtures/tiktok-fashion.json` and `tiktok-shopping.json` 
 3. **RC-017 photo integration:** existing confirmed-style matching/tests are present, but exercise actual AI-018 published outputs once Alan's photo pipeline is ready. Uncertain observations stay out of research; photos never establish ownership automatically in Dev 4 code.
 4. **Research acceptance with Dev 1:** verify actual images/placeholders, price freshness labels, unknown price/stock states, ownership filtering, invalid-listing selection clearing, and failed/stale job states in the wired room. Deployment is outside this local experiment.
 5. **Demo preparation:** warm the chosen queries, keep recorded fallbacks honestly labeled, and rehearse one recipient story. Our text-research core is implemented; these experiments are not yet live features. RC-009 remains a proposed no-pay demo decision awaiting team confirmation; RC-010–013 are optional paired payment work, not silently added scope.
+
+Duplicate evidence follow-up: conflicting valid copies (including a disagreement on advertising status) are omitted during normalization and again at the discovery boundary. Counter-only updates do not change caption evidence. Regression tests cover both duplicate orders; this remains a local experiment, not a deployed discovery feature.

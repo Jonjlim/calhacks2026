@@ -24,7 +24,7 @@ The discovery spikes are **not production features**. No TikTok or Google Trends
 
 ## Validation so far
 
-- Integrated suite including the new demo rehearsal: **282 passed, 3 live-only skipped**. The rehearsal passed individually as well.
+- Integrated suite including the new demo rehearsal: **286 passed, 3 live-only skipped**. The rehearsal passed individually as well.
 - App and Convex TypeScript checks pass after explicitly converting the public string listing ID back to its Convex ID type at mutation calls in the test.
 - Exact locked dependencies installed with `npm ci --ignore-scripts`; the install reported zero vulnerabilities.
 - Default Turbopack build: sandbox font-network failure, then a host process/port-binding panic on retry. This is not a passing default build.
@@ -58,3 +58,7 @@ Until Alex reviews: no deploy, no shared-branch push/merge, no production data c
 ## Overnight stop
 
 Independent scoped work is complete at this snapshot. Remaining live acceptance and agent/media integration need team coordination or deployment access, so the bounded heartbeat was stopped early rather than adding unused features. All work stays local for Alex’s review. No live providers were called during the final offline rehearsal/brief-limit follow-up.
+
+## Follow-up after Alex requested continued work
+
+Hardened local fashion discovery against conflicting duplicate posts: neither source ordering nor the discovery caller can erase an advertising flag by supplying a second copy. Conflicting evidence is omitted; engagement counter updates alone are tolerated. Added backend integration regressions proving a failed replacement search retains the last successful catalog without restarting the provider, and an obsolete scheduled poll is fenced before any network request. Full offline suite: 286 passed, 3 live-only skipped; app and Convex TypeScript checks passed. No paid calls, deployments or shared-branch changes.

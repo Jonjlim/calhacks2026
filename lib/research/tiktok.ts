@@ -26,7 +26,6 @@ const count = (value: unknown): number | undefined => typeof value === "number" 
 export function normalizeTikTokPosts(raw: unknown, input: FashionSampleContext): TikTokFashionPost[] {
   const context = contextSchema.safeParse(input);
   if (!context.success || !Array.isArray(raw)) return [];
-  const seen = new Set<string>();
   const posts: TikTokFashionPost[] = [];
   for (const value of raw) {
     const alternate = alternateSchema.safeParse(value);
@@ -48,7 +47,7 @@ export function normalizeTikTokPosts(raw: unknown, input: FashionSampleContext):
     if (sourceUrl.protocol !== "https:" || !["www.tiktok.com", "tiktok.com"].includes(sourceUrl.hostname)
       || sourceUrl.username || sourceUrl.password || sourceUrl.port) continue;
     const match = /^\/@([a-zA-Z0-9._]+)\/(?:video|photo)\/(\d+)\/?$/.exec(sourceUrl.pathname);
-    if (!match?.[1] || !match[2] || seen.has(match[2])) continue;
+    if (!match?.[1] || !match[2]) continue;
     const iso = typeof row.createTimeISO === "string" && /^\d{4}-\d{2}-\d{2}T/.test(row.createTimeISO) ? Date.parse(row.createTimeISO) : NaN;
     const seconds = typeof row.createTime === "number" && Number.isSafeInteger(row.createTime) ? row.createTime * 1000 : NaN;
     if (row.createTimeISO !== undefined && !Number.isFinite(iso)) continue;
@@ -68,7 +67,6 @@ export function normalizeTikTokPosts(raw: unknown, input: FashionSampleContext):
       || hashtags.some(tag => ["ad", "sponsored", "paidpartnership", "advertisement"].includes(tag));
     sourceUrl.search = "";
     sourceUrl.hash = "";
-    seen.add(match[2]);
     posts.push({ source: "tiktok", postId: match[2], sourceUrl: sourceUrl.href,
       creatorKey: match[1].toLowerCase(), caption, hashtags, publishedAt,
       retrievedAt: context.data.retrievedAt,
@@ -78,7 +76,23 @@ export function normalizeTikTokPosts(raw: unknown, input: FashionSampleContext):
       advertising: flagged ? "flagged" : row.isAd === false && row.isSponsored === false ? "not_flagged" : "unknown",
     });
   }
-  return posts;
+  return deduplicateEvidence(posts);
+}
+
+/** Conflicting copies are not independent or reliable evidence, in either order. */
+function deduplicateEvidence(posts: TikTokFashionPost[]): TikTokFashionPost[] {
+  const unique = new Map<string, TikTokFashionPost>();
+  const conflicts = new Set<string>();
+  const evidenceKey = (post: TikTokFashionPost) => JSON.stringify([
+    post.sourceUrl, post.creatorKey, post.caption, [...post.hashtags].sort(),
+    post.publishedAt, post.advertising,
+  ]);
+  for (const post of posts) {
+    const previous = unique.get(post.postId);
+    if (previous && evidenceKey(previous) !== evidenceKey(post)) conflicts.add(post.postId);
+    else if (!previous) unique.set(post.postId, post);
+  }
+  return [...unique.values()].filter(post => !conflicts.has(post.postId));
 }
 
 /** Bounded English denim vocabulary. Literal mentions, not visual garment recognition. */
@@ -101,7 +115,7 @@ const GARMENTS: Array<{ garment: string; pattern: RegExp }> = [
 export function discoverFashionIdeas(posts: TikTokFashionPost[], context: FashionSampleContext, limit = 3): FashionDiscovery[] {
   if (!contextSchema.safeParse(context).success) return [];
   const vintage = /\bvintage\b/i.test(context.seedTerm);
-  const unique = [...new Map(posts.map(post => [post.postId, post])).values()]
+  const unique = deduplicateEvidence(posts)
     .filter(post => post.advertising !== "flagged" && post.publishedAt >= context.windowStart && post.publishedAt <= context.windowEnd);
   const ideas: FashionDiscovery[] = [];
   for (const { garment, pattern } of GARMENTS) {

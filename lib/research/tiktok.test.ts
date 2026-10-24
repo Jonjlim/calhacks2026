@@ -44,7 +44,22 @@ describe("public TikTok normalization", () => {
       { ...value, webVideoUrl: "https://token@www.tiktok.com/@alice/video/101" },
       { ...value, webVideoUrl: "https://www.tiktok.com/@alice" },
     ], context)).toEqual([]);
-    expect(normalizeTikTokPosts([value, value, { ...value, webVideoUrl: "https://www.tiktok.com/@renamed/video/101" }], context)).toHaveLength(1);
+    expect(normalizeTikTokPosts([value, value], context)).toHaveLength(1);
+    expect(normalizeTikTokPosts([value, { ...value, webVideoUrl: "https://www.tiktok.com/@renamed/video/101" }], context)).toEqual([]);
+  });
+
+  it("drops conflicting duplicate evidence in either order while tolerating counter updates", () => {
+    const original = post("101", "alice");
+    for (const changed of [
+      { ...original, isAd: true },
+      { ...original, text: "Vintage outfit #ad" },
+      { ...original, webVideoUrl: "https://www.tiktok.com/@bob/video/101" },
+      { ...original, createTimeISO: new Date(end - 2 * 86400000).toISOString() },
+    ]) {
+      expect(normalizeTikTokPosts([original, changed], context)).toEqual([]);
+      expect(normalizeTikTokPosts([changed, original], context)).toEqual([]);
+    }
+    expect(normalizeTikTokPosts([original, { ...original, playCount: 2000 }], context)).toHaveLength(1);
   });
 
   it("does not coerce counters or convert unknown advertising status to organic", () => {
@@ -101,6 +116,13 @@ describe("caption-based fashion suggestions", () => {
       expect(posts[1]?.advertising).toBe("flagged");
       expect(discoverFashionIdeas(posts, context)).toEqual([]);
     }
+  });
+
+  it("does not let duplicate order erase advertising evidence at the discovery boundary", () => {
+    const posts = normalizeTikTokPosts([post("101", "alice"), post("102", "bob")], context);
+    const conflicting = { ...posts[1]!, advertising: "flagged" as const };
+    expect(discoverFashionIdeas([...posts, conflicting], context)).toEqual([]);
+    expect(discoverFashionIdeas([conflicting, ...posts], context)).toEqual([]);
   });
 
   it("does not interpret vague outfit captions or unrelated hashtags as clothing recognition", () => {

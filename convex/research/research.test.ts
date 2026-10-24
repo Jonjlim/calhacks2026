@@ -212,6 +212,45 @@ describe("research pipeline", () => {
     await t.mutation(research.expireJob, next);
     expect((await t.run(ctx => ctx.db.get(next.jobId)))?.status).toBe("uncertain");
   });
+  it("keeps the last successful catalog when a replacement search fails, without restarting it", async () => {
+    const { t, alex, input } = await setup();
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    const first = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, first);
+    await t.mutation(research.completeJob, { ...first, raw: fixture.pages, retrievedAt: fixture.retrievedAt });
+    const before = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    vi.setSystemTime(Date.now() + 1);
+    const replacementInput = { ...input, idempotencyKey: "replacement" };
+    const replacement = unwrap(await alex.mutation(api.research.research.startResearch, replacementInput));
+    await t.mutation(research.claimJob, replacement);
+    await t.mutation(research.completeJob, { ...replacement, raw: [], retrievedAt: fixture.retrievedAt });
+    const after = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    expect(after).toEqual(before);
+    const jobs = unwrap(await alex.query(api.jobs.listRoomJobs, { roomId: input.roomId }));
+    expect(jobs.researchJobs.find(job => job._id === replacement.jobId)?.status).toBe("failed");
+    expect(unwrap(await alex.mutation(api.research.research.startResearch, replacementInput))).toEqual(replacement);
+    await t.action(research.runResearch, replacement);
+    expect(await t.run(ctx => ctx.db.query("researchJobs").collect())).toHaveLength(2);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("fences an obsolete scheduled poll before it can contact the provider", async () => {
+    const { t, alex, input } = await setup();
+    const old = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, old);
+    vi.setSystemTime(Date.now() + 1);
+    await alex.mutation(api.research.research.startResearch, {
+      ...input, budgetMinor: 9000, idempotencyKey: "replacement",
+    });
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(research.pollResearch, { ...old, runId: "old-run", startedAt: Date.now() });
+    expect((await t.run(ctx => ctx.db.get(old.jobId)))?.status).toBe("stale");
+    expect(await t.run(ctx => ctx.db.query("productListings").collect())).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("runs the scheduled start and poll path without a second paid POST", async () => {
     const { t, alex, input } = await setup();
     vi.stubEnv("APIFY_TOKEN", "fake-token");
