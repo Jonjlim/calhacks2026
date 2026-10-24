@@ -66,6 +66,16 @@ export interface ChatMessage {
   body: string;
   createdAt: number;
   clientIdempotencyKey: string;
+  agentJobId?: string;
+  responseAgentJobId?: string;
+  replyToSlot?: string;
+  citations?: AgentCitations;
+}
+
+export interface AgentCitations {
+  listingIds: string[];
+  publishedClueIds: string[];
+  researchJobId?: string;
 }
 
 // ---------- Evidence and clues ----------
@@ -222,6 +232,7 @@ export interface AgentEvent {
   kind: "started" | "question" | "handoff" | "completed" | "failed" | "stale";
   summary: string;
   createdAt: number;
+  citations?: AgentCitations;
 }
 
 // ---------- Products ----------
@@ -404,14 +415,30 @@ export interface AgentJob {
   latestMessageId?: string;
   knowledgeRevision?: number;
   mode?: "quiet" | "auto";
+  trigger?: "human" | "research_completed" | "knowledge_changed";
+  researchJobId?: string;
   startedAt?: number;
   finishedAt?: number;
+  modelUsage?: AgentModelUsage;
+}
+
+export interface AgentModelUsage {
+  calls: number;
+  reportedCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  reasoningTokens: number;
 }
 
 export interface ResearchJob {
   id: string;
   roomId: string;
   knowledgeRevision: number;
+  actingParticipantId?: string;
+  originatingAgentJobId?: string;
+  latestMessageId?: string;
+  continuationAgentJobId?: string;
   brief: SearchBrief;
   status: JobStatus;
   inputHash: string;

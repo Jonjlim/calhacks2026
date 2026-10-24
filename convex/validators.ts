@@ -5,6 +5,11 @@
 import { v } from "convex/values";
 
 export const currency = v.literal("USD");
+export const agentCitations = v.object({
+  listingIds: v.array(v.id("productListings")), publishedClueIds: v.array(v.id("publishedClues")), researchJobId: v.optional(v.id("researchJobs")),
+});
+export const agentTrigger = v.union(v.literal("human"), v.literal("research_completed"), v.literal("knowledge_changed"));
+export const agentModelUsage = v.object({ calls: v.number(), reportedCalls: v.number(), inputTokens: v.number(), outputTokens: v.number(), cachedInputTokens: v.number(), reasoningTokens: v.number() });
 export const recipientCategory = v.union(v.literal("interest"), v.literal("dislike"), v.literal("ownership"), v.literal("size"), v.literal("constraint"));
 export const recipientQuestionType = v.union(v.literal("suitability"), v.literal("ownership"), v.literal("constraint"));
 

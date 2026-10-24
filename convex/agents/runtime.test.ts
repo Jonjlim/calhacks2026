@@ -110,19 +110,52 @@ describe("durable agent jobs", () => {
     vi.stubEnv("LLM_BASE_URL", "https://model.example/v1");
     vi.stubEnv("LLM_API_KEY", "test");
     vi.stubEnv("LLM_MODEL", "test");
-    const fetcher = vi.fn().mockImplementation(async () => Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(question) } }] }));
+    const fetcher = vi
+      .fn()
+      .mockImplementation(async () =>
+        Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { content: JSON.stringify(question) },
+            },
+          ],
+        }),
+      );
     vi.stubGlobal("fetch", fetcher);
-    const args = { roomId: ids.roomId, body: "@unwrap what should we get Maya?", clientIdempotencyKey: "merged-chat" };
+    const args = {
+      roomId: ids.roomId,
+      body: "@unwrap what should we get Maya?",
+      clientIdempotencyKey: "merged-chat",
+    };
     const first = value(await alice.mutation(api.messages.sendMessage, args));
-    expect(value(await alice.mutation(api.messages.sendMessage, args))._id).toBe(first._id);
+    expect(
+      value(await alice.mutation(api.messages.sendMessage, args))._id,
+    ).toBe(first._id);
     const jobs = await t.run((ctx) => ctx.db.query("agentJobs").collect());
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ actingParticipantId: ids.alice, latestMessageId: first._id, mode: "quiet", status: "pending" });
+    expect(jobs[0]).toMatchObject({
+      actingParticipantId: ids.alice,
+      latestMessageId: first._id,
+      mode: "quiet",
+      status: "pending",
+    });
     await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-    expect(await t.run((ctx) => ctx.db.get(jobs[0]!._id))).toMatchObject({ status: "succeeded" });
+    expect(await t.run((ctx) => ctx.db.get(jobs[0]!._id))).toMatchObject({
+      status: "succeeded",
+    });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const answer = value(await alice.mutation(api.agents.buyer.answerQuestion, { roomId: ids.roomId, slot: "direction", body: "A class together", clientIdempotencyKey: "merged-answer" }));
-    expect(await t.run((ctx) => ctx.db.get(ids.roomId))).toMatchObject({ latestMessageId: answer.messageId });
+    const answer = value(
+      await alice.mutation(api.agents.buyer.answerQuestion, {
+        roomId: ids.roomId,
+        slot: "direction",
+        body: "A class together",
+        clientIdempotencyKey: "merged-answer",
+      }),
+    );
+    expect(await t.run((ctx) => ctx.db.get(ids.roomId))).toMatchObject({
+      latestMessageId: answer.messageId,
+    });
   });
   it("requires membership, deduplicates turns, and allows one claim", async () => {
     const { t, ids, alice } = await setup();
@@ -321,18 +354,16 @@ describe("durable agent jobs", () => {
     vi.stubEnv("LLM_BASE_URL", "https://model.example/v1");
     vi.stubEnv("LLM_API_KEY", "test");
     vi.stubEnv("LLM_MODEL", "test");
-    const fetcher = vi
-      .fn()
-      .mockImplementation(async () =>
-        Response.json({
-          choices: [
-            {
-              finish_reason: "stop",
-              message: { content: JSON.stringify(question) },
-            },
-          ],
-        }),
-      );
+    const fetcher = vi.fn().mockImplementation(async () =>
+      Response.json({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: { content: JSON.stringify(question) },
+          },
+        ],
+      }),
+    );
     vi.stubGlobal("fetch", fetcher);
     const { jobId } = value(
       await alice.mutation(api.agents.buyer.requestTurn, {
@@ -517,6 +548,9 @@ describe("recipient agent integration", () => {
       status: "succeeded",
     });
     expect(calls).toHaveLength(2);
+    expect((await t.run((ctx) => ctx.db.get(jobId)))?.modelUsage).toMatchObject(
+      { calls: 2, reportedCalls: 0 },
+    );
     expect(JSON.stringify(calls[0])).not.toContain("Enjoys ceramics workshops");
     expect(JSON.stringify(calls[1])).not.toContain("@unwrap help");
     const activity = value(
