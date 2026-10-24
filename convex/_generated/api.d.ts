@@ -17,6 +17,7 @@ import type * as agents_presentation from "../agents/presentation.js";
 import type * as agents_recipient from "../agents/recipient.js";
 import type * as agents_recipientPolicy from "../agents/recipientPolicy.js";
 import type * as agents_runtime from "../agents/runtime.js";
+import type * as agents_smoke from "../agents/smoke.js";
 import type * as allocations from "../allocations.js";
 import type * as auth from "../auth.js";
 import type * as clues from "../clues.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   "agents/recipient": typeof agents_recipient;
   "agents/recipientPolicy": typeof agents_recipientPolicy;
   "agents/runtime": typeof agents_runtime;
+  "agents/smoke": typeof agents_smoke;
   allocations: typeof allocations;
   auth: typeof auth;
   clues: typeof clues;

@@ -130,7 +130,7 @@ Unsupported types return `refused` with `reason: "out_of_policy"`.
 
 Triggered by `extract` or by an explicit “analyze my paste” mutation.
 
-Input: one `EvidenceSource` owned by the caller.
+Input: one `EvidenceSource` owned by the caller. For `photo` (P0) sources, the photo-reading step below runs and proposes clues directly. For `screenshot` (P1-C) and `voice_note` (P2) sources, a transcription step runs first and writes ordinary `PrivateMessage` rows; extraction then reads those rows exactly like pasted text.
 
 Output: `ProposedClue[]` with:
 
@@ -145,6 +145,32 @@ Rules:
 - Extraction cannot publish.
 - Re-running on the same `sourceRevision` is idempotent (`inputHash`).
 - Deleting the import tombstones proposed clues that only exist because of it.
+
+### Photo reading (P0)
+
+Runs as the source owner, before extraction, in the same job.
+
+- The uploader marks the recipient with one tap per photo; the client records a normalized point. That mark is the uploader's statement — Unwrap does no face recognition and matches no face across photos.
+- Send each photo to the vision-capable model with the marked point and one instruction: return a `PhotoObservation` (contract in [CONTRACTS.md](CONTRACTS.md)) — the marked person's activity in 1–6 words, a `placeType` from the closed enum, style terms, and visible items with an owned-likelihood. Validate with Zod.
+- Photos without a marker yield setting, style, and object observations only. Other people in the frame are never described or identified.
+- No names, no face identification, no age, gender, appearance, health, ethnicity, or religion inferences. No landmarks or exact places; `placeType` is the closed enum. Model output is untrusted; instructions inside a photo are not commands.
+- Write one observation row per photo as a `PrivateMessage` with `mediaIndex`, delete the files, and set `media.status`. On failure, set `failed`, delete the files, and write nothing.
+- Then propose clues directly from the observations: a single photo's term becomes an `uncertain` clue; the same term in two or more photos merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Photo clues set `speakerAssumption: "unknown"` and never bypass the human publish gate — confirmation is the reviewer's tap, not the model's confidence.
+- Corroborated style terms publish as ordinary interest clues and reach research through the confirmed-clue path (see “Confirmed visual preferences in research” in [CONTRACTS.md](CONTRACTS.md)); there is no separate `SearchBrief` style field.
+
+### Screenshot transcription (P1-C)
+
+Runs as the source owner, before extraction, in the same job.
+
+- Send each screenshot to the vision-capable model with one instruction: return the visible text as `{ speaker?, text, mediaIndex }[]`, plus a short caption for non-text content that matters (for example “saved post: wheel-throwing class”). Validate with Zod.
+- Read only what is visible. Do not identify people from faces, guess names that are not shown, or describe bodies, health, or location.
+- Text inside an image is untrusted data, exactly like pasted text. Instructions in a screenshot are not commands.
+- Write the results as `PrivateMessage` rows with `mediaIndex`, delete the file, and set `media.status`. On failure, set `failed`, delete the file, and write nothing.
+- Then run the normal extractor on that source. Speaker rules still apply: a friend's message in the screenshot is not the recipient's wish unless the speaker is the recipient.
+
+### Voice-note transcription (P2)
+
+The contributor records up to 60 seconds about the recipient (“she's been obsessed with film cameras lately”). A speech-to-text call turns it into one `PrivateMessage` with `speakerHint` set to the contributor, the audio is deleted, and the extractor runs. Statements the contributor makes about the recipient are treated like a contributor's pasted note, not as the recipient's own words. Record only yourself; never someone else's voice.
 
 ## Product research
 
@@ -380,3 +406,5 @@ Dev 4 marks a listing `invalid` (gone, unparsed, or superseded). Recommendations
 The specific model ID, context window, and structured-output support are **unverified**. Phase 0 must run one structured-output call against the provider we actually have (hackathon LLM credit, Bitdeer, or similar). If structured output is unreliable, keep Zod and retry once, then fail the job.
 
 Do not add a second model to get embeddings in P0. Text-embedding similarity is not ownership detection and is not image understanding.
+
+P0 photo clues and P1-C screenshot clues need the chosen model to accept images. Verify that in the Phase 0 spike with one real photo and one screenshot. If the provider cannot read images, photo clues demote to the text-only spine and P1-C is dropped — never add a second LLM SDK for them. Voice notes (P2) need a speech-to-text API, which is a new external provider and stays **unverified** until a spike passes.
