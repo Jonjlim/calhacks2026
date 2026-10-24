@@ -126,11 +126,15 @@ function JoinForm({ actions, onBack, onEntered }: { actions: LandingActions; onB
 
   return (
     <FormCard title="Join a gift room" onBack={onBack} onSubmit={submit} error={error}>
-      <Field name="inviteToken" label="Invite code" placeholder="paste your code" autoFocus autoComplete="off" spellCheck={false} />
+      <Field name="inviteToken" label="Invite code" placeholder="paste your code" autoFocus autoComplete="off" spellCheck={false} maxLength={300} />
       <Field name="displayName" label="Your name" placeholder="Sam" autoComplete="given-name" />
-      <p className="text-[12.5px] leading-snug text-dusk/60">
-        Preview build — try <code className="rounded bg-dusk/[0.06] px-1 py-0.5 font-mono text-[11.5px] text-dusk/80">{MOCK_INVITE_TOKEN}</code>
-      </p>
+      {actions.source === "mock" ? (
+        <p className="text-[12.5px] leading-snug text-dusk/60">
+          Preview build — try <code className="rounded bg-dusk/[0.06] px-1 py-0.5 font-mono text-[11.5px] text-dusk/80">{MOCK_INVITE_TOKEN}</code>
+        </p>
+      ) : (
+        <p className="text-[12.5px] leading-snug text-dusk/60">Paste the code or the whole invite link.</p>
+      )}
       <SubmitButton pending={pending} idle="Join the room" busy="Finding it…" />
     </FormCard>
   );
@@ -146,7 +150,7 @@ function EnteredCard({ entry, via, onBack }: { entry: LandingRoomEntry; via: "cr
           Preview mode
         </span>
       )}
-      <h2 className="font-display text-[28px] leading-tight text-dusk">{via === "create" ? "Your room is ready to try." : "You found the room."}</h2>
+      <h2 className="font-display text-[28px] leading-tight text-dusk">{via === "create" ? (mock ? "Your room is ready to try." : "Your room is ready.") : "You found the room."}</h2>
       <p className="mt-2 text-[15px] leading-relaxed text-dusk/70">
         {mock
           ? "Rooms aren't saved yet — the backend isn't connected in this build. You can walk through the demo room instead."
