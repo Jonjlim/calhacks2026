@@ -11,6 +11,7 @@
 import type * as agents_buyer from "../agents/buyer.js";
 import type * as agents_engine from "../agents/engine.js";
 import type * as agents_extract from "../agents/extract.js";
+import type * as agents_ideas from "../agents/ideas.js";
 import type * as agents_mediaRuntime from "../agents/mediaRuntime.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_photo from "../agents/photo.js";
@@ -41,6 +42,7 @@ import type * as lib_proposalEngine from "../lib/proposalEngine.js";
 import type * as lib_result from "../lib/result.js";
 import type * as lib_roomPurge from "../lib/roomPurge.js";
 import type * as lib_views from "../lib/views.js";
+import type * as map from "../map.js";
 import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as payments_checkout from "../payments/checkout.js";
@@ -80,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "agents/buyer": typeof agents_buyer;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;
+  "agents/ideas": typeof agents_ideas;
   "agents/mediaRuntime": typeof agents_mediaRuntime;
   "agents/model": typeof agents_model;
   "agents/photo": typeof agents_photo;
@@ -110,6 +113,7 @@ declare const fullApi: ApiFromModules<{
   "lib/result": typeof lib_result;
   "lib/roomPurge": typeof lib_roomPurge;
   "lib/views": typeof lib_views;
+  map: typeof map;
   media: typeof media;
   messages: typeof messages;
   "payments/checkout": typeof payments_checkout;

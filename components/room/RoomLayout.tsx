@@ -19,6 +19,7 @@ import { avatarFor, portraitUrl } from "@/lib/room/avatars";
 import { PHASE_LABEL, roomPhase } from "@/lib/room/phase";
 import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
+import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
 import type { RoomActions, RoomData } from "./types";
 
@@ -78,6 +79,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   useEffect(() => {
     setCouncil({
       roomId: room.id,
+      viewerId: me.id,
       events: data.council?.events ?? [],
       decorations: data.council?.decorations ?? [],
       participants: participants.map((p) => ({ id: p.id, displayName: p.displayName, joinedAt: p.joinedAt })),
@@ -85,7 +87,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
     });
-  }, [room.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {
@@ -167,6 +169,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
 
+      {/* The memory game floats over the tower while the room is still gathering. */}
+      {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
+        <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
+      )}
+
       {/* Phase bar */}
       <div className="pointer-events-auto absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)]">
         <span className="flex gap-1" aria-hidden>
@@ -180,6 +187,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}
+          {!preview && <a className="btn-secondary h-11 px-4 text-[14px]" href={`/room/${room.id}/map`}>Gift map</a>}
           <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
             {stage === "tower" ? "Garden" : "Tower"}
           </button>
@@ -187,7 +195,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}
           {!preview && actions && (
-            <button className="btn-secondary h-11 w-11 text-[20px]" aria-label="Notes and room tools" title="Notes and room tools" onClick={() => setDrawer({ kind: "notes" })}>✎</button>
+            <button className="btn-secondary h-11 px-4 text-[14px]" aria-label="Backstage: notes, agents and sharing" title="Backstage: notes, agents and sharing" onClick={() => setDrawer({ kind: "notes" })}>Backstage</button>
           )}
         </div>
       </div>

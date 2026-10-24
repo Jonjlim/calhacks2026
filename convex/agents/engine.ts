@@ -361,7 +361,22 @@ export async function decideBuyer(
       },
       agentDecisionSchema,
     );
-  let decision = await call();
+  let decision: ModelDecision;
+  try {
+    decision = await call();
+  } catch (error) {
+    // Automatic follow-ups must not die because the model twice returned malformed JSON: answer from the ranked records.
+    if (
+      error instanceof AgentFailure &&
+      error.code === "validation_failed" &&
+      snapshot.trigger &&
+      snapshot.trigger !== "human"
+    ) {
+      const fallback = groundedFallback(snapshot);
+      if (fallback) return fallback;
+    }
+    throw error;
+  }
   // Directly invited but silent: one corrective retry, then accept whatever comes back.
   if (
     snapshot.trigger === "human" &&
