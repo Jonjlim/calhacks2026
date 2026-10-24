@@ -130,7 +130,7 @@ Unsupported types return `refused` with `reason: "out_of_policy"`.
 
 Triggered by `extract` or by an explicit “analyze my paste” mutation.
 
-Input: one `EvidenceSource` owned by the caller. For `screenshot` (P1-C) and `voice_note` (P2) sources, a transcription step runs first and writes ordinary `PrivateMessage` rows; extraction then reads those rows exactly like pasted text.
+Input: one `EvidenceSource` owned by the caller. For `photo` (P0) sources, the photo-reading step below runs and proposes clues directly. For `screenshot` (P1-C) and `voice_note` (P2) sources, a transcription step runs first and writes ordinary `PrivateMessage` rows; extraction then reads those rows exactly like pasted text.
 
 Output: `ProposedClue[]` with:
 
@@ -145,6 +145,18 @@ Rules:
 - Extraction cannot publish.
 - Re-running on the same `sourceRevision` is idempotent (`inputHash`).
 - Deleting the import tombstones proposed clues that only exist because of it.
+
+### Photo reading (P0)
+
+Runs as the source owner, before extraction, in the same job.
+
+- The uploader marks the recipient with one tap per photo; the client records a normalized point. That mark is the uploader's statement — Unwrap does no face recognition and matches no face across photos.
+- Send each photo to the vision-capable model with the marked point and one instruction: return a `PhotoObservation` (contract in [CONTRACTS.md](CONTRACTS.md)) — the marked person's activity in 1–6 words, a `placeType` from the closed enum, style terms, and visible items with an owned-likelihood. Validate with Zod.
+- Photos without a marker yield setting, style, and object observations only. Other people in the frame are never described or identified.
+- No names, no face identification, no age, gender, appearance, health, ethnicity, or religion inferences. No landmarks or exact places; `placeType` is the closed enum. Model output is untrusted; instructions inside a photo are not commands.
+- Write one observation row per photo as a `PrivateMessage` with `mediaIndex`, delete the files, and set `media.status`. On failure, set `failed`, delete the files, and write nothing.
+- Then propose clues directly from the observations: a single photo's term becomes an `uncertain` clue; the same term in two or more photos merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Photo clues set `speakerAssumption: "unknown"` and never bypass the human publish gate — confirmation is the reviewer's tap, not the model's confidence.
+- Corroborated style terms reach the research brief as `SearchBrief.styleTerms` soft modifiers once published.
 
 ### Screenshot transcription (P1-C)
 
@@ -172,6 +184,7 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
+  styleTerms?: string[]; // photo-derived style modifiers; never exclusions
   listingLimit: number; // P0 default 12
 }
 ```
@@ -395,4 +408,4 @@ The specific model ID, context window, and structured-output support are **unver
 
 Do not add a second model to get embeddings in P0. Text-embedding similarity is not ownership detection and is not image understanding.
 
-P1-C needs the chosen model to accept images. Verify that in the Phase 0 spike with one screenshot. If the provider cannot read images, P1-C is dropped rather than adding a second LLM SDK. Voice notes (P2) need a speech-to-text API, which is a new external provider and stays **unverified** until a spike passes.
+P0 photo clues and P1-C screenshot clues need the chosen model to accept images. Verify that in the Phase 0 spike with one real photo and one screenshot. If the provider cannot read images, photo clues demote to the text-only spine and P1-C is dropped — never add a second LLM SDK for them. Voice notes (P2) need a speech-to-text API, which is a new external provider and stays **unverified** until a spike passes.

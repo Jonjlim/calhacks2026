@@ -26,7 +26,7 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | D6 | Price and availability require a source URL and `retrievedAt`. | Judges and buyers must be able to check. | Model-invented products or stale remembered prices. |
 | D7 | Contracts first; every workstream mocks the others. | Four people, 36 hours. | Implementing against implicit types. |
 | D8 | A working demo beats feature count and sponsor count. | Hackathon scoring happens on what runs. | Building every track integration. |
-| D9 | Product cards show real source photos (P0). Screenshot clues (P1-C) and voice notes (P2) are converted to private text before extraction, and the uploaded file is deleted. | Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline is easier to secure than three. | Storing raw images or audio; a separate image-clue pipeline; AI-generated product images. |
+| D9 | Product cards show real source photos (P0). Photo clues (P0), screenshot clues (P1-C), and voice notes (P2) are read once by the vision model into private text or observation rows; the uploaded file is deleted. No face recognition — the uploader taps who the recipient is. | Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline with one human gate is easier to secure than three. | Storing raw images or audio; a separate image-clue pipeline; face recognition or identity inference; AI-generated product images. |
 
 ### Stack evaluation
 
@@ -41,8 +41,8 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
 | Vercel + Convex | Confirmed hosting. No extra worker host in P0. |
 | Bitdeer / Factory / Bright Data | Conditional sponsor options. Adopt only after a spike shows a real product role. |
-| Convex file storage | P1-C / P2 only. Holds screenshots and voice notes until they are read, then deletes them. |
-| Vision input on the chosen LLM | P1-C. **Unverified.** Must work on the same provider; no second LLM SDK. |
+| Convex file storage | P0 (photo clues), P1-C, P2. Holds photos, screenshots, and voice notes until they are read, then deletes them. |
+| Vision input on the chosen LLM | P0 (photo clues) and P1-C. **Unverified until the Phase 0 spike.** Must work on the same provider; no second LLM SDK. If it fails, photo clues demote to the text-only spine. |
 | Speech-to-text API | P2. **Unverified** new provider. Spike before any code depends on it. |
 
 ## Component diagram
@@ -66,7 +66,7 @@ flowchart TB
   end
 
   subgraph external [External providers]
-    LLM[Tool-capable LLM]
+    LLM[Tool- and vision-capable LLM]
     Shop[Apify or shopping API]
     Trends[Trend source - P2]
     Stripe[Stripe test mode - P1]
