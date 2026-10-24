@@ -10,7 +10,9 @@
  *                         contributionLimits
  *   server-only:          agentJobs, agentDecisions, askedSlots
  *
- * Recipient tables are server/owner-only and optional. Payments remain P1-B.
+ * Recipient tables are server/owner-only and optional.
+ * P1-B payment tables (paymentAttempts, providerEvents) are server-written;
+ * clients read only their own attempt plus group counts via payments/state.ts.
  *
  * authTables (users, authSessions, ...) belong to Convex Auth and are never
  * returned by room queries.
@@ -389,6 +391,35 @@ export default defineSchema({
   })
     .index("by_demo_memory", ["demoKey", "memoryId"])
     .index("by_room_memory", ["roomId", "memoryId"]),
+
+  /** P1-B. Server-written; clients only see their own attempt through payments/state.ts views. */
+  paymentAttempts: defineTable({
+    roomId: v.id("rooms"),
+    revisionId: v.id("proposalRevisions"),
+    participantId: v.id("participants"),
+    provider: V.paymentProvider,
+    providerObjectId: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    clientIdempotencyKey: v.string(),
+    amountMinor: v.number(),
+    currency: V.currency,
+    status: V.paymentAttemptStatus,
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_revision", ["revisionId"])
+    .index("by_revision_participant", ["revisionId", "participantId"])
+    .index("by_provider_object", ["providerObjectId"]),
+
+  /** P1-B webhook ledger. Server-only; providerEventId is unique. */
+  providerEvents: defineTable({
+    provider: V.paymentProvider,
+    providerEventId: v.string(),
+    type: v.string(),
+    providerObjectId: v.optional(v.string()),
+    receivedAt: v.number(),
+  }).index("by_provider_event", ["provider", "providerEventId"]),
 
   researchJobs: defineTable({
     providerRunId: v.optional(v.string()),

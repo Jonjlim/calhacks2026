@@ -1,9 +1,13 @@
 # convex/payments (P1-B only)
 
-Empty on purpose. Payments start only if the Phase 0 spike (RC-009) says `go` or `organizer-only` and checkpoint C3 passed. Current proposal: `no-pay` (see `docs/DEV4_PAYMENT_DECISION.md`).
+Off unless the deployment sets `PAYMENTS_SANDBOX_ENABLED=true`. P0 pledges never depend on this directory.
 
-- Dev 2 owns the revision/payment state machine and freeze-on-capture (BE-015).
-- Dev 4 owns the Stripe test-mode adapter (RC-010+).
+RC-009 currently records `no-pay` (see `docs/DEV4_PAYMENT_DECISION.md`), so no Stripe adapter is planned. The state machine stays dormant behind the flag and ready if that decision changes.
+
+- `stateMachine.ts` (Dev 2, BE-015): pure attempt transitions, group status derivation, unwind intents.
+- `sync.ts` (Dev 2): applies the state machine to stored attempts; also used when the proposal engine supersedes a revision.
+- `state.ts` (Dev 2): public status query and intent mutations (`beginAuthorization`, `beginCapture`, `cancelPayments`, `cancelMyAuthorization`), plus internal hooks for the adapter (`attachProviderObject`, `applyAttemptStatus`, `recordProviderEvent`).
+- Stripe test-mode adapter and webhook route (Dev 4, RC-010+): not built yet. It must record intent through `state.ts` before every provider call and report results only through `applyAttemptStatus`.
 - No LLM path may create, authorize, or capture a payment.
 
-See `docs/COMMERCE_AND_PAYMENTS.md`.
+See `docs/COMMERCE_AND_PAYMENTS.md` and the payment sections of `docs/CONTRACTS.md`.

@@ -505,7 +505,7 @@ interface Approval {
 
 ### Payment attempt (P1-B)
 
-**Owner:** Dev 2 (document), Dev 4 (adapter). **Consumers:** Dev 1 (truthful status).
+**Owner:** Dev 2 (document + state machine, `convex/payments/`), Dev 4 (adapter). **Consumers:** Dev 1 (truthful status).
 
 ```ts
 interface PaymentAttempt {
@@ -514,8 +514,10 @@ interface PaymentAttempt {
   revisionId: string;
   participantId: string;
   provider: "stripe_test";
-  providerObjectId?: string;
-  idempotencyKey: string;
+  providerObjectId?: string; // server-only
+  idempotencyKey: string; // server-derived, sent to Stripe; server-only
+  amountMinor: number; // frozen share from the revision
+  currency: "USD";
   status:
     | "not_started"
     | "authorization_pending"
@@ -529,10 +531,33 @@ interface PaymentAttempt {
     | "refunded"
     | "action_required"
     | "uncertain";
+  lastError?: string; // UI-safe adapter message, max 200 chars
   createdAt: number;
+  updatedAt: number;
+}
+
+/** Client view of the caller's own attempt; no provider IDs or idempotency keys. */
+type MyPaymentAttemptView = Pick<
+  PaymentAttempt,
+  "id" | "revisionId" | "status" | "amountMinor" | "currency" | "lastError" | "createdAt" | "updatedAt"
+>;
+
+interface PaymentStatusView {
+  enabled: boolean; // PAYMENTS_SANDBOX_ENABLED=true on the deployment
+  mode: "stripe_test";
+  revisionId: string | null;
+  groupStatus: ProposalRevision["status"] | null;
+  frozen: boolean; // capturing | test_funded | recovery_pending
+  payerCount: number;
+  authorizedCount: number;
+  capturedCount: number;
+  attentionCount: number; // failed, action_required, or uncertain
+  myAttempt: MyPaymentAttemptView | null;
+  merchantOrder: { status: "not_implemented" };
 }
 ```
 
+`amountMinor`, `currency`, `lastError`, and `updatedAt` are additive (BE-015). Group payment status is the current `ProposalRevision.status`. Peers see counts, never another participant's attempt or instrument. Storage also keeps `clientIdempotencyKey` and a server-only `ProviderEvent { provider, providerEventId (unique), type, providerObjectId?, receivedAt }` ledger.
 ### Agent / research job status
 
 **Owner:** Dev 2 (table), Dev 3 / Dev 4 (writers). **Consumers:** Dev 1.
@@ -884,12 +909,34 @@ Server-only hooks for other workstreams (internal functions or helpers, not clie
 
 ### Payment operations (P1-B)
 
-| Name | Owner | Input | Output | Access | Errors |
+Dev 2 state half (BE-015) lives in `convex/payments/state.ts`. Every public mutation returns `refused` unless `PAYMENTS_SANDBOX_ENABLED=true`, and requires a human member identity (scheduled agent actions have none). Dev 4's Stripe actions call these **before** each provider call, then report results through the internal mutations.
+
+| Name | Kind | Input | Output | Access | Errors |
 | --- | --- | --- | --- | --- | --- |
-| `createAuthorization` | Dev 4 + Dev 2 | `{ revisionId }` | hosted checkout payload | owning participant, revision current | `invalid_revision`, `unauthorized` |
-| `captureRevision` | Dev 4 + Dev 2 | `{ revisionId, idempotencyKey }` | group status | organizer or controller | `invalid_revision`, `infeasible` |
-| `cancelAuthorization` | Dev 4 | `{ attemptId }` | `PaymentAttempt` | server / owner | `not_found` |
-| `reconcileEvent` | Dev 4 | signed provider event | void | HTTP webhook | ignore duplicates |
+| `payments.state.getPaymentStatus` | query | `{ roomId }` | `PaymentStatusView` | Member | `unauthorized`, `not_found` |
+| `payments.state.beginAuthorization` | mutation | `{ revisionId, idempotencyKey }` | `{ attemptId, revisionId, amountMinor, currency, idempotencyKey, status, created }` | Payer on the current revision once every payer approved (`approved_pledged`), or while `authorizing` / `blocked` | `refused`, `invalid_revision`, `unauthorized`, `validation_failed` |
+| `payments.state.beginCapture` | mutation | `{ revisionId }` | `{ revisionId, attempts: { attemptId, providerObjectId, amountMinor, idempotencyKey }[] }` | Organizer; revision `ready_to_capture`. Sets `capturing` (freeze) and `capture_pending` first; repeat returns the same list | `refused`, `invalid_revision`, `unauthorized`, `infeasible` |
+| `payments.state.cancelPayments` | mutation | `{ revisionId }` | `{ canceledRevisionId, currentRevisionId }` | Organizer, pre-capture only. Mints a fresh revision for new approvals | `refused`, `invalid_revision`, `unauthorized` |
+| `payments.state.cancelMyAuthorization` | mutation | `{ attemptId }` | `MyPaymentAttemptView` | Attempt owner, pre-capture only | `refused`, `not_found`, `unauthorized`, `invalid_revision` |
+
+Server-only hooks for the Dev 4 adapter:
+
+| Name | Purpose |
+| --- | --- |
+| `internal.payments.state.attachProviderObject({ attemptId, providerObjectId })` | Bind a PaymentIntent/Session ID once; unique across attempts |
+| `internal.payments.state.applyAttemptStatus({ attemptId, status, lastError? })` | Record a provider-reported status; repeat is a no-op, illegal transitions are `validation_failed`; re-derives group status and unwind intents |
+| `internal.payments.state.recordProviderEvent({ providerEventId, type, providerObjectId? })` | Webhook dedupe; `{ duplicate: true }` means stop |
+| `internal.payments.state.getAttempt` / `findAttemptByProviderObject` / `listPendingProviderWork({ revisionId })` | Reads for the adapter and reconcile |
+
+Group transitions (pure, `convex/payments/stateMachine.ts`):
+
+- `approved_pledged → authorizing` on the first attempt; `→ ready_to_capture` when every payer's latest attempt is `authorized`; `→ blocked` on any `authorization_failed` (a retry with a new key returns to `authorizing`).
+- `capturing → test_funded` only when every payer is `captured`. `uncertain` stays `capturing` until reconcile. Any other outcome is `recovery_pending`.
+- `recovery_pending`: authorized attempts get `cancellation_pending`, captured ones `refund_pending`; when every attempt is terminal (`canceled` / `refunded` / `authorization_failed`) the revision becomes `canceled`, its approvals are invalidated, and a fresh revision is minted.
+- Pre-capture revisions (`authorizing`, `ready_to_capture`, `blocked`) remain editable: a material change supersedes them as usual and records `cancellation_pending` on live attempts. `capturing`, `test_funded`, and `recovery_pending` are frozen; selection, cap, and listing-invalidation edits return `invalid_revision`.
+- Late provider events on superseded or canceled revisions are recorded, then unwound (cancel or refund).
+
+The original `createAuthorization`, `captureRevision`, `cancelAuthorization`, and `reconcileEvent` names remain Dev 4's Stripe-facing actions and wrap the operations above.
 
 LLM-initiated payment operations are forbidden.
 
