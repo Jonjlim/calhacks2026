@@ -145,6 +145,7 @@ async function seed() {
   ).insertedIds;
   const published = unwrap(await alice.mutation(api.clues.publishClue, { proposedClueId: aliceClues[1]! }));
 
+  unwrap(await alice.mutation(api.media.generateEvidenceUploadUrl, { roomId }));
   const aliceStorageId = await t.run((ctx) =>
     ctx.storage.store(new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" })),
   );
