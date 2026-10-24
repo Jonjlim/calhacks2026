@@ -404,9 +404,13 @@ persisted. A 24-hour cache and current-knowledge fence apply at reads and shoppi
 `startResearch` accepts an optional discovery job reference; old callers are unchanged.
 UI cards and Alan's optional tool use remain consumer integration work.
 
-The Actor/input combination had one successful standalone spike; the new persisted
-pipeline is **unverified live** until deployed and accepted. Fixture tests do not
-establish current provider reliability or platform-wide trends. No new product
+The Actor/input combination had one successful standalone spike. The persisted
+pipeline also completed one personal-dev run on cool-bat-724: 20 returned posts,
+8 valid recent posts, zero corroborated garment directions. Provider start/poll,
+completion and the member query were verified live; no live discovery-to-shopping
+direction was established by that empty sample. Empty samples preserve the
+ordinary published-clue search. Fixture tests do not establish production provider
+reliability or platform-wide trends. No new product
 source, AI provider or database is added. The fixed Stripe adapter additionally
 supports canceling a zero-capture manual hold, per current official API docs;
 actual hosted-Checkout hold cancellation remains **unverified live**.

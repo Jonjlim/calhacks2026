@@ -55,10 +55,13 @@ export const startDiscovery = mutation({
     const open = await ctx.db.query("fashionJobs").withIndex("by_room_seed", q => q.eq("roomId", args.roomId).eq("seedTerm", seed.seedTerm))
       .order("desc").filter(q => q.or(q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain"))).first();
     if (open) {
-      if (open.status === "uncertain" || await isFashionJobCurrent(ctx, open)) return ok({ jobId: open._id });
-      // Superseded work with no unresolved outcome can be fenced before a new request.
-      if (open.providerRunId) return ok({ jobId: open._id });
-      await ctx.db.patch(open._id, { status: "stale", lastError: "Published interests changed before discovery started." });
+      if (await isFashionJobCurrent(ctx, open)) return ok({ jobId: open._id });
+      // A claimed/uncertain start without a run ID could already be billable.
+      // Keep it blocked for operator reconciliation even if room knowledge changed.
+      if (["running", "uncertain"].includes(open.status) && !open.providerRunId) return ok({ jobId: open._id });
+      // A known superseded run cannot be applied, but must not permanently block
+      // a human's explicit request for the new room revision.
+      await ctx.db.patch(open._id, { status: "stale", lastError: "Published interests changed; the earlier discovery cannot be applied." });
     }
     const cached = await ctx.db.query("fashionJobs").withIndex("by_room_seed", q => q.eq("roomId", args.roomId).eq("seedTerm", seed.seedTerm))
       .order("desc").filter(q => q.eq(q.field("status"), "succeeded")).first();
@@ -177,6 +180,7 @@ export const completeDiscovery = internalMutation({
       mode: "live_sample", label: "Sampled public TikTok mentions; not platform-wide popularity or verified organic content",
       actor: FASHION_ACTOR, build: FASHION_BUILD, providerRunId: job.providerRunId, context,
       supportingPublishedClueIds: job.supportingPublishedClueIds, directions,
+      evidenceSummary: { returnedRows: raw.length, validRecentPosts: posts.length, excludedAdvertisingPosts: posts.filter(p => p.advertising === "flagged").length },
     } });
   },
 });

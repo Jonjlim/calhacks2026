@@ -1235,6 +1235,9 @@ separate consumers; existing research requests remain compatible.
   user queries never reach the social provider. It persists pending before scheduling
   one bounded Actor start. Same-key retries reuse the job; same-seed open/uncertain
   jobs block duplicate paid starts. A current succeeded sample is reused for 24 hours.
+  A known superseded run is fenced stale before a human explicitly requests the
+  new revision; an unknown paid-start outcome without a run ID stays blocked for
+  operator review even after knowledge changes.
 - `research/fashion.resumeDiscovery({roomId, jobId})` polls an existing known run
   after uncertainty. It never creates a new Actor run. Unknown-start outcomes need
   operator reconciliation. Changed room knowledge makes a job stale.
@@ -1251,7 +1254,9 @@ separate consumers; existing research requests remain compatible.
   confirmed clues; future/stale samples cannot be offered for shopping.
 - Existing `research/research.startResearch` adds optional `fashionJobId`. If supplied,
   it must be a succeeded, fresh, same-room job for current knowledge. The first sourced
-  direction becomes the one shopping query. Budget, exclusions and ordinary job fences
+  direction becomes the one shopping query. If a valid sample has no corroborated
+  directions, keep the ordinary published-clue brief; an empty social result never
+  blocks gift search or invents a trend. Budget, exclusions and ordinary job fences
   remain server-owned. Discovery does not publish a recipient preference or establish
   product popularity, sizing, stock, garment age or purchase suitability.
 
@@ -1265,6 +1270,7 @@ interface FashionDiscoverySample {
   context: FashionSampleContext;
   supportingPublishedClueIds: string[];
   directions: FashionDiscovery[];
+  evidenceSummary?: { returnedRows: number; validRecentPosts: number; excludedAdvertisingPosts: number };
 }
 interface FashionDiscoveryJobView {
   id: string;
@@ -1278,6 +1284,12 @@ interface FashionDiscoveryView {
   sample: (FashionDiscoverySample & { jobId: string }) | null;
 }
 ```
+
+`evidenceSummary` counts actual returned rows, normalized/deduplicated posts inside
+the requested time window, and explicitly flagged advertisements among those
+posts. Unknown advertising is not organic. It supports an honest empty-result
+message; it is not a popularity score. Optional for compatibility with existing
+stored samples from the first personal-dev check.
 
 ### Canceling an uncaptured Stripe authorization (Dev 4, RC-013)
 

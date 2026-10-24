@@ -17,7 +17,8 @@ No room UI or Alan agent files were modified.
 4. To search products from that context, call the existing
    `api.research.research.startResearch` with its ordinary arguments plus
    `fashionJobId: sample.jobId`. Include the supporting published clue IDs. The
-   first sourced direction becomes the shopping query; usual budget/exclusions,
+   first sourced direction becomes the shopping query. An empty valid sample
+   keeps the ordinary published-clue query, with no trend claim; usual budget/exclusions,
    membership, normalization and stale-job rules still apply.
 5. If `latestJob.canResume`, call `resumeDiscovery({roomId, jobId})` to poll the
    existing run. This starts no new paid run. Unknown-start outcomes require
@@ -57,3 +58,20 @@ If interrupted, use `--resume <same directory>`; do not repeat `--start`. A lost
 mutation response reuses the same persisted idempotency key. A known uncertain
 provider run resumes GET polling. The script reports real results, including zero
 corroborated directions, without inventing a successful recommendation.
+
+## Verified personal-dev result
+
+Run `24af846a-937f-44b0-b0ce-29f6c589fb57`, provider run `1R5KZQSel0lZNY4uQ`,
+completed on cool-bat-724. Synthetic room `p17dnds1emtkymdhzjnkz84jdd8gwzct`,
+fashion job `pd791csvfjnv653hpp2hpm56558gxcbx`. One capped source start; no shopping,
+model or Stripe calls. Read-only inspection of the same completed dataset found
+20 rows, 8 normalized recent public posts and **zero corroborated style directions**.
+The source responded correctly; it did not establish a recurring garment in this
+bounded sample. Do not present it as a successful live trend recommendation.
+
+This finding led to the empty-sample fallback and optional evidence counts.
+Persisted start/poll/completion and member reads are verified live. The positive
+discovery-to-shopping handoff is verified offline against recorded source data;
+it was not established by this live sample. No repeated paid search was issued.
+UI cards and Alan's tool call remain consumer work. Payment worker/cancellation
+changes remain offline-tested helpers, not enabled payment controls.

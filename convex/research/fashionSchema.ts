@@ -11,6 +11,7 @@ export const fashionSample = v.object({
   mode: v.literal("live_sample"), label: v.string(), actor: v.string(), build: v.string(), providerRunId: v.string(),
   context: v.object({ seedTerm: v.string(), windowStart: v.number(), windowEnd: v.number(), retrievedAt: v.number() }),
   supportingPublishedClueIds: v.array(v.string()), directions: v.array(fashionDirection),
+  evidenceSummary: v.optional(v.object({ returnedRows: v.number(), validRecentPosts: v.number(), excludedAdvertisingPosts: v.number() })),
 });
 export const fashionTables = {
   fashionJobs: defineTable({

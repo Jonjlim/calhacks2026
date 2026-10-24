@@ -76,9 +76,9 @@ export const startResearch = mutation({
     if (args.fashionJobId) {
       const discovery = await usableFashionJob(ctx, room._id, args.fashionJobId);
       const direction = discovery?.sample?.directions[0];
-      if (!direction || !discovery?.supportingPublishedClueIds.every(id => clueIds.includes(id)))
+      if (!discovery || !discovery.supportingPublishedClueIds.every(id => clueIds.includes(id)))
         return err("stale_job", "Use a fresh discovery supported by the current search's published clues.");
-      brief.queryTerms = [direction.searchQuery];
+      if (direction) brief.queryTerms = [direction.searchQuery];
     }
     // Canonical collision-free input fingerprint. It contains no raw imports or private caps.
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null,

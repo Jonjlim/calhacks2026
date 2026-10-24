@@ -76,6 +76,7 @@ describe("persisted live fashion discovery", () => {
     expect(view.sample).toMatchObject({ mode: "live_sample", jobId: s.jobId, providerRunId: "fashion123", supportingPublishedClueIds: [s.clue._id] });
     expect(view.sample?.directions[0]).toMatchObject({ searchQuery: "vintage loose fit jeans", distinctCreators: 3 });
     expect(view.sample?.directions[0]?.postUrls).toHaveLength(3);
+    expect(view.sample?.evidenceSummary).toEqual({ returnedRows: recorded.data.length, validRecentPosts: 4, excludedAdvertisingPosts: 0 });
     const stored = JSON.stringify(await s.t.run(ctx => ctx.db.get(s.jobId)));
     expect(stored).not.toContain("caption");
     expect(stored).not.toContain("authorProfile");
@@ -154,6 +155,24 @@ describe("persisted live fashion discovery", () => {
     expect((await s.t.run(ctx => ctx.db.get(job.jobId)))?.status).toBe("succeeded");
     expect(fetcher.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
   });
+  it("allows an explicit new-revision search after a known stale run, but fences unknown paid outcomes", async () => {
+    for (const knownRun of [true, false]) {
+      const s = await setup();
+      const first = value(await s.alex.mutation(f.startDiscovery, s.args));
+      await s.t.mutation(worker.claimDiscovery, first);
+      if (knownRun) await s.t.mutation(worker.rememberRun, { ...first, runId: "fashion123" });
+      await s.t.mutation(worker.settleDiscovery, { ...first, status: "uncertain", message: "Synthetic interrupted response" });
+      await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "ownership", text: "Owns a denim jacket" });
+      const next = value(await s.alex.mutation(f.startDiscovery, { ...s.args, idempotencyKey: "changed-knowledge" }));
+      if (knownRun) {
+        expect(next.jobId).not.toBe(first.jobId);
+        expect((await s.t.run(ctx => ctx.db.get(first.jobId)))?.status).toBe("stale");
+      } else {
+        expect(next.jobId).toBe(first.jobId);
+        expect((await s.t.run(ctx => ctx.db.get(first.jobId)))?.status).toBe("uncertain");
+      }
+    }
+  });
   it("does not fabricate directions for empty results or contradictory evidence", async () => {
     const s = await setup();
     const job = value(await s.alex.mutation(f.startDiscovery, s.args));
@@ -162,9 +181,12 @@ describe("persisted live fashion discovery", () => {
     vi.setSystemTime(Date.now() + 100);
     await s.t.mutation(worker.completeDiscovery, { ...job, raw: [], retrievedAt: Date.now() });
     expect(value(await s.alex.query(f.getDiscovery, { roomId: s.roomId })).sample?.directions).toEqual([]);
-    expect(await s.alex.mutation(api.research.research.startResearch, {
+    const baseline = value(await s.alex.mutation(api.research.research.startResearch, {
       roomId: s.roomId, publishedClueIds: [s.clue._id], idempotencyKey: "no-direction", fashionJobId: job.jobId,
-    })).toMatchObject({ ok: false, error: { code: "stale_job" } });
+    }));
+    const ordinary = await s.t.run(ctx => ctx.db.get(baseline.jobId));
+    expect(ordinary?.brief?.queryTerms).toEqual(["vintage denim"]);
+    expect(ordinary?.brief?.budgetMinor).toBe(8000);
   });
 
   it("executes scheduled discovery and hands its sourced query to exactly one shopping start", async () => {

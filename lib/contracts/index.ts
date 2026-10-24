@@ -48,6 +48,7 @@ export interface FashionDiscoverySample {
   context: FashionSampleContext;
   supportingPublishedClueIds: string[];
   directions: FashionDiscovery[];
+  evidenceSummary?: { returnedRows: number; validRecentPosts: number; excludedAdvertisingPosts: number };
 }
 export interface FashionDiscoveryJobView {
   id: string;
