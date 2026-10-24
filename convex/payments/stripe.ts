@@ -138,6 +138,18 @@ export function createStripeTestAdapter(config: { secretKey: string; frontendOri
     captureIntent(id: string, key: string) {
       return intentId.safeParse(id).success ? intent(`payment_intents/${id}/capture`, "POST", key) : Promise.resolve(failed("Invalid PaymentIntent ID."));
     },
+    async retrieveRefund(id: string): Promise<StripeAdapterResult<StripeTestRefund>> {
+      if (!/^re_[A-Za-z0-9]+$/.test(id)) return failed("Invalid refund ID.");
+      const result = await request(`refunds/${id}`);
+      if (result.kind !== "ok") return result;
+      const parsed = refundSchema.safeParse(result.value);
+      if (!parsed.success || parsed.data.id !== id) return uncertain("Stripe returned an unsupported or mismatched refund.");
+      const r = parsed.data;
+      const parent = await intent(`payment_intents/${r.payment_intent}`);
+      if (parent.kind !== "ok") return parent;
+      if (r.amount > parent.value.amountReceivedMinor) return uncertain("Refund amount exceeds observed captured funds.");
+      return { kind: "ok", value: { id: r.id, paymentIntentId: r.payment_intent, amountMinor: r.amount, status: r.status } };
+    },
     async refundIntent(id: string, amountMinor: number, key: string): Promise<StripeAdapterResult<StripeTestRefund>> {
       if (!intentId.safeParse(id).success || !cents.min(1).safeParse(amountMinor).success) return failed("Refund requires a PaymentIntent and positive integer USD cents.");
       // Re-fetch first: refunds themselves do not carry livemode, so validate the intent's test mode and amount.

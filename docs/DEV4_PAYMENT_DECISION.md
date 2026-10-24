@@ -45,3 +45,11 @@ Dev 4 transport/signature work independently with mocks; do not call it a finish
 Checkout or multi-contributor feature. Real sandbox checks require a test key,
 webhook configuration and the Dev 2 durable state/freeze integration. No money or
 membership authority moves into the adapter.
+
+## Sandbox connectivity verified
+
+On cool-bat-724, one synthetic $1 manual-capture Checkout was created, retrieved
+and expired successfully. No card entry or authorization/capture/refund occurred.
+This verifies the hosted-session adapter connection, not the complete payment
+feature or webhook delivery. The durable state/event layer remains the next joint
+integration. See DEV4_PAYMENTS_HANDOFF.md for exact completed code and dependencies.

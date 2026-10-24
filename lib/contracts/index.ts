@@ -592,3 +592,25 @@ export interface StripeTestEvent {
 export type StripeAdapterResult<T> =
   | { kind: "ok"; value: T }
   | { kind: "failed" | "uncertain"; message: string };
+
+export interface StripePaymentExpectation {
+  binding: StripePaymentBinding;
+  amountMinor: number;
+  mode: "authorize" | "collect";
+  paymentIntentId?: string;
+}
+export interface StripePaymentObservation {
+  status: PaymentAttempt["status"];
+  paymentIntentId?: string;
+  checkoutSessionId?: string;
+  capturedMinor: number;
+  refundedMinor: number;
+  reason: string;
+}
+
+export interface StripePaymentReadInput {
+  expected: StripePaymentExpectation;
+  checkoutSessionId?: string;
+  paymentIntentId?: string;
+  refundIds?: string[];
+}

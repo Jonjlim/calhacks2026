@@ -123,6 +123,26 @@ describe("Stripe sandbox transport", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("retrieves a refund only with a matching test-mode parent and strips payer data", async () => {
+    const { adapter, fetcher } = setup();
+    fetcher.mockResolvedValueOnce(Response.json({ id: "re_123", object: "refund", payment_intent: "pi_123", amount: 1000, currency: "usd", status: "succeeded", customer: "private" }))
+      .mockResolvedValueOnce(Response.json({ ...intent, status: "succeeded", amount_received: 2500, amount_capturable: 0 }));
+    expect(await adapter.retrieveRefund("re_123")).toEqual({ kind: "ok", value: { id: "re_123", paymentIntentId: "pi_123", amountMinor: 1000, status: "succeeded" } });
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual(["https://api.stripe.com/v1/refunds/re_123", "https://api.stripe.com/v1/payment_intents/pi_123"]);
+  });
+
+  it("rejects a mismatched refund reference without querying its parent", async () => {
+    const { adapter, fetcher } = setup({ id: "re_other", object: "refund", payment_intent: "pi_123", amount: 1000, currency: "usd", status: "pending" });
+    expect((await adapter.retrieveRefund("re_123")).kind).toBe("uncertain");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects raw card details or other unexpected checkout inputs", async () => {
+    const { adapter, fetcher } = setup();
+    expect((await adapter.createCheckout({ ...input, cardNumber: "synthetic-unaccepted-field" } as typeof input)).kind).toBe("failed");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("rejects returned object IDs that differ from the requested object", async () => {
     const one = setup({ ...session, id: "cs_test_other" });
     expect((await one.adapter.retrieveCheckout(session.id)).kind).toBe("uncertain");

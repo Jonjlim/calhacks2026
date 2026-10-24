@@ -1137,3 +1137,57 @@ export type StripeAdapterResult<T> =
   | { kind: "ok"; value: T }
   | { kind: "failed" | "uncertain"; message: string };
 ```
+
+### Stripe reconciliation helpers (Dev 4 provider observations)
+
+`retrieveRefund(refundId)` fetches a refund and verifies its parent PaymentIntent is
+in test mode. `observeStripePayment({ expected, intent, refunds? })` returns an
+allowlisted provider observation, not a database transition. `expected` contains
+`binding: StripePaymentBinding`, the frozen `amountMinor`, expected `mode`, and
+an optional already-bound PaymentIntent id. A mismatch refuses the observation.
+
+The observation reports `status: PaymentAttempt["status"]`, `paymentIntentId`,
+`capturedMinor`, `refundedMinor` and a bounded reason. A full observed capture is
+`captured`; a partial capture is `action_required`. Known succeeded refunds are
+deduplicated by provider id and summed in cents. Only a sum exactly equal to the
+captured amount is `refunded`; partial or pending recovery is not full refund.
+A fresh intent awaiting a payment method is pending, not a fabricated failure.
+Caller retrieves provider state after a verified webhook and durably applies the
+observation under Dev 2's event-id/revision fences. This helper never captures,
+refunds, unfreezes a room or declares the merchant order complete.
+
+`readStripePayment(input: StripePaymentReadInput, reader)` fetches the current
+Checkout and/or PaymentIntent, compares frozen amount/bindings/known object IDs,
+then retrieves up to ten distinct tracked refunds and builds the observation.
+No write method is available on its reader port. An open session with no intent
+is pending; an expired session with no intent is canceled. A previously known
+intent is always retrieved even if its session has expired. Completed Checkout
+without a retrievable intent stays unresolved. A payment observation can omit
+`paymentIntentId` before the provider has created one and includes the observed
+`checkoutSessionId` when supplied. The input comes from the state layer, not a
+browser. Repeated/out-of-order webhook notifications lead to fresh reads, not
+blind replay of their embedded status.
+
+```ts
+interface StripePaymentExpectation {
+  binding: StripePaymentBinding;
+  amountMinor: number;
+  mode: "authorize" | "collect";
+  paymentIntentId?: string;
+}
+interface StripePaymentObservation {
+  status: PaymentAttempt["status"];
+  paymentIntentId?: string;
+  checkoutSessionId?: string;
+  capturedMinor: number;
+  refundedMinor: number;
+  reason: string;
+}
+interface StripePaymentReadInput {
+  expected: StripePaymentExpectation;
+  checkoutSessionId?: string;
+  paymentIntentId?: string;
+  refundIds?: string[];
+}
+```
+
