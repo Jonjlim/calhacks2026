@@ -11,6 +11,7 @@ import { ActivityFeed } from "@/components/agents/ActivityFeed";
 import { ChatModeToggle } from "@/components/agents/ChatModeToggle";
 import { RecipientDemo } from "@/components/agents/RecipientDemo";
 import { StatsPanel } from "@/components/agents/StatsPanel";
+import { ShareWorldPanel } from "@/components/worlds/ShareWorldPanel";
 import { MediaIntake } from "@/components/clues/MediaIntake";
 import type { Id } from "@/convex/_generated/dataModel";
 import { RoomHeader } from "./RoomHeader";
@@ -65,6 +66,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           <ProposedClueReview clues={data.myProposedClues} actions={actions} />
           <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
           {liveRoomId && <RecipientDemo roomId={liveRoomId} isOrganizer={isOrganizer} />}
+          {liveRoomId && isOrganizer && <ShareWorldPanel roomId={liveRoomId} />}
           <ProposalPanel
             proposal={data.proposal}
             participants={participants}
