@@ -535,3 +535,12 @@ export interface ProposalView {
   feasible: boolean;
   myLimit?: ContributionLimit;
 }
+
+/** Bounded source context for the buyer; never a published recipient preference. */
+export interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}

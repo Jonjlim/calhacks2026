@@ -1021,3 +1021,33 @@ The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, 
 | Output | `PublicWorld { id, isSample, mine, occasion, recipientAlias, budgetBand, friends, inputs: { kind, count }[], highlights: string[] (≤3, ≤80 chars), state: "exploring" \| "chosen", outcome?: { title, priceMinor?, priceStatus, source }, sharedAt }` plus `WorldAggregate` |
 | Privacy | Never exposes room id, user ids, invite token, real names, chats, contribution limits, or private imports. Highlights are organizer-picked active clue lines with names replaced; sensitive text is rejected. |
 | Errors | `unauthorized`, `validation_failed`, `refused` (sample seeding disabled) |
+
+### Recorded fashion context → buyer agent (Dev 4 / Dev 3 integration)
+
+Owner: Dev 4 constructs source context; Dev 3 consumes it in the existing buyer snapshot.
+`BuyerSnapshot.fashionDiscovery?: FashionAgentContext` is an additive internal field,
+not a database field or a recipient preference. No migration or public endpoint changes.
+
+```ts
+interface FashionAgentContext {
+  mode: "recorded_sample";
+  label: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+}
+```
+
+The first integration is an explicit offline replay under existing `DEMO_SEED_ENABLED=true`.
+Only active confirmed interest/wish clues that literally contain both vintage and denim
+activate the recorded vintage-denim sample. Uncertain wording, private evidence, unrelated
+interests and disabled demo mode produce no context. Source dates are preserved; a sample
+retrieved in the future or more than 24 hours ago is omitted. Only bounded derived directions,
+source URLs and sample context reach the model; raw captions and author metadata do not.
+
+The buyer may use a direction as the first SearchBrief query only as inspiration for the
+supporting published interest. It cannot cite it as a new recipient preference, product,
+price or platform-wide trend. Existing server budget, exclusions, revision checks and
+one-direction shopping worker still apply. The context participates in input-version fencing.
+No TikTok request, automatic paid discovery, new provider or deployment is enabled by this
+bridge. Live refresh/persistence and user-visible discovery provenance are still pending.

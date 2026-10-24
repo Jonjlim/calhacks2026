@@ -365,3 +365,13 @@ Local tests mock paid provider traffic. This checkout still needs the team's Con
 One Python uAgent in `fetch-agent/` (`uagents==0.25.5`, AgentChatProtocol 0.3.0) is the only Fetch.ai registration. It runs five roles — Archivist, Muse, Scout, Keeper, Courier — as real functions and replies in ASI:One without needing the website. It is a new external API (Agentverse / ASI:One), not a second app: Convex stays authoritative for state, and the Scout's product research reuses the existing Apify pipeline through a secret-gated Convex HTTP action rather than a new provider.
 
 Flow: ASI:One or `/council` page → coordinator → `POST /council/events` (Bearer `COUNCIL_INGEST_SECRET`) → Convex `councilEvents` / `giftDecorations` → `council.demoState` subscription → avatars animate locally. Products and raw memories never travel in events. The language model (ASI:One `asi1`) may only add clues; products, prices and links come only from research. Rejected: five separately registered agents (no new capability, five times the setup); runtime 3D generation for charms (slow, unbounded; a fixed library is rendered locally instead).
+
+### D15 — Recorded fashion evidence in the existing buyer snapshot (2026-10-24)
+
+The first Dev 4/Dev 3 discovery bridge reuses Alan's buyer snapshot and search decision,
+under the existing demo flag only. A confirmed vintage-denim interest can receive the
+recorded source-backed directions from the verified spike, with original dates and a
+24-hour expiry. It creates no service, paid call, schema migration or preference. The
+existing shopping worker still receives one chosen query and owns product facts. This
+validates the handoff without turning the standalone TikTok spike into an automatic paid
+pipeline. Live refresh and displayed social provenance remain pending.

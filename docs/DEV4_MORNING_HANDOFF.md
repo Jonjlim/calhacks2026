@@ -1,10 +1,10 @@
 # Dev 4 morning handoff
 
-Snapshot: October 24, 2026, about 04:30 America/Los_Angeles. This is a local integration snapshot, not a deployment sign-off. Later follow-up work should update this file rather than create competing handoffs.
+Snapshot: October 24, 2026, about 09:50 America/Los_Angeles. This is a local integration snapshot, not a deployment sign-off. Later follow-up work should update this file rather than create competing handoffs.
 
 ## Branches and integration
 
-The team now integrates through **dev**. At the remote check, `dev` and `main` both pointed to `62c1932`; `p0` still existed at `7d7f664`, despite being treated as historical by the team.
+The team now integrates through **dev**. At the latest remote check, `dev` points to `6df29dd` (Ally’s island/council/phone update), `main` remains at `62c1932`, and `alan` points to `4c02fa2`. Older Dev 4 core retrieval work is in dev; our newer experiments and fixes are local.
 
 Work remains on `dev4/alex`. Main's 3D world/avatar/intro update and the latest dev live-UI update have been integrated. Merge `9093ee7` preserves dev's new UI while restoring the previously tested agent/ranking/photo-plan changes that the “Sync main into dev, keeping dev tree” commit omitted. No shared branch has been changed by this work.
 
@@ -20,11 +20,11 @@ The earlier homepage-mock concern applied to main at `90bb0de`. It is outdated f
 - Search brief limits now obey the existing shared validator: 1–12, with safe defaults for non-finite inputs. Regression cases validate actual builder output against the shared Zod schema. The previous builder allowed 24 despite the validator allowing 12; current research requests use the default, so this hardens the optional pure-function input rather than fixing a demonstrated production outage.
 - `convex/research/demo-flow.test.ts`: a two-member offline backend rehearsal from published preferences through a recorded product, selection, approved pledges, cap-change invalidation and listing recovery. Membership and private-cap views are exercised. It injects recorded data at the completion boundary and makes no provider/model calls.
 
-The discovery spikes are **not production features**. No TikTok or Google Trends context is currently fed into Alan's LLM. The reviewed model catalog is part of the current ranker; it is separate from social popularity and does not set trend scores.
+The discovery spikes are **not live production discovery features**. A recorded TikTok direction can now reach Alan’s existing buyer snapshot under `DEMO_SEED_ENABLED=true`, only for a matching confirmed vintage-denim clue and within 24 hours of the original sample retrieval. It is explicitly labeled recorded. Google Trends context is not connected. The reviewed model catalog is part of the current ranker; it is separate from social popularity and does not set trend scores.
 
 ## Validation so far
 
-- Integrated suite including the new demo rehearsal: **286 passed, 3 live-only skipped**. The rehearsal passed individually as well.
+- Integrated suite including the new demo rehearsal: **359 passed, 3 live-only skipped**. The rehearsal passed individually as well.
 - App and Convex TypeScript checks pass after explicitly converting the public string listing ID back to its Convex ID type at mutation calls in the test.
 - Exact locked dependencies installed with `npm ci --ignore-scripts`; the install reported zero vulnerabilities.
 - Default Turbopack build: sandbox font-network failure, then a host process/port-binding panic on retry. This is not a passing default build.
@@ -43,9 +43,9 @@ The execution document has six numbered phases (0 through 5), plus the 2B photo 
 
 ## Remaining work and ownership
 
-1. **Dev 4 + Alan:** agree on the source-backed discovery-to-gift-direction handoff before integrating social context into the existing buyer agent. Keep published preferences separate from untrusted public posts. Avoid inventing a second agent system or parallel contract.
+1. **Dev 4 + Alan:** review the recorded discovery bridge now connected to the buyer snapshot. Live TikTok refresh, persisted discovery provenance and visible social-source explanations remain pending. Keep published preferences separate from public sample evidence.
 2. **Dev 4:** broader product relevance beyond the two reviewed models needs actual product/category evidence; search/seller association alone is insufficient. Keep ownership literal and respect explicit category exclusions.
-3. **Alan + Jonathon:** actual photo reading/upload lifecycle remains a dependency; photo contracts and research matching tests do not prove media support is implemented. Verify their latest work before taking over files.
+3. **Alan + Jonathon:** Alan’s photo/screenshot upload and read-once lifecycle are now integrated locally. The browser and real vision-provider acceptance still need to run; offline tests do not prove live media behavior.
 4. **Dev 1 + team:** walk the live landing → join → import → review/publish → research → select → caps → approve flow in two browsers. Check card image failures/placeholders, price freshness, stale/failed research, and approval invalidation. The newer UI has images/freshness/pledge controls wired; browser behavior still needs acceptance.
 5. **Team:** confirm the proposed no-pay demo decision. Stripe and recipient-agent features are optional; do not imply that approved pledges charge anyone.
 
@@ -62,3 +62,11 @@ Independent scoped work is complete at this snapshot. Remaining live acceptance 
 ## Follow-up after Alex requested continued work
 
 Hardened local fashion discovery against conflicting duplicate posts: neither source ordering nor the discovery caller can erase an advertising flag by supplying a second copy. Conflicting evidence is omitted; engagement counter updates alone are tolerated. Added backend integration regressions proving a failed replacement search retains the last successful catalog without restarting the provider, and an obsolete scheduled poll is fenced before any network request. Full offline suite: 286 passed, 3 live-only skipped; app and Convex TypeScript checks passed. No paid calls, deployments or shared-branch changes.
+
+## Awake-session integration
+
+- `bbb2439`: merged latest dev (`6df29dd`) locally, retaining our research changes.
+- `c6d4062`: merged Alan’s ready branch (`4c02fa2`). Preserved Ally’s island/phone layout and placed media intake, chat mode/activity/stats, recipient demo and optional world sharing within its existing tabs. Retained our reviewed catalog matching; used Alan’s newer conversational agent and smoke/live scripts. No shared branch push.
+- `6afeb59`: fixed /worlds build failure without Convex configuration by rendering an explicit offline fallback before any provider-dependent hooks.
+- The recorded fashion bridge adds only an optional internal snapshot field and pure source-context builder. It does not add a database, paid call, service or environment change. Integration test runs Alan’s buyer with mocked model output, checks source context reaches it, then verifies the chosen query reaches the existing shopping worker while server budget/exclusions override model values. No new preference is published.
+- Current validation: 359 passed, 3 live-only skipped; app and Convex TypeScript passed; webpack production build passed with the integrated /worlds and /council routes. Live browser/deployment acceptance is still pending.

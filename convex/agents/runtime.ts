@@ -18,6 +18,7 @@ import {
 } from "./engine";
 import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
 import { readCatalog } from "../research/catalog";
+import { recordedFashionContext } from "../../lib/research/fashionContext";
 import {
   renderRecommendation,
   renderReply,
@@ -79,7 +80,12 @@ export async function readBuyerSnapshot(
     .first();
   const lastAgentMessage = messages.find((m) => m.authorKind === "buyer_agent");
   const chronological = messages.reverse();
+  const fashionDiscovery = recordedFashionContext({
+    enabled: process.env.DEMO_SEED_ENABLED === "true",
+    clues: catalog.clues, now: Date.now(),
+  });
   return {
+    ...(fashionDiscovery ? { fashionDiscovery } : {}),
     roomId: room._id,
     jobId: job._id,
     recipientDisplayName: room.recipientDisplayName,
@@ -184,6 +190,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
     researchRunning: snapshot.researchRunning,
     recipientEnabled: snapshot.recipientAgentEnabled,
     research: snapshot.research,
+    fashionDiscovery: snapshot.fashionDiscovery,
     excluded: snapshot.excluded,
   });
 }
