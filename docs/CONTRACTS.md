@@ -819,7 +819,41 @@ Server-only hooks for other workstreams (internal functions or helpers, not clie
 
 LLM-initiated payment operations are forbidden.
 
+### AI Council (Fetch.ai coordinator) — additive
+
+Owner: Dev 1 (council UI) with Dev 3 (agents). Consumers: the `fetch-agent/` coordinator, `/council` page. Additive tables; no existing table changes. Code: `lib/council/contracts.ts`, `lib/council/library.json`, `convex/council.ts`.
+
+One registered Fetch.ai agent (Chat Protocol, ASI:One) runs five specialist roles as real functions and emits an event at each execution boundary:
+
+| Actor | Task | Does |
+| --- | --- | --- |
+| `archivist` | `analyze_memories` | Extracts clues (interests, wishes, owned items, dislikes, budget) from the request/memories |
+| `muse` | `design_decoration` | Maps clues to a `DecorationSpec` from the approved library only |
+| `scout` | `research_gifts` | Real product research via the existing Apify pipeline (`/council/research`), cached |
+| `keeper` | `check_constraints` | Budget, ownership and dislike rules; hard exclusions vs. soft notes |
+| `courier` | `deliver_recommendations` | Coordinates and prepares the final answer |
+
+`CouncilEvent` — `{ eventId, runId, actor, task, status: started|completed|failed, sequence, timestamp, result? }`. `result` is display-only and small: `{ summary?, count?, decorations?, cached?, error? }`. Products, URLs and raw memories never travel in events. `roomId` is never invented: ASI:One runs have none; web demo runs carry a browser `demoKey`.
+
+`DecorationSpec` — `{ memoryId, jar: wish|interest|moment, assetId, color, placement, label }`, every enum from `lib/council/library.json`.
+
+Tables: `councilRuns` (`runId`, `source`, `demoKey?`, `status`, `lastSequence`, timestamps), `councilEvents` (unique `eventId`), `giftDecorations` (unique per `demoKey` + `memoryId`).
+
+HTTP (server-to-server, `Authorization: Bearer $COUNCIL_INGEST_SECRET`): `POST /council/runs`, `POST /council/events`, `POST /council/research`. Queries: `council.demoState({ demoKey })` — latest run, its events, and persisted decorations.
+
+Semantics: events are idempotent by `eventId`; state per actor is the highest `sequence` seen, so duplicates and out-of-order delivery cannot rewind a finished task; a decoration is upserted per memory, so reconnects never duplicate charms; a run with no event for 120 s reads as `interrupted`.
+
 ---
+
+### Room council integration (Dev 1 + Dev 3 + Dev 4)
+
+The authenticated room uses `councilRoom.start({roomId, publishedClueIds, idempotencyKey})`, returning `Result<{runId, jobId}>`. Membership, active room clues, room knowledge revision and the stated room budget are checked in Convex. The coordinator receives only published clues and public room context. No private imports, unpublished extractions or contribution limits cross this boundary.
+
+Additive optional `councilRuns` fields: `roomId`, `researchJobId`, `knowledgeRevision`, `idempotencyKey`, `approved` (listing ID + Keeper notes), `excluded` (title + reason), `cached`, `deliveredAt`, `error`. Status additionally supports `partial` and `uncertain`. Indexes: room/start time, research job, room/request key. Existing demo/ASI records remain valid and never acquire room access. `giftDecorations.demoKey` becomes optional; room decorations use `roomId` and an indexed room/memory pair. Only current active published-clue IDs may produce room charms.
+
+`councilRoom.state({roomId})` is membership checked and returns the latest run, validated display events and active-clue charms. `POST /council/room-research` accepts only a registered room run ID from the trusted coordinator; it starts/polls the existing persisted research job. Provider input is the server-built SearchBrief, never agent-generated search commands. A retry attaches to the same job. `POST /council/results` accepts `{runId, kept: [{sourceUrl, notes}], excluded: [{title, reason}], cached, error?}`. It validates every source against that run's observed productListings and stores only references/notes, not model-generated listings. Results are idempotent per run; stale room knowledge is rejected. Public catalog queries apply the Keeper-approved subset and retain existing clue-based scoring, voting, selection and proposal checks. Product payloads do not travel in progress events.
+
+A room run is complete only after result persistence. Empty/failed research is failed or partial (if a charm exists); dispatch or provider timeouts remain uncertain and block duplicate charged work. An explicit resume uses the same run/job. Research-job providerRunId/startedAt are persisted optional fields for reconciliation; an unknown start outcome is never blindly restarted. ASI:One stays independent of private web rooms.
 
 ## Mock guidance
 

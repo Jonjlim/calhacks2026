@@ -1,0 +1,25 @@
+# Render blueprint for the Fetch.ai coordinator only (the Next.js site stays on Vercel).
+# One always-on web service: uAgents keeps the Agentverse mailbox connection and
+# finishes council runs after acknowledging them, which a serverless function would cut off.
+services:
+  - type: web
+    name: unwrap-gift-council
+    runtime: docker
+    dockerfilePath: ./fetch-agent/Dockerfile
+    dockerContext: .
+    plan: starter            # always-on; free instances sleep and drop the mailbox
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: AGENT_SEED        # reuse the same seed to keep the registered agent1q… address
+        sync: false
+      - key: ASI1_API_KEY
+        sync: false
+      - key: CONVEX_SITE_URL   # https://<cloud-deployment>.convex.site
+        sync: false
+      - key: COUNCIL_INGEST_SECRET
+        sync: false
+      - key: COUNCIL_AGENT_SECRET
+        sync: false
+      - key: COUNCIL_USE_LLM
+        value: "1"

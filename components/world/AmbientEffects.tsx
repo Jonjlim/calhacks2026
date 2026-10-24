@@ -1,7 +1,7 @@
 "use client";
 
 import { useFrame, useThree } from "@react-three/fiber";
-import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { mulberry32 } from "./painterly/noise";
 import { foregroundLeavesTexture, sparkleTexture } from "./painterly/textures";
@@ -292,4 +292,229 @@ export function Birds({ animate }: { animate: boolean }) {
       ))}
     </>
   );
+}
+
+const fireflyVertex = /* glsl */ `
+  attribute vec4 aSeed;
+  uniform float uTime;
+  uniform float uPixelRatio;
+  uniform float uSize;
+  varying float vGlow;
+  varying float vHue;
+  void main() {
+    float t = uTime;
+    // Lazy looping paths: each firefly circles its home spot on its own rhythm.
+    vec3 p = position;
+    p.x += sin(t * (0.21 + aSeed.x * 0.18) + aSeed.y * 6.28) * (0.5 + aSeed.z * 0.7);
+    p.z += cos(t * (0.17 + aSeed.y * 0.16) + aSeed.x * 6.28) * (0.5 + aSeed.z * 0.6);
+    p.y += sin(t * (0.37 + aSeed.z * 0.3) + aSeed.w * 6.28) * 0.28;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    // Slow blink: mostly a soft ember, with an occasional bright pulse.
+    float pulse = pow(max(0.0, sin(t * (0.6 + aSeed.w * 0.9) + aSeed.x * 40.0)), 4.0);
+    vGlow = 0.22 + 0.78 * pulse;
+    vHue = aSeed.y;
+    gl_PointSize = uSize * uPixelRatio * (0.75 + 0.5 * pulse) * (240.0 / -mv.z);
+  }
+`;
+
+const fireflyFragment = /* glsl */ `
+  varying float vGlow;
+  varying float vHue;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float halo = smoothstep(0.5, 0.0, d);
+    float core = smoothstep(0.14, 0.0, d);
+    vec3 warm = mix(vec3(1.0, 0.86, 0.45), vec3(0.82, 1.0, 0.5), vHue);
+    float a = (halo * halo * 0.55 + core) * vGlow;
+    if (a < 0.01) discard;
+    gl_FragColor = vec4(warm * (0.8 + core * 0.6), a);
+  }
+`;
+
+/** Where fireflies gather: the main island's meadow, plus a few around the waterfall gardens. */
+const FIREFLY_ZONES = [
+  { centre: [0, 1.4, 0], spread: [13, 2.4, 10], share: 0.8 },
+  { centre: [-21.3, -11.5, -17.3], spread: [7, 2.2, 6], share: 0.2 },
+] as const;
+
+/**
+ * Night-time fireflies. Motion lives entirely in the vertex shader (one draw
+ * call, no per-frame CPU work); additive glow so they read as light sources.
+ * With reduced motion they stay put as soft, still embers.
+ */
+export function Fireflies({ animate, count = 70 }: { animate: boolean; count?: number }) {
+  const dpr = useThree((s) => s.viewport.dpr);
+  const geo = useMemo(() => {
+    const rng = mulberry32(77);
+    const position = new Float32Array(count * 3);
+    const seed = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      const zone = rng() < FIREFLY_ZONES[0].share ? FIREFLY_ZONES[0] : FIREFLY_ZONES[1];
+      position.set(
+        [
+          zone.centre[0] + (rng() - 0.5) * zone.spread[0],
+          zone.centre[1] + (rng() - 0.5) * zone.spread[1],
+          zone.centre[2] + (rng() - 0.5) * zone.spread[2],
+        ],
+        i * 3,
+      );
+      seed.set([rng(), rng(), rng(), rng()], i * 4);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(position, 3));
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 4));
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 100);
+    return g;
+  }, [count]);
+  const mat = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 3.7 }, uPixelRatio: { value: dpr }, uSize: { value: 2.2 } },
+        vertexShader: fireflyVertex,
+        fragmentShader: fireflyFragment,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    [dpr],
+  );
+  useEffect(() => () => {
+    geo.dispose();
+    mat.dispose();
+  }, [geo, mat]);
+  useFrame((_, dt) => {
+    if (animate) mat.uniforms.uTime!.value += Math.min(dt, 0.1);
+  });
+  return <points geometry={geo} material={mat} frustumCulled={false} renderOrder={5} />;
+}
+
+const petalVertex = /* glsl */ `
+  attribute vec3 aOffset;
+  attribute vec4 aSeed;
+  attribute vec3 aColor;
+  uniform float uTime;
+  uniform vec3 uBoxMin;
+  uniform vec3 uBoxSize;
+  varying vec3 vColor;
+  varying float vFade;
+  varying float vShade;
+
+  mat3 rotation(vec3 a) {
+    vec3 s = sin(a), c = cos(a);
+    return mat3(c.y * c.z, c.y * s.z, -s.y,
+                s.x * s.y * c.z - c.x * s.z, s.x * s.y * s.z + c.x * c.z, s.x * c.y,
+                c.x * s.y * c.z + s.x * s.z, c.x * s.y * s.z - s.x * c.z, c.x * c.y);
+  }
+
+  void main() {
+    float t = uTime + aSeed.w * 40.0;
+    float speed = 0.55 + aSeed.x * 0.6;
+    // Wind speed swells in gusts; x is its integral, so petals never drift backwards.
+    float x = speed * (0.85 * t - 1.13 * cos(0.31 * t + 1.0) - 0.34 * cos(0.73 * t));
+    vec3 p = aOffset + vec3(
+      x,
+      -0.16 * speed * t + sin(t * (1.1 + aSeed.y) + aSeed.z * 6.28) * 0.35,
+      sin(t * (0.4 + aSeed.z * 0.3) + aSeed.x * 6.28) * 0.8
+    );
+    // Wrap inside the volume so the pool of petals is endless.
+    vec3 u = mod(p - uBoxMin, uBoxSize) / uBoxSize;
+    p = uBoxMin + u * uBoxSize;
+    vFade = smoothstep(0.0, 0.14, u.x) * (1.0 - smoothstep(0.82, 1.0, u.x))
+          * smoothstep(0.0, 0.12, u.y) * (1.0 - smoothstep(0.88, 1.0, u.y));
+
+    // Tumble: each petal flips on its own axes, faster in gusts.
+    mat3 r = rotation(vec3(t * (1.2 + aSeed.y * 1.6), t * (0.7 + aSeed.x), t * 0.5 + aSeed.z * 6.28));
+    vec3 local = r * (position * (0.75 + aSeed.z * 0.6));
+    vec3 n = normalize(r * vec3(0.0, 0.0, 1.0));
+    // Two-tone shading: the face catching the sun is lighter, edge-on reads darker.
+    vShade = 0.72 + 0.28 * abs(dot(n, normalize(vec3(0.5, 0.8, 0.3))));
+    vColor = aColor;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p + local, 1.0);
+  }
+`;
+
+const petalFragment = /* glsl */ `
+  varying vec3 vColor;
+  varying float vFade;
+  varying float vShade;
+  void main() {
+    if (vFade < 0.01) discard;
+    gl_FragColor = vec4(vColor * vShade, vFade * 0.95);
+    #include <colorspace_fragment>
+  }
+`;
+
+const PETAL_COLORS = ["#f6b7c6", "#f3a1b0", "#fff4e0", "#ef9a86", "#ffd6dc", "#ffffff"];
+
+/** A small cupped teardrop: the outline of a cherry/rose petal, bent so it reads in 3D. */
+function petalGeometry(): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, -0.07);
+  shape.bezierCurveTo(0.06, -0.05, 0.075, 0.03, 0.02, 0.07);
+  shape.quadraticCurveTo(0, 0.055, -0.02, 0.07);
+  shape.bezierCurveTo(-0.075, 0.03, -0.06, -0.05, 0, -0.07);
+  const g = new THREE.ShapeGeometry(shape, 6);
+  const pos = g.getAttribute("position");
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    pos.setZ(i, x * x * 6 + y * y * 2.5);
+  }
+  return g;
+}
+
+/** Where petals blow: across and in front of the main island, clear of the text column on the left. */
+const PETAL_BOX = { min: new THREE.Vector3(-9, -1.5, -7), size: new THREE.Vector3(28, 9, 17) };
+
+/**
+ * Daytime flower petals carried on the wind. One instanced draw call with
+ * every motion computed in the vertex shader (no per-frame CPU work). With
+ * reduced motion they hang still mid-air.
+ */
+export function FlowerPetals({ animate, count = 70 }: { animate: boolean; count?: number }) {
+  const geo = useMemo(() => {
+    const base = petalGeometry();
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = base.index;
+    g.setAttribute("position", base.getAttribute("position"));
+    const rng = mulberry32(203);
+    const offset = new Float32Array(count * 3);
+    const seed = new Float32Array(count * 4);
+    const color = new Float32Array(count * 3);
+    const c = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      offset.set([PETAL_BOX.min.x + rng() * PETAL_BOX.size.x, PETAL_BOX.min.y + rng() * PETAL_BOX.size.y, PETAL_BOX.min.z + rng() * PETAL_BOX.size.z], i * 3);
+      seed.set([rng(), rng(), rng(), rng()], i * 4);
+      c.set(PETAL_COLORS[Math.floor(rng() * PETAL_COLORS.length)]!).convertSRGBToLinear();
+      color.set([c.r, c.g, c.b], i * 3);
+    }
+    g.setAttribute("aOffset", new THREE.InstancedBufferAttribute(offset, 3));
+    g.setAttribute("aSeed", new THREE.InstancedBufferAttribute(seed, 4));
+    g.setAttribute("aColor", new THREE.InstancedBufferAttribute(color, 3));
+    g.instanceCount = count;
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 100);
+    return g;
+  }, [count]);
+  const mat = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uBoxMin: { value: PETAL_BOX.min }, uBoxSize: { value: PETAL_BOX.size } },
+        vertexShader: petalVertex,
+        fragmentShader: petalFragment,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    [],
+  );
+  useEffect(() => () => {
+    geo.dispose();
+    mat.dispose();
+  }, [geo, mat]);
+  useFrame((_, dt) => {
+    if (animate) mat.uniforms.uTime!.value += Math.min(dt, 0.1);
+  });
+  return <mesh geometry={geo} material={mat} frustumCulled={false} renderOrder={5} />;
 }

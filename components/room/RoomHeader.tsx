@@ -30,12 +30,12 @@ export function RoomHeader({
   }
 
   return (
-    <header className="flex flex-col gap-3 lg:col-span-3 lg:flex-row lg:items-end lg:justify-between">
+    <header className="flex flex-col gap-3 lg:col-span-3 ">
       <div>
         <Link href="/" className="font-display text-[22px] leading-none font-semibold text-dusk">
           unwrap<span className="text-coral-soft">.</span>
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-plum">{room.title}</h1>
+        <h1 className="mt-3 font-display text-[42px] leading-[1.05] text-dusk">{room.title}</h1>
         <p className="text-sm text-plum-soft">
           For {room.recipientDisplayName} · {room.occasion} · {participants.length} in the room
         </p>

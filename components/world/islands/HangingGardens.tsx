@@ -11,6 +11,7 @@ import { OPENING_CAMERA } from "../sceneConfig";
 import { rimRadius } from "../terrain";
 import { WORLD_LAYOUT } from "../worldLayout";
 import { CloudSkirt, FloatingPlacement, groundOn, IslandFlowers, KitMeshes, MID_DETAIL, MID_PALETTE } from "./shared";
+import { useScenePalette } from "../scenePalette";
 
 const P = WORLD_LAYOUT.gardens;
 const SHAPE = P.shape;
@@ -166,6 +167,7 @@ function Vines() {
 
 /** A thin painted ribbon of falling water: scrolling streaks on a curved strip, plus spray at the foot. */
 function Waterfall({ animate }: { animate: boolean }) {
+  const tint = useScenePalette().cloudTint;
   const map = useMemo(() => {
     const t = waterTexture().clone();
     t.repeat.set(1, 1.6);
@@ -195,7 +197,7 @@ function Waterfall({ animate }: { animate: boolean }) {
         <meshBasicMaterial map={map} color="#dcecf6" transparent opacity={0.88} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <sprite position={[0, -5.0, 0.9]} scale={[2.4, 1.2, 1]}>
-        <spriteMaterial map={cloudTexture(2, false)} transparent depthWrite={false} opacity={0.75} />
+        <spriteMaterial map={cloudTexture(2, false)} color={tint} transparent depthWrite={false} opacity={0.6} />
       </sprite>
     </group>
   );
@@ -215,7 +217,7 @@ export function HangingGardens({ animate }: { animate: boolean }) {
         colors={["#f6b7c6", "#ffffff", "#ffe08a", "#c9b6ee", "#ef9a86", "#f3a1b0"]}
         avoid={(x, z) => Math.hypot(x - POND.x, z - POND.z) < 0.9 || Math.hypot(x - TREE.x, z - TREE.z) < 0.8}
       />
-      <CloudSkirt radius={SHAPE.radius} depth={SHAPE.depth} count={4} seed={13} animate={animate} opacity={0.8} />
+      <CloudSkirt radius={SHAPE.radius} depth={SHAPE.depth} count={4} seed={13} animate={animate} opacity={0.32} />
     </FloatingPlacement>
   );
 }

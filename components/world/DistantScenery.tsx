@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { CloudCastle } from "./islands/CloudCastle";
 import { HangingGardens } from "./islands/HangingGardens";
@@ -11,6 +11,7 @@ import { IslandMesh } from "./FloatingIsland";
 import { fbm, mulberry32 } from "./painterly/noise";
 import { flat } from "./painterly/materials";
 import { cliffTexture } from "./painterly/textures";
+import { useScenePalette } from "./scenePalette";
 import { Lantern } from "./props/Lantern";
 import { bridgeEnd } from "./props/Stonework";
 import { terrainHeight, type IslandShape } from "./terrain";
@@ -175,6 +176,11 @@ function Mountains() {
     [],
   );
   const mat = flat("mountain-strata", "#ffffff", { map: cliffTexture(), vertexColors: true, fog: false });
+  const { mountainTint } = useScenePalette().distant;
+  // The material is cached and shared, so grade it in place when the time of day changes.
+  useEffect(() => {
+    mat.color.set(mountainTint);
+  }, [mat, mountainTint]);
   return (
     <group userData={userData}>
       {geometries.map((g, i) => (
@@ -193,9 +199,10 @@ function hazeTexture() {
   const ctx = c.getContext("2d")!;
   const g = ctx.createLinearGradient(0, 0, 0, 256);
   g.addColorStop(0, "rgba(255,255,255,0)");
-  g.addColorStop(0.55, "rgba(255,255,255,0.75)");
-  g.addColorStop(0.8, "rgba(255,255,255,1)");
-  g.addColorStop(1, "rgba(255,255,255,1)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.7)");
+  g.addColorStop(0.72, "rgba(255,255,255,1)");
+  g.addColorStop(0.86, "rgba(255,255,255,0.85)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 4, 256);
   hazeTex = new THREE.CanvasTexture(c);
@@ -205,6 +212,7 @@ function hazeTexture() {
 
 /** Soft veils of mist between the ranges: cheap atmospheric perspective. */
 function HazeVeils() {
+  const { hazeTint, hazeOpacity } = useScenePalette().distant;
   const veils = [
     { z: -150, y: -40, h: 36, color: "#e7ecf3", opacity: 0.7 },
     { z: -128, y: -44, h: 30, color: "#eef0f4", opacity: 0.8 },
@@ -215,7 +223,7 @@ function HazeVeils() {
       {veils.map((v, i) => (
         <mesh key={i} position={[0, v.y + v.h / 2, v.z]} renderOrder={-2}>
           <planeGeometry args={[520, v.h]} />
-          <meshBasicMaterial map={hazeTexture()} color={v.color} transparent opacity={v.opacity} depthWrite={false} fog={false} />
+          <meshBasicMaterial map={hazeTexture()} color={hazeTint ?? v.color} transparent opacity={v.opacity * hazeOpacity} depthWrite={false} fog={false} />
         </mesh>
       ))}
     </>

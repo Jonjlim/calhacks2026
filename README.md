@@ -74,6 +74,7 @@ Solo mode is a one-participant room, not a second product.
 | [docs/PRODUCT.md](docs/PRODUCT.md) | Vision, journeys, P0/P1/P2 scope |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data model, runtime flows |
 | [docs/AI_AGENTS.md](docs/AI_AGENTS.md) | Buyer agent, recipient agent, tools, and protocols |
+| [docs/FETCH_AI_COUNCIL.md](docs/FETCH_AI_COUNCIL.md) | Fetch.ai AI Council agent: run it, register on Agentverse, test in ASI:One, demo checklist |
 | [docs/DATA_AND_PRIVACY.md](docs/DATA_AND_PRIVACY.md) | Consent, classification, and access control |
 | [docs/COMMERCE_AND_PAYMENTS.md](docs/COMMERCE_AND_PAYMENTS.md) | Listings, allocation, proposals, sandbox payments |
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | Shared TypeScript-shaped interfaces |

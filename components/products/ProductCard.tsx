@@ -15,6 +15,8 @@ const AVAILABILITY_LABELS: Record<ProductListing["availability"], string | null>
 // PX-006: every card shows source URL, observed price, and retrieval time.
 export function ProductCard({ listing }: { listing: ProductListing }) {
   // Freshness depends on the clock, so compute it after mount to keep SSR and hydration identical.
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [listing.imageUrl]);
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     setNow(Date.now());
@@ -26,9 +28,9 @@ export function ProductCard({ listing }: { listing: ProductListing }) {
 
   return (
     <article className="flex gap-3 rounded-xl border border-plum/10 bg-white/60 p-3">
-      {listing.imageUrl && (
-        <img src={listing.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" loading="lazy" />
-      )}
+      {listing.imageUrl && !imageFailed ? (
+        <img src={listing.imageUrl} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" loading="lazy" onError={() => setImageFailed(true)} />
+      ) : <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-paper px-2 text-center text-[10px] text-dusk/55">Photo unavailable</div>}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-medium">{listing.title}</h3>

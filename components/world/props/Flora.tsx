@@ -86,10 +86,19 @@ function leafMass(m: CanopyMass, seed: number): THREE.BufferGeometry {
   return g;
 }
 
-function canopyGeometry(masses: CanopyMass[], seed: number): THREE.BufferGeometry {
+/** Warm coral-and-gold canopy for the present's tree, in the gift's own palette. */
+const AUTUMN_STOPS: [number, string][] = [
+  [0, "#a8493a"],
+  [0.35, "#d9735e"],
+  [0.65, "#e0a24a"],
+  [0.88, "#f0c66a"],
+  [1, "#fbe7a1"],
+];
+
+function canopyGeometry(masses: CanopyMass[], seed: number, stops = CANOPY_STOPS): THREE.BufferGeometry {
   const merged = mergeGeometries(masses.map((m, i) => leafMass(m, seed * 7 + i)));
   smoothNormals(merged);
-  paintByHeight(merged, CANOPY_STOPS, 0.14, seed);
+  paintByHeight(merged, stops, 0.14, seed);
   // Sun-side warmth: lift the +x / top quadrant toward a yellow-green highlight.
   const col = merged.getAttribute("color");
   const nor = merged.getAttribute("normal");
@@ -136,6 +145,8 @@ export interface TreeProps {
   seed: number;
   blobs?: number;
   kind?: TreeKind;
+  /** `autumn` paints the canopy in the gift's coral and gold. */
+  palette?: "green" | "autumn";
   outline?: boolean;
   /** Ground height override when not standing on the main island. */
   y?: number;
@@ -143,7 +154,7 @@ export interface TreeProps {
 
 const BLOSSOM = ["#f6b7c6", "#fde3ea", "#f3a1b0", "#ffffff"];
 
-export function StylizedTree({ x, z, scale = 1, seed, blobs = 7, kind = "round", outline = true, y: groundY }: TreeProps) {
+export function StylizedTree({ x, z, scale = 1, seed, blobs = 7, kind = "round", palette = "green", outline = true, y: groundY }: TreeProps) {
   const { trunk, canopy, blossoms, trunkH } = useMemo(() => {
     const { masses, trunkH, lean } = canopyLayout(kind, seed, blobs);
     let blossoms: THREE.BufferGeometry | null = null;
@@ -159,8 +170,8 @@ export function StylizedTree({ x, z, scale = 1, seed, blobs = 7, kind = "round",
       }
       blossoms = mergeGeometries(dots);
     }
-    return { trunk: trunkGeometry(trunkH, 0.17, 0.18, seed, masses, lean), canopy: canopyGeometry(masses, seed), blossoms, trunkH };
-  }, [seed, blobs, kind]);
+    return { trunk: trunkGeometry(trunkH, 0.17, 0.18, seed, masses, lean), canopy: canopyGeometry(masses, seed, palette === "autumn" ? AUTUMN_STOPS : CANOPY_STOPS), blossoms, trunkH };
+  }, [seed, blobs, kind, palette]);
   const y = (groundY ?? groundAt(x, z)) - 0.05;
   return (
     <group position={[x, y, z]} scale={scale} rotation={[0, seed, 0]} userData={{ sketch: 7, sketchRegion: true }}>
@@ -169,7 +180,7 @@ export function StylizedTree({ x, z, scale = 1, seed, blobs = 7, kind = "round",
       </mesh>
       <group position={[0.18, trunkH - 0.05, 0]}>
         <mesh geometry={canopy} material={paint("canopy", { map: foliageTexture(), vertexColors: true, wind: 0.012 })} castShadow receiveShadow>
-          {outline && <InkOutline weight="medium" color="#20372b" opacity={0.55} />}
+          {outline && <InkOutline weight="medium" color={palette === "autumn" ? "#6a2e24" : "#20372b"} opacity={0.55} />}
         </mesh>
         {blossoms && <mesh geometry={blossoms} material={paint(`blossom-${seed % BLOSSOM.length}`, { color: BLOSSOM[seed % BLOSSOM.length] })} />}
       </group>

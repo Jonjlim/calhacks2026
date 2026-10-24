@@ -2,14 +2,17 @@
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { useScenePalette } from "./scenePalette";
 import type { WorldQuality } from "./sceneConfig";
 
 /**
- * One warm key light (the only shadow caster) plus a sky/ground hemisphere
- * fill: golden highlights, cool lavender shadows.
+ * One key light (the only shadow caster) plus a sky/ground hemisphere fill.
+ * Day: golden sun, cool lavender shadows. Night: cool moonlight, so the warm
+ * lanterns and windows become the focal glow.
  */
-export function WorldLighting({ quality }: { quality: WorldQuality }) {
+export function WorldLighting({ quality, interior = false }: { quality: WorldQuality; interior?: boolean }) {
   const sun = useRef<THREE.DirectionalLight>(null);
+  const { light: tone } = useScenePalette();
 
   useEffect(() => {
     const light = sun.current;
@@ -27,11 +30,12 @@ export function WorldLighting({ quality }: { quality: WorldQuality }) {
 
   return (
     <>
-      <hemisphereLight args={["#d4e3ff", "#9d8cc0", 0.95]} />
+      {/* Inside the tower the island's daylight is dimmed; the room's own lanterns carry the scene. */}
+      <hemisphereLight args={[tone.hemiSky, tone.hemiGround, tone.hemiIntensity * (interior ? 0.35 : 1)]} />
       <directionalLight
         ref={sun}
-        color="#ffe1ad"
-        intensity={3.0}
+        color={tone.key}
+        intensity={tone.keyIntensity * (interior ? 0.12 : 1)}
         position={[11, 12, -4.5]}
         castShadow
         shadow-mapSize-width={mapSize}
@@ -47,9 +51,9 @@ export function WorldLighting({ quality }: { quality: WorldQuality }) {
         shadow-camera-far={40}
       />
       {/* Warm bounce off the cloud sea so the underside reads as painted rock, not void. */}
-      <directionalLight color="#f6d8c4" intensity={0.9} position={[3, -8, 9]} />
+      <directionalLight color={tone.bounce} intensity={tone.bounceIntensity * (interior ? 0 : 1)} position={[3, -8, 9]} />
       {/* Soft rim from behind to separate silhouettes from the sky. */}
-      <directionalLight color="#c7d2ff" intensity={0.55} position={[-6, 5, -10]} />
+      <directionalLight color={tone.rim} intensity={tone.rimIntensity * (interior ? 0.2 : 1)} position={[-6, 5, -10]} />
     </>
   );
 }

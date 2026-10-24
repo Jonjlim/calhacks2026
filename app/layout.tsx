@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Caveat, Cormorant_Garamond, Figtree } from "next/font/google";
 import type { ReactNode } from "react";
 import { ConvexClientProvider } from "@/components/providers/ConvexClientProvider";
+import { IslandWorldProvider } from "@/components/world/IslandWorldProvider";
 import "./globals.css";
 
 const display = Cormorant_Garamond({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-cormorant", display: "swap" });
@@ -16,8 +17,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${hand.variable}`}>
-      <body className="min-h-screen antialiased">
-        <ConvexClientProvider>{children}</ConvexClientProvider>
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
+        <ConvexClientProvider><IslandWorldProvider>{children}</IslandWorldProvider></ConvexClientProvider>
       </body>
     </html>
   );
