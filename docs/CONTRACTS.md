@@ -94,7 +94,9 @@ interface Room {
 }
 ```
 
-Access: members read; organizer updates metadata. `inviteToken` is for join, not for private data.
+Access: members read; organizer updates metadata (`rooms.updateRoom`). `inviteToken` is for join, not for private data.
+
+Server-only `deletedAt?: number` is set by `rooms.deleteRoom`. From that moment every membership check, invite lookup, and `listMyRooms` treats the room as missing (`not_found`) while `internal.rooms.purgeRoomBatch` removes its rows. Deleted rooms are never returned, so `Room` does not carry the field.
 
 ### Participant
 
@@ -124,8 +126,11 @@ interface ChatMessage {
   body: string;
   createdAt: number;
   clientIdempotencyKey: string;
+  deletedAt?: number; // author deleted it: body is "" and the row stays as a tombstone
 }
 ```
+
+`messages.deleteMessage` overwrites the stored body rather than filtering it, so readers that use `chatMessages` directly (the buyer-agent snapshot) never see deleted text. `room.latestMessageId` and job fences may keep pointing at a tombstone.
 
 ### Evidence source
 
@@ -505,7 +510,7 @@ interface Approval {
 
 ### Payment attempt (P1-B)
 
-**Owner:** Dev 2 (document), Dev 4 (adapter). **Consumers:** Dev 1 (truthful status).
+**Owner:** Dev 2 (document + state machine, `convex/payments/`), Dev 4 (adapter). **Consumers:** Dev 1 (truthful status).
 
 ```ts
 interface PaymentAttempt {
@@ -514,8 +519,10 @@ interface PaymentAttempt {
   revisionId: string;
   participantId: string;
   provider: "stripe_test";
-  providerObjectId?: string;
-  idempotencyKey: string;
+  providerObjectId?: string; // server-only
+  idempotencyKey: string; // server-derived, sent to Stripe; server-only
+  amountMinor: number; // frozen share from the revision
+  currency: "USD";
   status:
     | "not_started"
     | "authorization_pending"
@@ -529,10 +536,33 @@ interface PaymentAttempt {
     | "refunded"
     | "action_required"
     | "uncertain";
+  lastError?: string; // UI-safe adapter message, max 200 chars
   createdAt: number;
+  updatedAt: number;
+}
+
+/** Client view of the caller's own attempt; no provider IDs or idempotency keys. */
+type MyPaymentAttemptView = Pick<
+  PaymentAttempt,
+  "id" | "revisionId" | "status" | "amountMinor" | "currency" | "lastError" | "createdAt" | "updatedAt"
+>;
+
+interface PaymentStatusView {
+  enabled: boolean; // PAYMENTS_SANDBOX_ENABLED=true on the deployment
+  mode: "stripe_test";
+  revisionId: string | null;
+  groupStatus: ProposalRevision["status"] | null;
+  frozen: boolean; // capturing | test_funded | recovery_pending
+  payerCount: number;
+  authorizedCount: number;
+  capturedCount: number;
+  attentionCount: number; // failed, action_required, or uncertain
+  myAttempt: MyPaymentAttemptView | null;
+  merchantOrder: { status: "not_implemented" };
 }
 ```
 
+`amountMinor`, `currency`, `lastError`, and `updatedAt` are additive (BE-015). Group payment status is the current `ProposalRevision.status`. Peers see counts, never another participant's attempt or instrument. Storage also keeps `clientIdempotencyKey` and a server-only `ProviderEvent { provider, providerEventId (unique), type, providerObjectId?, receivedAt }` ledger.
 ### Agent / research job status
 
 **Owner:** Dev 2 (table), Dev 3 / Dev 4 (writers). **Consumers:** Dev 1.
@@ -660,10 +690,13 @@ May enqueue `AgentJob` `evaluate_thread`.
 | --- | --- |
 | Owner | Dev 2 (storage, source rows), Dev 3 (vision / transcription action) |
 | Consumers | Dev 1 |
-| Input | `generateEvidenceUploadUrl`: `{ roomId }` → `{ uploadUrl }`. `importMediaEvidence` (implemented: `photo` and `screenshot`; `voice_note` is P2, not built): `{ roomId, kind: "photo" \| "screenshot", label, files: { storageId, marker?: { x: number, y: number } }[] }`. The marker is per file (photos only) and normalized 0–1. |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → `{ uploadUrl }`, one call per file. `importMediaEvidence` (implemented: `photo` and `screenshot`; `voice_note` is P2, not built): `{ roomId, kind: "photo" \| "screenshot", label, files: { storageId, marker?: { x: number, y: number } }[] }`. The marker is per file (photos only) and normalized 0–1. |
 | Output | `{ source: EvidenceSource }`. The caller then runs `extractClues({ sourceId })` as for pasted text. |
-| Access | Caller becomes owner. A storage id already attached to any source is rejected, so another member's upload cannot be claimed. Files live in a private `evidenceMedia` table that clients never read. |
-| Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
+| Access | Members only. Caller becomes owner. Each issued URL records a server-only `mediaUploadGrants` row; a file can be claimed only against one of the caller's own unused grants issued before the file was created and within the last hour, and each grant covers one file. A storage id already attached to any source is rejected. Files live in a private `evidenceMedia` table that clients never read; no public query returns storage ids, file URLs, or `evidenceMedia` rows, and `recipientMarkers` appear only on the owner's `listMyEvidence`. |
+| Rate limit | `generateEvidenceUploadUrl`: at most 12 URLs per member per room per 10 minutes, then `refused`. |
+| Rejections | Non-member and unauthenticated calls delete nothing. A validation failure deletes only the unclaimed files matched to the caller's own grants (and consumes those grants); files that are claimed, missing, or not the caller's are left alone. Unclaimed files older than one hour, and claimed files still unread after 24 hours, are removed by `cleanup.sweepStaleUploads`. |
+| Errors | `unauthorized`, `refused` (upload URL rate limit), `validation_failed` (wrong type, too large, too many files, duplicate, bad marker, file not uploaded by the caller or upload expired), `provider_timeout` |
+| Migration | BE-018 hardening (Dev 2; consumers Dev 1, Dev 3): additive `mediaUploadGrants` table; clients must call `generateEvidenceUploadUrl` once per file before uploading (the shipped `MediaDrop` already does). Server-side `contentType` is the upload request's `Content-Type` header (size is measured by Convex); mutations cannot read bytes, so the extraction action is the first code that sees them. |
 
 Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
@@ -860,6 +893,10 @@ All are membership-checked and return `Result<T>`.
 | `votes.listVotes` | query | `{ roomId }` | `{ listingId, tally, myVote? }[]` | Member |
 | `votes.clearVote` | mutation | `{ roomId, listingId }` | `{ listingId, tally }` | Member |
 | `jobs.listRoomJobs` | query | `{ roomId }` | recent agent + research job statuses | Member; `extract` jobs only to their owner |
+| `rooms.updateRoom` | mutation | `{ roomId, title?, recipientDisplayName?, occasion?, deadlineAt?: number \| null, budgetMinor?: number \| null }` | `Room` | Organizer. Omitted = unchanged, `null` clears the optional field. Same validation as `createRoom`. Budget is a hint; caps, allocation, and the revision are untouched |
+| `messages.deleteMessage` | mutation | `{ messageId }` | `ChatMessage` tombstone (`body: ""`, `deletedAt`) | Author of a `participant` message (`unauthorized` otherwise). `buyer_agent` messages return `refused` for everyone, organizer included. Idempotent; does not enqueue an agent turn |
+| `rooms.leaveRoom` | mutation | `{ roomId, deletePrivateData?: boolean }` | `null` | Contributor. Deletes their participant row, cap, and votes; cancels open agent jobs acting as them; recomputes the proposal (new revision without their share, prior approvals invalidated). Published clues and chat stay. With `deletePrivateData`, also hard-deletes their evidence, private messages, stored files, proposed clues, and their `agentEvents`; published clues derived from that evidence become `source_withdrawn` (excerpt dropped, `proposedClueId` unlinked). Organizer gets `refused`; a frozen revision (`capturing`/`test_funded`/`recovery_pending`) gets `invalid_revision` |
+| `rooms.deleteRoom` | mutation | `{ roomId, confirmTitle }` | `null` | Organizer; `confirmTitle` must equal the title after trimming (`validation_failed`). Sets `room.deletedAt` (access ends immediately), cancels open agent/research jobs, and schedules `purgeRoomBatch`. `invalid_revision` while the revision is frozen or any payment attempt is non-terminal (other than `not_started`) |
 
 Server-only hooks for other workstreams (internal functions or helpers, not client-callable):
 
@@ -871,6 +908,7 @@ Server-only hooks for other workstreams (internal functions or helpers, not clie
 | `internal.jobs.setAgentJobStatus` / `setResearchJobStatus` | Dev 3 / Dev 4 | Enforced transitions; terminal states return `stale_job` |
 | `enqueueAgentJob`, `insertResearchJob`, `agentInputHash`, `isResearchJobCurrent` (exported from `convex/jobs.ts`) | Dev 3 / Dev 4 | Create job rows inside your own mutation with `inputHash` / `idempotencyKey` dedupe |
 | `internal.proposals.clearSelectionsForListing({ listingId })` | Dev 4 RC-007 | Clears a selection of an invalidated listing and supersedes its revision |
+| `internal.rooms.purgeRoomBatch({ roomId })` | Dev 2 BE-017 | Deletes up to 256 rows of a room marked `deletedAt` and reschedules itself; finally deletes the room. Order: research/agent jobs and council runs first (so in-flight commits find no job), then private data, public data, revisions with approvals and payment attempts, listings, worlds, participants. Stored evidence files are deleted with their `evidenceMedia` rows. No-op for rooms that are not marked deleted. `providerEvents` (webhook ledger, no room id) are kept |
 
 ### `queryRecipientAgent` (P1-A)
 
@@ -885,12 +923,34 @@ Server-only hooks for other workstreams (internal functions or helpers, not clie
 
 ### Payment operations (P1-B)
 
-| Name | Owner | Input | Output | Access | Errors |
+Dev 2 state half (BE-015) lives in `convex/payments/state.ts`. Every public mutation returns `refused` unless `PAYMENTS_SANDBOX_ENABLED=true`, and requires a human member identity (scheduled agent actions have none). Dev 4's Stripe actions call these **before** each provider call, then report results through the internal mutations.
+
+| Name | Kind | Input | Output | Access | Errors |
 | --- | --- | --- | --- | --- | --- |
-| `createAuthorization` | Dev 4 + Dev 2 | `{ revisionId }` | hosted checkout payload | owning participant, revision current | `invalid_revision`, `unauthorized` |
-| `captureRevision` | Dev 4 + Dev 2 | `{ revisionId, idempotencyKey }` | group status | organizer or controller | `invalid_revision`, `infeasible` |
-| `cancelAuthorization` | Dev 4 | `{ attemptId }` | `PaymentAttempt` | server / owner | `not_found` |
-| `reconcileEvent` | Dev 4 | signed provider event | void | HTTP webhook | ignore duplicates |
+| `payments.state.getPaymentStatus` | query | `{ roomId }` | `PaymentStatusView` | Member | `unauthorized`, `not_found` |
+| `payments.state.beginAuthorization` | mutation | `{ revisionId, idempotencyKey }` | `{ attemptId, revisionId, amountMinor, currency, idempotencyKey, status, created }` | Payer on the current revision once every payer approved (`approved_pledged`), or while `authorizing` / `blocked` | `refused`, `invalid_revision`, `unauthorized`, `validation_failed` |
+| `payments.state.beginCapture` | mutation | `{ revisionId }` | `{ revisionId, attempts: { attemptId, amountMinor, idempotencyKey }[] }` | Organizer; revision `ready_to_capture`. Sets `capturing` (freeze) and `capture_pending` first; repeat returns the same list. Provider object IDs are not returned; the server-side adapter reads them with `internal.payments.state.getAttempt` | `refused`, `invalid_revision`, `unauthorized`, `infeasible` |
+| `payments.state.cancelPayments` | mutation | `{ revisionId }` | `{ canceledRevisionId, currentRevisionId }` | Organizer, pre-capture only. Mints a fresh revision for new approvals | `refused`, `invalid_revision`, `unauthorized` |
+| `payments.state.cancelMyAuthorization` | mutation | `{ attemptId }` | `MyPaymentAttemptView` | Attempt owner, pre-capture only | `refused`, `not_found`, `unauthorized`, `invalid_revision` |
+
+Server-only hooks for the Dev 4 adapter:
+
+| Name | Purpose |
+| --- | --- |
+| `internal.payments.state.attachProviderObject({ attemptId, providerObjectId })` | Bind a PaymentIntent/Session ID once; unique across attempts |
+| `internal.payments.state.applyAttemptStatus({ attemptId, status, lastError? })` | Record a provider-reported status; repeat is a no-op, illegal transitions are `validation_failed`; re-derives group status and unwind intents |
+| `internal.payments.state.recordProviderEvent({ providerEventId, type, providerObjectId? })` | Webhook dedupe; `{ duplicate: true }` means stop |
+| `internal.payments.state.getAttempt` / `findAttemptByProviderObject` / `listPendingProviderWork({ revisionId })` | Reads for the adapter and reconcile |
+
+Group transitions (pure, `convex/payments/stateMachine.ts`):
+
+- `approved_pledged → authorizing` on the first attempt; `→ ready_to_capture` when every payer's latest attempt is `authorized`; `→ blocked` on any `authorization_failed` (a retry with a new key returns to `authorizing`).
+- `capturing → test_funded` only when every payer is `captured`. `uncertain` stays `capturing` until reconcile. Any other outcome is `recovery_pending`.
+- `recovery_pending`: authorized attempts get `cancellation_pending`, captured ones `refund_pending`; when every attempt is terminal (`canceled` / `refunded` / `authorization_failed`) the revision becomes `canceled`, its approvals are invalidated, and a fresh revision is minted.
+- Pre-capture revisions (`authorizing`, `ready_to_capture`, `blocked`) remain editable: a material change supersedes them as usual and records `cancellation_pending` on live attempts. `capturing`, `test_funded`, and `recovery_pending` are frozen; selection, cap, and listing-invalidation edits return `invalid_revision`.
+- Late provider events on superseded or canceled revisions are recorded, then unwound (cancel or refund).
+
+The original `createAuthorization`, `captureRevision`, `cancelAuthorization`, and `reconcileEvent` names remain Dev 4's Stripe-facing actions and wrap the operations above.
 
 LLM-initiated payment operations are forbidden.
 
@@ -1228,6 +1288,10 @@ Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search t
 This adds a room-indexed `fashionJobs` table, isolated from payment and agent tables.
 The new table has no migration of existing rows. UI and buyer-agent wiring are
 separate consumers; existing research requests remain compatible.
+BE-017 integration: deleting a room cancels open fashion jobs and purges every
+fashion row through the room index in the job-first deletion phase. Fashion
+workers refuse rooms marked `deletedAt` and members who have left, so late
+provider responses cannot recreate data after access revocation.
 
 - `research/fashion.startDiscovery({roomId, idempotencyKey})` is a membership-checked
   mutation. It derives only `denim outfit` or `vintage denim outfit` from active,

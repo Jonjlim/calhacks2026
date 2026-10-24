@@ -19,7 +19,7 @@ async function publishedSeed(ctx: QueryCtx, roomId: Id<"rooms">) {
 export async function isFashionJobCurrent(ctx: QueryCtx, job: Doc<"fashionJobs">): Promise<boolean> {
   const room = await ctx.db.get(job.roomId);
   const member = await ctx.db.get(job.actingParticipantId);
-  if (!room || !member || member.roomId !== job.roomId || room.knowledgeRevision !== job.knowledgeRevision) return false;
+  if (!room || room.deletedAt !== undefined || !member || member.roomId !== job.roomId || room.knowledgeRevision !== job.knowledgeRevision) return false;
   const seed = await publishedSeed(ctx, job.roomId);
   return seed?.seedTerm === job.seedTerm
     && JSON.stringify(seed.supportingPublishedClueIds) === JSON.stringify([...job.supportingPublishedClueIds].sort());

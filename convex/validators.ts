@@ -141,6 +141,22 @@ export const proposalStatus = v.union(
   v.literal("canceled"),
 );
 
+export const paymentAttemptStatus = v.union(
+  v.literal("not_started"),
+  v.literal("authorization_pending"),
+  v.literal("authorized"),
+  v.literal("authorization_failed"),
+  v.literal("capture_pending"),
+  v.literal("captured"),
+  v.literal("cancellation_pending"),
+  v.literal("canceled"),
+  v.literal("refund_pending"),
+  v.literal("refunded"),
+  v.literal("action_required"),
+  v.literal("uncertain"),
+);
+
+export const paymentProvider = v.literal("stripe_test");
 export const approvalStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),

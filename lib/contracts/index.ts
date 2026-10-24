@@ -142,6 +142,8 @@ export interface ChatMessage {
   responseAgentJobId?: string;
   replyToSlot?: string;
   citations?: AgentCitations;
+  /** Author deleted the message; body is "" and the row is a tombstone. */
+  deletedAt?: number;
 }
 
 export interface AgentCitations {
@@ -434,6 +436,20 @@ export type VoteValue = "up" | "down" | "flag_duplicate";
 
 // ---------- Payments (P1-B) ----------
 
+export type PaymentAttemptStatus =
+  | "not_started"
+  | "authorization_pending"
+  | "authorized"
+  | "authorization_failed"
+  | "capture_pending"
+  | "captured"
+  | "cancellation_pending"
+  | "canceled"
+  | "refund_pending"
+  | "refunded"
+  | "action_required"
+  | "uncertain";
+
 export interface PaymentAttempt {
   id: string;
   roomId: string;
@@ -442,22 +458,41 @@ export interface PaymentAttempt {
   provider: "stripe_test";
   providerObjectId?: string;
   idempotencyKey: string;
-  status:
-    | "not_started"
-    | "authorization_pending"
-    | "authorized"
-    | "authorization_failed"
-    | "capture_pending"
-    | "captured"
-    | "cancellation_pending"
-    | "canceled"
-    | "refund_pending"
-    | "refunded"
-    | "action_required"
-    | "uncertain";
+  /** Frozen share from the revision, integer cents. */
+  amountMinor: number;
+  currency: Currency;
+  status: PaymentAttemptStatus;
+  /** UI-safe message from the adapter; never raw provider payloads. */
+  lastError?: string;
   createdAt: number;
+  updatedAt: number;
 }
 
+/** Owner view of their own attempt. Provider IDs and idempotency keys stay server-side. */
+export type MyPaymentAttemptView = Pick<
+  PaymentAttempt,
+  "id" | "revisionId" | "status" | "amountMinor" | "currency" | "lastError" | "createdAt" | "updatedAt"
+>;
+
+/** Merchant fulfillment is not implemented; never derive it from payment status. */
+export type MerchantOrderStatus = "not_implemented";
+
+export interface PaymentStatusView {
+  enabled: boolean;
+  mode: "stripe_test";
+  revisionId: string | null;
+  /** The current revision's status (group payment status during P1-B). */
+  groupStatus: ProposalStatus | null;
+  /** True once capture has started; gift/cap/selection edits are refused. */
+  frozen: boolean;
+  payerCount: number;
+  authorizedCount: number;
+  capturedCount: number;
+  /** Payers whose latest attempt failed, needs action, or is uncertain. */
+  attentionCount: number;
+  myAttempt: MyPaymentAttemptView | null;
+  merchantOrder: { status: MerchantOrderStatus };
+}
 // ---------- Jobs ----------
 
 export type JobStatus =

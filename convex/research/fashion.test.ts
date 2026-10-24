@@ -35,6 +35,27 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(recorded.context.retriev
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("persisted live fashion discovery", () => {
+  it("cancels and purges discovery on room deletion without late writes or cross-room deletion", async () => {
+    const s = await setup();
+    vi.stubEnv("APIFY_TOKEN", "");
+    const fetcher = vi.fn<typeof fetch>();
+    vi.stubGlobal("fetch", fetcher);
+    const first = value(await s.alex.mutation(f.startDiscovery, s.args));
+    await s.t.mutation(worker.claimDiscovery, first);
+    await s.t.mutation(worker.rememberRun, { ...first, runId: "fashion123" });
+    const other = value(await s.alex.mutation(api.rooms.createRoom, { title: "Preserved room", recipientDisplayName: "Sam", occasion: "Birthday" }));
+    await s.alex.mutation(api.clues.upsertManualPreference, { roomId: other.room._id, kind: "interest", text: "Likes denim" });
+    const preserved = value(await s.alex.mutation(f.startDiscovery, { roomId: other.room._id, idempotencyKey: "preserved" }));
+    value(await s.alex.mutation(api.rooms.deleteRoom, { roomId: s.roomId, confirmTitle: "Denim gift" }));
+    expect((await s.t.run(ctx => ctx.db.get(first.jobId)))?.status).toBe("canceled");
+    expect(await s.alex.query(f.getDiscovery, { roomId: s.roomId })).toMatchObject({ ok: false, error: { code: "not_found" } });
+    await s.t.mutation(worker.completeDiscovery, { ...first, raw: recorded.data, retrievedAt: Date.now() });
+    expect((await s.t.run(ctx => ctx.db.get(first.jobId)))?.sample).toBeUndefined();
+    await s.t.finishAllScheduledFunctions(vi.runAllTimers);
+    expect(await s.t.run(ctx => ctx.db.get(first.jobId))).toBeNull();
+    expect(await s.t.run(ctx => ctx.db.get(preserved.jobId))).not.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it("denies outsiders before creating jobs or exposing sources", async () => {
     const s = await setup();
     expect(await s.outsider.mutation(f.startDiscovery, s.args)).toMatchObject({ ok: false, error: { code: "unauthorized" } });

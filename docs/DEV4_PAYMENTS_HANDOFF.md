@@ -33,8 +33,12 @@ and full application-state integration have not been verified.
 
 ## Jonathon / BE-015 integration dependency
 
-The current schema has no payment-attempt or provider-event tables. Dev 4 has
-not modified the Dev 2 schema, approval or proposal-state authority.
+After integrating dev at e0083aa, Dev 2's paymentAttempts/providerEvents tables,
+state machine, public intent mutations, status query and internal provider hooks
+are present. Dev 4 has preserved that implementation. The transport/state bridge,
+operation claims, organizer-total policy and HTTP webhook route are still missing.
+The state mutations remain gated by PAYMENTS_SANDBOX_ENABLED; this merge does
+not enable the flag or expose a Stripe-calling action.
 
 The state layer needs to:
 
@@ -50,6 +54,15 @@ For organizer Checkout, Dev 2 can implement `OrganizerCheckoutStore.claim()` and
 replace any of the authorization, freeze, persistence or reconciliation work
 above. Port interfaces are additive in lib/contracts/index.ts and CONTRACTS.md;
 the payment schema and public endpoints remain untouched.
+
+Current compatibility limits: state.ts records one participant's approved share,
+whereas the organizer runner requests `mode: collect`. Do not map an automatic
+organizer capture into the existing per-contributor authorization flow without
+an agreed organizer-total policy and matching transitions. `providerObjectId`
+alone also does not persist the full Checkout/intent/refund reference set or an
+operation-version fence required by the recovery helpers. The two implementations
+can coexist dormant while this bridge is completed; merging them does not itself
+enable end-to-end payments.
 
 Do not configure a Stripe webhook endpoint until there is a durable receipt path;
 acknowledging a verified event without persisting it would lose recovery events.

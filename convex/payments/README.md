@@ -1,23 +1,32 @@
-# Convex payments — P1-B implementation in progress
+# Convex payments — P1-B integration in progress
 
-Dev 4's server-only `stripe.ts` adapter and `webhook.ts` raw-body signature verifier
-are implemented and tested against synthetic provider responses. A real sandbox
-create/retrieve/expire Checkout spike passed without card entry or funds movement.
-Card authorization/capture and real webhook delivery remain unverified. No public payment action, schema table, webhook route or
-payment UI has been enabled. P0 still ends at approved pledges.
+Dev 2's persisted payment state and Dev 4's Stripe sandbox transport are both
+implemented. They are not yet connected by production-facing payment actions or
+an HTTP webhook route. P0 still ends at approved pledges. State mutations remain
+off unless the deployment sets `PAYMENTS_SANDBOX_ENABLED=true`.
 
-- Dev 2 owns payment-attempt/event persistence, revision locking, approvals and recovery transitions (BE-015).
-- Dev 4 owns the Stripe test-mode transport, response validation and signature verification (RC-010+).
-- Every provider write needs a durable, operation-specific idempotency key and a state-layer claim before the call.
-- No LLM path can authorize payment operations. Test keys only; no raw card data.
-- Verified events are references to reconcile, not payment-success assertions. Event deduplication belongs in the database.
-- `read.ts` retrieves current Checkout/intent/refund state; `reconcile.ts` derives bounded observations. Captured payments use a complete bounded refund list, including refunds whose create response was lost. Incomplete lists or missing tracked refunds remain uncertain. Repeated events lead to fresh reads, never replayed embedded payment status.
-- `cancelAuthorization` retrieves and cancels only a manual hold with zero captured funds, using a stable key. Already canceled holds use a read only. Expiring an open Checkout is a separate operation; live hold cancellation remains unverified.
-- `checkout.ts` runs organizer collection through Dev 2's durable claim/settle port. It returns a Checkout URL only after settlement, re-reads existing references, and never replaces completed/expired sessions automatically. The Convex store implementation is still missing.
+- `stateMachine.ts`, `sync.ts`, `state.ts` (Dev 2, BE-015): attempt transitions,
+  group status, freeze-on-capture, stored intents, owner-safe status views, unwind
+  intents and provider-event ledger hooks. They never call Stripe.
+- `stripe.ts` (Dev 4): test-key-only hosted Checkout, checked provider reads,
+  explicit keyed capture, manual-hold cancellation, expiry and refunds. One live
+  create/retrieve/expire spike passed without card entry or funds movement;
+  actual card authorization/capture/refund/cancellation remain unverified live.
+- `webhook.ts`: raw-body signature verification. A verified event supplies
+  references to reconcile, not payment-success authority. The HTTP route and
+  transactionally fenced application of events still need integration.
+- `read.ts` / `reconcile.ts`: fresh test-mode observations with frozen amount and
+  binding checks, bounded refund discovery and explicit partial/uncertain states.
+- `checkout.ts`: organizer collection through the documented durable claim/settle
+  port. No URL is returned before settlement; saved references use GETs and
+  completed/expired sessions are never replaced automatically. Dev 2's current
+  state surface records per-contributor authorization intents; it is not an
+  implementation of the organizer-total claim/settle port.
 
-Next: pair the existing contract with Dev 2, wire organizer Checkout plus one
-verified webhook route, then
-run the actual sandbox acceptance before enabling any payment controls. Multi-card
-capture and partial recovery remain unfinished.
+Every provider write needs a durable operation-specific key and authorized claim.
+No LLM path may create, authorize or capture a payment. Do not enable payment
+controls until the state/adapter bridge, durable webhook reconciliation and real
+sandbox acceptance pass. Multi-card capture and group recovery remain unfinished.
 
-See `docs/CONTRACTS.md`, `docs/COMMERCE_AND_PAYMENTS.md` and `docs/DEV4_PAYMENT_DECISION.md`.
+See `docs/CONTRACTS.md`, `docs/COMMERCE_AND_PAYMENTS.md` and
+`docs/DEV4_PAYMENTS_HANDOFF.md` for the current integration boundary.
