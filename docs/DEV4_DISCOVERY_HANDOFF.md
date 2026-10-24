@@ -77,3 +77,20 @@ discovery-to-shopping handoff is verified offline against recorded source data;
 it was not established by this live sample. No repeated paid search was issued.
 UI cards and Alan's tool call remain consumer work. Payment worker/cancellation
 changes remain offline-tested helpers, not enabled payment controls.
+
+## Google Trends discovery (live, same pattern)
+
+`convex/research/trendJobs.ts` adds persisted Google Trends discovery for any short,
+confirmed published interest/wish (e.g. "pottery tools", "rock climbing", "film camera").
+
+1. `api.research.trendJobs.startDiscovery({roomId, publishedClueId, idempotencyKey})`
+   from an explicit human action. One capped run ($0.20), US, past 3 months.
+2. Subscribe to `api.research.trendJobs.getDiscovery({roomId})`. Show `sample.suggestions`
+   (query, Google Trends link, rising % or breakout) with the label "related US searches,
+   past 3 months; search interest, not sales". Show failed/uncertain status honestly.
+3. Shop it: `api.research.research.startResearch({..., trendJobId: sample.jobId})` with the
+   supporting published clue included. The first suggestion becomes the shopping query.
+4. `resumeDiscovery({roomId, jobId})` when `latestJob.canResume`.
+
+Names, numbers and long phrases are refused before any paid call. Needs Jonathon's deploy
+(new `trendJobs` table) before it works on the shared deployment.

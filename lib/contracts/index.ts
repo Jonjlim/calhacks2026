@@ -80,6 +80,33 @@ export type TrendObservation = TrendContext & {
   | { kind: "breakout_search" }
 );
 
+/** Live Google Trends discovery (Dev 4). Search interest, not sales or product popularity. */
+export interface TrendSignal {
+  kind: "top_search" | "rising_search" | "breakout_search";
+  popularityIndex?: number;
+  growthPercent?: number;
+}
+export interface TrendSuggestion {
+  query: string;
+  sourceUrl: string;
+  signals: TrendSignal[];
+}
+export interface TrendDiscoverySample {
+  mode: "live_sample";
+  label: string;
+  actor: string;
+  build: string;
+  providerRunId: string;
+  context: TrendContext;
+  publishedClueId: string;
+  suggestions: TrendSuggestion[];
+  evidenceSummary: { returnedRows: number; observations: number };
+}
+/** latestJob reuses the discovery job view shape shared with fashion discovery. */
+export interface TrendDiscoveryView {
+  latestJob: FashionDiscoveryJobView | null;
+  sample: (TrendDiscoverySample & { jobId: string }) | null;
+}
 // ---------- Errors / results ----------
 
 export type AppErrorCode =

@@ -1294,6 +1294,49 @@ only an unresolved current request becomes uncertain and queues a status follow-
 This prevents old unresolved inputs from blocking a later explicitly requested
 search while preserving the no-automatic-paid-retry rule for current uncertainty.
 
+### Live Google Trends discovery jobs (Dev 4)
+
+Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools;
+Dev 2 deploy review. Adds a room-indexed `trendJobs` table (`convex/research/trendSchema.ts`),
+isolated from payment and agent tables; no migration of existing rows. Room deletion
+cancels open trend jobs and purges them in the job-first phase, like `fashionJobs`.
+Provider: the already-evaluated `agenscrape~google-trends-scraper` build `1.0.21`
+on the existing Apify account; US, past 3 months, related searches only, at most
+10 dataset rows, $0.20 charge cap. Both social and trend sources share the bounded run
+client in `convex/research/apifyRun.ts` (one POST per start, no automatic retry).
+
+- `research/trendJobs.startDiscovery({roomId, publishedClueId, idempotencyKey})` is a
+  membership-checked mutation for one explicit human request. The seed is the shopping
+  phrase of one active, confirmed published interest/wish: 1–4 lowercase words, letters
+  only, at most 40 characters. Phrases containing a recipient or participant name token
+  are refused (`validation_failed`), never rewritten. Uncertain wording, exclusions and
+  private evidence never reach the provider. Pending is persisted before the paid start;
+  same-key retries, same-seed open/uncertain jobs and fresh (24 h) succeeded samples are
+  reused instead of starting another run.
+- `research/trendJobs.resumeDiscovery({roomId, jobId})` polls a known uncertain run only.
+- `research/trendJobs.getDiscovery({roomId})` returns `Result<TrendDiscoveryView>`:
+  latest job status (`FashionDiscoveryJobView` shape) and the current usable sample.
+- Completion keeps only gift-shaped related queries that contain every seed word and are
+  not local/informational (`discoverShoppingQueries`), up to 5, rising/breakout first.
+  Each `TrendSuggestion` keeps its Google Trends source URL and the observed signals
+  (`popularityIndex`, `growthPercent`, or breakout). Label: search interest, not sales.
+- `research/research.startResearch` adds optional `trendJobId`. It must be a fresh,
+  current, same-room succeeded job whose `publishedClueId` is among the search's clues;
+  otherwise `stale_job`. The first suggestion becomes the one shopping query; an empty
+  sample keeps the ordinary brief. Supplying both `fashionJobId` and `trendJobId` is
+  `validation_failed`. Budget, exclusions, ranking and job fences are unchanged; a trend
+  never becomes a per-product "trending" claim.
+
+```ts
+interface TrendSignal { kind: "top_search" | "rising_search" | "breakout_search"; popularityIndex?: number; growthPercent?: number }
+interface TrendSuggestion { query: string; sourceUrl: string; signals: TrendSignal[] }
+interface TrendDiscoverySample {
+  mode: "live_sample"; label: string; actor: string; build: string; providerRunId: string;
+  context: TrendContext; publishedClueId: string; suggestions: TrendSuggestion[];
+  evidenceSummary: { returnedRows: number; observations: number };
+}
+interface TrendDiscoveryView { latestJob: FashionDiscoveryJobView | null; sample: (TrendDiscoverySample & { jobId: string }) | null }
+```
 ### Live fashion discovery jobs (RC-014, Dev 4)
 
 Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools.
