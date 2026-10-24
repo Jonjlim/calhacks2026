@@ -137,17 +137,23 @@ function listingTokens(listing: ProductListing): string[] {
 }
 
 /**
- * The clue's last word is treated as its head noun ("kit" in "pottery starter
- * kit") and must appear, plus two thirds of the remaining words. Otherwise
- * "owns a pottery starter kit" would hide every pottery item, including classes.
+ * Short clues (up to three words, e.g. "pottery starter kit") must match every
+ * word, so owning a starter kit hides starter kits but keeps tool kits and
+ * classes. Longer clues need their last word (usually the head noun) plus two
+ * thirds of the rest, so wordy clues still block close matches.
  */
 function blocks(clueTokens: string[], titleTokens: Set<string>): boolean {
   const head = clueTokens[clueTokens.length - 1];
   if (head === undefined || !titleTokens.has(head)) return false;
   const matched = clueTokens.filter((t) => titleTokens.has(t)).length;
+  if (clueTokens.length <= 3) return matched === clueTokens.length;
   return matched >= Math.ceil((clueTokens.length * 2) / 3);
 }
 
+/**
+ * Ranking signal only. A neutral 0.5 for unknown prices orders results; it
+ * never establishes affordability or proposal feasibility.
+ */
 function budgetFitFor(
   listing: ProductListing,
   budgetMinor: number | undefined,

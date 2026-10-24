@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSearchBrief } from "./brief";
-import { FIXTURE_ROOM_ID, cluesAfterOwnership, clueLikesPottery } from "./fixtures";
+import { FIXTURE_ROOM_ID, cluesAfterOwnership, clueLikesPottery } from "./fixtures/maya";
 import { cluePhrase, contentTokens } from "./text";
 
 describe("buildSearchBrief", () => {
@@ -69,6 +69,6 @@ describe("text helpers", () => {
   });
 
   it("merges simple synonyms and plurals", () => {
-    expect(contentTokens("Beginner Ceramics Lessons")).toEqual(["starter", "pottery", "class"]);
+    expect(contentTokens("Beginner Pottery Lessons")).toEqual(["starter", "pottery", "class"]);
   });
 });

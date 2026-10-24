@@ -6,7 +6,9 @@ import {
   cluesAfterOwnership,
   cluesBeforeOwnership,
   fixtureListings,
-} from "./fixtures";
+} from "./fixtures/maya";
+import recorded from "./fixtures/johnvc-shopping.json";
+import { normalizeDataset } from "./normalize";
 import { combineScore, filterListings, rankListings } from "./score";
 
 const rank = (clues: PublishedClue[], listings: ProductListing[] = fixtureListings) =>
@@ -139,5 +141,47 @@ describe("determinism and limits", () => {
   it("combineScore applies the documented weights", () => {
     expect(combineScore({ personalRelevance: 1, budgetFit: 1, trendSignal: 1 })).toBeCloseTo(1);
     expect(combineScore({ personalRelevance: 1, budgetFit: 0, trendSignal: 0 })).toBeCloseTo(0.7);
+  });
+});
+
+describe("ownership matching on recorded Apify data", () => {
+  const listings: ProductListing[] = normalizeDataset(recorded.pages, recorded.retrievedAt).map(
+    (l, i) => ({ ...l, id: `rec_${i}`, roomId: "room_maya", jobId: "rj_recorded", status: "active" }),
+  );
+  const titles = (recs: { listingId: string }[]) =>
+    recs.map((r) => listings.find((l) => l.id === r.listingId)?.title);
+
+  it("normalizes the recorded sample", () => {
+    expect(listings.length).toBe(4);
+  });
+
+  it("keeps pottery tool kits when she owns a starter kit", () => {
+    const kept = titles(rank(cluesAfterOwnership, listings));
+    expect(kept).toEqual(
+      expect.arrayContaining(["Kemper Pottery Tool Kit", "Amaco Pottery Tool Kit", "Mudtools Do All Trim Tool"]),
+    );
+  });
+
+  it("does not treat a ceramic mug as matching a pottery interest", () => {
+    const mug = rank(cluesAfterOwnership, listings).find((r) =>
+      listings.find((l) => l.id === r.listingId)?.title.includes("Mug"),
+    );
+    expect(mug?.publishedClueIds).toEqual([]);
+  });
+});
+
+describe("ownership matching variants", () => {
+  const kit = (id: string, title: string): ProductListing => ({ ...fixtureListings[0]!, id, title });
+
+  it("excludes starter kits worded differently but keeps other kits", () => {
+    const listings = [
+      kit("a", "Pottery Kit for Beginners"),
+      kit("b", "Complete Pottery Starter Kit, 20 Piece"),
+      kit("c", "Pottery Tool Kit"),
+      kit("d", "Pottery Wheel Starter Class"),
+    ];
+    const { kept, excluded } = filterListings({ listings, clues: [clueOwnsStarterKit] });
+    expect(excluded.map((e) => e.listingId).sort()).toEqual(["a", "b"]);
+    expect(kept.map((l) => l.id).sort()).toEqual(["c", "d"]);
   });
 });

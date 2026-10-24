@@ -3,7 +3,7 @@
  * Every listing is `manual_fixture` and must be labeled as such in the UI.
  * Never promote these to `apify`.
  */
-import type { ProductListing, PublishedClue } from "../../lib/contracts";
+import type { ProductListing, PublishedClue } from "../../../lib/contracts";
 
 export const FIXTURE_ROOM_ID = "room_maya";
 export const FIXTURE_JOB_ID = "rj_fixture";

@@ -20,8 +20,6 @@ const STOPWORDS = new Set([
 const CANONICAL: Record<string, string> = {
   beginner: "starter",
   beginners: "starter",
-  ceramic: "pottery",
-  ceramics: "pottery",
   classes: "class",
   lesson: "class",
   lessons: "class",
