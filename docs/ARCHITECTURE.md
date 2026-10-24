@@ -26,6 +26,7 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | D6 | Price and availability require a source URL and `retrievedAt`. | Judges and buyers must be able to check. | Model-invented products or stale remembered prices. |
 | D7 | Contracts first; every workstream mocks the others. | Four people, 36 hours. | Implementing against implicit types. |
 | D8 | A working demo beats feature count and sponsor count. | Hackathon scoring happens on what runs. | Building every track integration. |
+| D9 | Product cards show real source photos (P0). Screenshot clues (P1-C) and voice notes (P2) are converted to private text before extraction, and the uploaded file is deleted. | Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline is easier to secure than three. | Storing raw images or audio; a separate image-clue pipeline; AI-generated product images. |
 
 ### Stack evaluation
 
@@ -40,6 +41,9 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
 | Vercel + Convex | Confirmed hosting. No extra worker host in P0. |
 | Bitdeer / Factory / Bright Data | Conditional sponsor options. Adopt only after a spike shows a real product role. |
+| Convex file storage | P1-C / P2 only. Holds screenshots and voice notes until they are read, then deletes them. |
+| Vision input on the chosen LLM | P1-C. **Unverified.** Must work on the same provider; no second LLM SDK. |
+| Speech-to-text API | P2. **Unverified** new provider. Spike before any code depends on it. |
 
 ## Component diagram
 

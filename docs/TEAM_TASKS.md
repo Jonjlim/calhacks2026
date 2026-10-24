@@ -80,6 +80,9 @@ In-memory `roomQuery`, `chatQuery`, `myProposedCluesQuery`, `publishedCluesQuery
 | PX-017 | Payment status panel (test-mode labeling) | P1-B | PX-014 |
 | PX-018 | Wrap animation and recipient reveal | P2 | PX-009 |
 | PX-019 | Advanced React Flow interactions | P2 | PX-008 |
+| PX-020 | Product photo on every card, with a labeled “no photo from source” placeholder | P0 | PX-006 |
+| PX-021 | Screenshot drop zone (1–3 images), upload progress, “deleted after reading” copy | P1-C | PX-004, BE-018 |
+| PX-022 | Hold-to-record voice note (60 s max, “record yourself only”) | P2 | PX-021, AI-017 |
 
 ---
 
@@ -142,6 +145,7 @@ Accept fixture `ProposedClue` and `ProductListing` JSON.
 | BE-015 | Payment status fields and freeze-on-capture | P1-B | BE-011 |
 | BE-016 | Recipient preference tables + grants (no buyer reads) | P1-A | BE-001 |
 | BE-017 | Cascade delete room | P2 | BE-006 |
+| BE-018 | `generateEvidenceUploadUrl` + `importMediaEvidence`: owner-only file storage, type/size limits, delete file after read | P1-C | BE-004 |
 
 ---
 
@@ -202,6 +206,8 @@ Fixture snapshots; later live `getRoomSnapshot`.
 | AI-013 | Buyer `queryRecipientAgent` integration | P1-A | AI-012 |
 | AI-014 | Quiet-mode (`@unwrap` only) for demo control | P0 | AI-003 |
 | AI-015 | Embeddings / second model | P2 | — |
+| AI-016 | Screenshot transcription → `PrivateMessage` rows, then normal extraction; verify the model accepts images in Phase 0 | P1-C | AI-002, BE-018 |
+| AI-017 | Voice-note speech-to-text → one `PrivateMessage`; provider spike first | P2 | AI-016 |
 
 ---
 
@@ -266,6 +272,7 @@ RC-001, RC-002, RC-003.
 | RC-013 | Cancel / refund / partial-capture recovery | P1-B | RC-012 |
 | RC-014 | TrendObservation + sourced badge | P2 | RC-005 |
 | RC-015 | Second product source or custom Actor | P2 | RC-003 |
+| RC-016 | Keep source photos: validate `imageUrl`, prefer listings with photos in the visible set, test it | P0 | RC-003, RC-005 |
 
 ---
 
@@ -294,6 +301,9 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | PX-017 | Payment panel | Dev 1 | P1-B | PX-014 | Status | Sandbox labeled | M |
 | PX-018 | Wrap / reveal | Dev 1 | P2 | PX-009 | Animation | Only after real success state | M |
 | PX-019 | Advanced map | Dev 1 | P2 | PX-008 | React Flow | Does not break mobile | L |
+| PX-020 | Product photos | Dev 1 | P0 | PX-006 | Card image | Placeholder when missing; no stock images | S |
+| PX-021 | Screenshot upload | Dev 1 | P1-C | PX-004, BE-018 | Drop zone | 3-file limit; deletion copy visible | S |
+| PX-022 | Voice note UI | Dev 1 | P2 | PX-021, AI-017 | Recorder | 60 s cap | S |
 | BE-001 | Schema | Dev 2 | P0 | — | `schema.ts` | Tables match contracts | M |
 | BE-002 | Auth + rooms | Dev 2 | P0 | BE-001 | create/join | Token ≠ private access | M |
 | BE-003 | Chat | Dev 2 | P0 | BE-002 | Messages | Two-client sync | S |
@@ -311,6 +321,7 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | BE-015 | Pay states | Dev 2 | P1-B | BE-011 | Status enums | Freeze on capture | M |
 | BE-016 | Recipient tables | Dev 2 | P1-A | BE-001 | Isolated tables | Buyer query denied | M |
 | BE-017 | Room delete | Dev 2 | P2 | BE-006 | Cascade | Private rows gone | S |
+| BE-018 | Media evidence | Dev 2 | P1-C | BE-004 | Upload + source rows | Peer cannot read; file gone after read | M |
 | AI-001 | Zod contracts | Dev 3 | P0 | — | Schemas | Invalid model output fails | S |
 | AI-002 | Extractor | Dev 3 | P0 | AI-001 | ProposedClues | Pottery + ownership demo | M |
 | AI-003 | Intent policy | Dev 3 | P0 | AI-001 | Decisions | Default listen | M |
@@ -326,6 +337,8 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | AI-013 | A2A query | Dev 3 | P1-A | AI-012 | AgentReply | Sanitized guidance | M |
 | AI-014 | Quiet mode | Dev 3 | P0 | AI-003 | Flag | Demo-safe | S |
 | AI-015 | Embeddings | Dev 3 | P2 | — | — | Not needed for P0 | L |
+| AI-016 | Screenshot clues | Dev 3 | P1-C | AI-002, BE-018 | Transcribe + extract | Synthetic chat screenshot yields the pottery clue | M |
+| AI-017 | Voice clues | Dev 3 | P2 | AI-016 | Transcribe + extract | Transcript is contributor-attributed | M |
 | RC-001 | Fixture listings | Dev 4 | P0 | — | JSON + schema | Labeled fixtures | S |
 | RC-002 | Source spike | Dev 4 | P0 | — | Note | Pass/fail recorded | S |
 | RC-003 | Live normalize | Dev 4 | P0 | RC-001, RC-002 | Listings | URL + price + time | M |
@@ -341,6 +354,7 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | RC-013 | Recovery | Dev 4 | P1-B | RC-012 | Paths | Partial capture honest | L |
 | RC-014 | Trends | Dev 4 | P2 | RC-005 | Observation | Real source or omit | M |
 | RC-015 | Extra source | Dev 4 | P2 | RC-003 | Actor/API | Not a logo-only add | L |
+| RC-016 | Listing photos | Dev 4 | P0 | RC-003, RC-005 | `imageUrl` kept | Photo-first visible set | S |
 
 ---
 
@@ -351,7 +365,7 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | 0–3 | PX-001–002 | BE-001–002 | AI-001–002 | RC-001–002, RC-009 |
 | 3–10 | PX-003–006 | BE-003–009 | AI-003–004, AI-014 | RC-003–005 |
 | 10–20 | PX-007–015 | BE-010–014, BE-006 | AI-005–011 | RC-006–008 |
-| 20–26 | Polish; PX-016 if go | BE-016 if go | AI-012–013 if go | Help C3; no new source |
+| 20–26 | Polish; PX-021 or PX-016 if go | BE-018 or BE-016 if go | AI-016 first, then AI-012–013 if go | Help C3; no new source |
 | 22–28 | PX-017 if go | BE-015 if go | Stay off payments | RC-010+ only if go |
 | 28–36 | Demo drive | Retest privacy | Quiet-mode | Fresh listings |
 

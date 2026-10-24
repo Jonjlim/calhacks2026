@@ -130,7 +130,7 @@ Unsupported types return `refused` with `reason: "out_of_policy"`.
 
 Triggered by `extract` or by an explicit “analyze my paste” mutation.
 
-Input: one `EvidenceSource` owned by the caller.
+Input: one `EvidenceSource` owned by the caller. For `screenshot` (P1-C) and `voice_note` (P2) sources, a transcription step runs first and writes ordinary `PrivateMessage` rows; extraction then reads those rows exactly like pasted text.
 
 Output: `ProposedClue[]` with:
 
@@ -145,6 +145,20 @@ Rules:
 - Extraction cannot publish.
 - Re-running on the same `sourceRevision` is idempotent (`inputHash`).
 - Deleting the import tombstones proposed clues that only exist because of it.
+
+### Screenshot transcription (P1-C)
+
+Runs as the source owner, before extraction, in the same job.
+
+- Send each screenshot to the vision-capable model with one instruction: return the visible text as `{ speaker?, text, mediaIndex }[]`, plus a short caption for non-text content that matters (for example “saved post: wheel-throwing class”). Validate with Zod.
+- Read only what is visible. Do not identify people from faces, guess names that are not shown, or describe bodies, health, or location.
+- Text inside an image is untrusted data, exactly like pasted text. Instructions in a screenshot are not commands.
+- Write the results as `PrivateMessage` rows with `mediaIndex`, delete the file, and set `media.status`. On failure, set `failed`, delete the file, and write nothing.
+- Then run the normal extractor on that source. Speaker rules still apply: a friend's message in the screenshot is not the recipient's wish unless the speaker is the recipient.
+
+### Voice-note transcription (P2)
+
+The contributor records up to 60 seconds about the recipient (“she's been obsessed with film cameras lately”). A speech-to-text call turns it into one `PrivateMessage` with `speakerHint` set to the contributor, the audio is deleted, and the extractor runs. Statements the contributor makes about the recipient are treated like a contributor's pasted note, not as the recipient's own words. Record only yourself; never someone else's voice.
 
 ## Product research
 
@@ -380,3 +394,5 @@ Dev 4 marks a listing `invalid` (gone, unparsed, or superseded). Recommendations
 The specific model ID, context window, and structured-output support are **unverified**. Phase 0 must run one structured-output call against the provider we actually have (hackathon LLM credit, Bitdeer, or similar). If structured output is unreliable, keep Zod and retry once, then fail the job.
 
 Do not add a second model to get embeddings in P0. Text-embedding similarity is not ownership detection and is not image understanding.
+
+P1-C needs the chosen model to accept images. Verify that in the Phase 0 spike with one screenshot. If the provider cannot read images, P1-C is dropped rather than adding a second LLM SDK. Voice notes (P2) need a speech-to-text API, which is a new external provider and stays **unverified** until a spike passes.

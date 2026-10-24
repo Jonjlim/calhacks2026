@@ -48,7 +48,7 @@ P0 ends at a versioned, approved proposal (pledges, not charges). P1 features ha
 1. Organizer creates a room: recipient display name, occasion, deadline, currency `USD`, optional budget ceiling.
 2. Friends join by invite link or QR. Join grants room membership, not the right to read private imports or other people’s caps.
 3. The room chat is the collaborative surface. People talk like friends. The buyer agent participates when it has a reason — not on every message.
-4. A contributor may paste selected text or import one supported text export. Unwrap proposes typed clues with source IDs. The contributor corrects, discards, or publishes.
+4. A contributor may paste selected text or import one supported text export. With P1-C, they may also drop in up to three screenshots (a group chat, a saved post, a wishlist). Unwrap proposes typed clues with source IDs. The contributor corrects, discards, or publishes.
 5. Published clues become room knowledge: interests, wishes, exclusions, ownership, timing, uncertain inferences.
 6. Research returns a bounded set of live listings (target 6–12 visible candidates).
 7. The group compares, votes or reacts, and drops one gift into the shared box.
@@ -144,6 +144,7 @@ Must work end to end with two participants, no Stripe, and no recipient-agent ne
 - Recipient preferences and exclusions as room-published clues
 - One working external product source
 - Product candidates with source links and observed prices
+- Product photos on every card when the source provides one, with a clear placeholder when it does not
 - Shortlist or lightweight gift map
 - Shared selection, comparison, or voting
 - Private contribution limits
@@ -163,9 +164,15 @@ Stripe test mode or a verified sponsor sandbox. Provider-hosted collection. Revi
 
 If P1-B slips, keep pledges and optionally one organizer checkout. Never say a pledge is a charge.
 
+**P1-C Screenshot clues**
+
+A contributor uploads up to three screenshots of a chat, a social post, or a wishlist. A vision-capable model reads the visible text into private messages, then the normal extractor proposes clues from them. The contributor reviews and publishes exactly as with pasted text. The image itself is deleted after it is read. This is the strongest non-text input for the demo: “Jordan dropped in a screenshot, and Unwrap noticed Maya saved three wheel-throwing posts.”
+
+P1-C depends only on the P0 clue flow and a model that accepts images. It does not depend on P1-A or P1-B.
+
 ### P2 — Stretch and polish
 
-Social/trend ranking, advanced React Flow, wrapping animation, extra product APIs, custom Apify Actors, Factory Droid, screenshot OCR / richer imports, recipient reveal, deeper personalization.
+Social/trend ranking, advanced React Flow, wrapping animation, extra product APIs, custom Apify Actors, Factory Droid, voice-note clues (record a short note, transcribe it into a private message, extract clues), other richer imports, recipient reveal, deeper personalization.
 
 Sponsor integrations must do real work in the product. Stop adding them when the P0 demo is at risk.
 
@@ -187,7 +194,7 @@ A teammate who was not in the architecture discussion should be able to:
 1. Create a room and join it from a second browser.
 2. Paste a synthetic conversation, see proposed clues, publish two of them, and leave one unpublished.
 3. Watch the other participant see only the published clues and the chat — not the raw import and not private caps.
-4. Get at least one live (or honestly timestamped) product card with a working source link and an observed price.
+4. Get at least one live (or honestly timestamped) product card with a product photo (or a visible “no photo from source” placeholder), a working source link, and an observed price.
 5. Open “Why this?” and see the published clues that justify it.
 6. Put one gift in the box, set two different caps, and see shares recompute.
 7. Approve a revision, change the gift or a cap, and watch the previous approvals become invalid.
@@ -205,6 +212,6 @@ If time gets tight, keep this spine and drop everything else:
 
 **Room → chat/clues → one sourced product list → one selected gift → allocated proposal → revision-aware approvals.**
 
-Drop in this order: trend ranking, reveal animation, React Flow polish, Factory/Droid, custom Actors, recipient agent, Stripe.
+Drop in this order: trend ranking, voice notes, reveal animation, React Flow polish, Factory/Droid, custom Actors, recipient agent, screenshot clues, Stripe.
 
 Do not drop source integrity, private caps, or approval invalidation to make room for a sponsor logo.

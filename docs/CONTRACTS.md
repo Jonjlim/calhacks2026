@@ -136,9 +136,14 @@ interface EvidenceSource {
   id: string;
   roomId: string;
   participantId: string;
-  kind: "paste" | "text_export";
+  kind: "paste" | "text_export" | "screenshot" | "voice_note"; // screenshot: P1-C, voice_note: P2
   label: string;
   sourceRevision: number;
+  /** screenshot / voice_note only. The uploaded file is deleted once read. */
+  media?: {
+    count: number; // screenshots: 1–3; voice notes: 1
+    status: "uploaded" | "transcribed" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -146,13 +151,17 @@ interface PrivateMessage {
   id: string;
   sourceId: string;
   participantId: string;
-  body: string;
+  body: string; // pasted text, or text read from a screenshot / voice note
   saidAt?: number;
   speakerHint?: string;
+  /** Which screenshot (0-based) the text came from; screenshot sources only. */
+  mediaIndex?: number;
 }
 ```
 
 Access: owner only, plus extractor action as that owner.
+
+Screenshots and voice notes become ordinary `PrivateMessage` rows before clue extraction, so `ProposedClue.sourceMessageIds` and every downstream rule stay the same. The raw file lives in Convex file storage only until transcription finishes, then it is deleted and `media.status` becomes `deleted` (or `failed`).
 
 ### Proposed clue
 
@@ -193,7 +202,7 @@ interface PublishedClue {
   publisherId: string;
   kind: ProposedClue["kind"];
   text: string;
-  sourceKind: "paste" | "import" | "chat" | "manual";
+  sourceKind: "paste" | "import" | "chat" | "manual" | "screenshot" | "voice_note";
   sourceMessageIds: string[];
   excerpt?: string;
   status: "active" | "withdrawn" | "source_withdrawn";
@@ -307,6 +316,8 @@ interface ProductListing {
   status: "active" | "invalid" | "stale";
 }
 ```
+
+`imageUrl` stays optional because some sources omit it, but it is expected for P0 product cards. Dev 4 keeps the provider's public thumbnail URL, validated as a public HTTPS URL, and prefers listings with photos when filling the visible 6–12 candidates. Dev 1 shows a labeled placeholder when it is missing and never substitutes a stock or AI-generated image.
 
 ### Product normalization helpers (RC-001 / RC-003)
 
@@ -592,6 +603,19 @@ May enqueue `AgentJob` `evaluate_thread`.
 | Output | `{ source: EvidenceSource, messages: PrivateMessage[] }` |
 | Access | Caller becomes owner |
 | Errors | `unauthorized`, `validation_failed` |
+
+### `generateEvidenceUploadUrl` / `importMediaEvidence` (P1-C screenshots, P2 voice notes)
+
+| | |
+| --- | --- |
+| Owner | Dev 2 (storage, source rows), Dev 3 (transcription action) |
+| Consumers | Dev 1 |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → one-time Convex upload URL. `importMediaEvidence`: `{ roomId, kind: "screenshot" \| "voice_note", label, storageIds }` |
+| Output | `{ source: EvidenceSource, jobId }` |
+| Access | Caller becomes owner. Storage IDs must come from that caller's upload URLs. |
+| Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
+
+Limits: screenshots PNG/JPEG/WebP, at most 3 files, 5 MB each. Voice notes: one file, at most 60 seconds. The action reads the media into `PrivateMessage` rows, deletes the file, then runs the normal `extractClues` path on that source.
 
 ### `extractClues`
 
