@@ -8,9 +8,12 @@
  *                         proposalRevisions, approvals, votes, researchJobs
  *   contributor_private:  evidenceSources, privateMessages, proposedClues,
  *                         contributionLimits
- *   server-only:          agentJobs, agentDecisions, askedSlots
+ *   server-only:          agentJobs, agentDecisions, askedSlots, evidenceMedia,
+ *                         mediaUploadGrants
  *
- * Recipient tables are server/owner-only and optional. Payments remain P1-B.
+ * Recipient tables are server/owner-only and optional.
+ * P1-B payment tables (paymentAttempts, providerEvents) are server-written;
+ * clients read only their own attempt plus group counts via payments/state.ts.
  *
  * authTables (users, authSessions, ...) belong to Convex Auth and are never
  * returned by room queries.
@@ -41,6 +44,8 @@ export default defineSchema({
     inviteToken: v.string(),
     createdBy: v.string(),
     createdAt: v.number(),
+    /** Set by rooms.deleteRoom; the room is unreachable from then on while purgeRoomBatch removes its rows. */
+    deletedAt: v.optional(v.number()),
   }).index("by_invite_token", ["inviteToken"]),
 
   participants: defineTable({
@@ -65,6 +70,8 @@ export default defineSchema({
     responseAgentJobId: v.optional(v.id("agentJobs")),
     replyToSlot: v.optional(v.string()),
     citations: v.optional(V.agentCitations),
+    /** Author deleted the message: body is overwritten with "" and the row stays as a tombstone. */
+    deletedAt: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_idempotency", ["roomId", "clientIdempotencyKey"]),
@@ -100,6 +107,16 @@ export default defineSchema({
   })
     .index("by_source", ["sourceId"])
     .index("by_storage", ["storageId"]),
+
+  /** One row per issued evidence upload URL; server-only. `storageId` is set once a file is claimed against it. */
+  mediaUploadGrants: defineTable({
+    roomId: v.id("rooms"),
+    participantId: v.id("participants"),
+    issuedAt: v.number(),
+    storageId: v.optional(v.id("_storage")),
+  })
+    .index("by_room_participant_issued", ["roomId", "participantId", "issuedAt"])
+    .index("by_issued", ["issuedAt"]),
 
   privateMessages: defineTable({
     sourceId: v.id("evidenceSources"),
@@ -389,6 +406,35 @@ export default defineSchema({
   })
     .index("by_demo_memory", ["demoKey", "memoryId"])
     .index("by_room_memory", ["roomId", "memoryId"]),
+
+  /** P1-B. Server-written; clients only see their own attempt through payments/state.ts views. */
+  paymentAttempts: defineTable({
+    roomId: v.id("rooms"),
+    revisionId: v.id("proposalRevisions"),
+    participantId: v.id("participants"),
+    provider: V.paymentProvider,
+    providerObjectId: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    clientIdempotencyKey: v.string(),
+    amountMinor: v.number(),
+    currency: V.currency,
+    status: V.paymentAttemptStatus,
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_revision", ["revisionId"])
+    .index("by_revision_participant", ["revisionId", "participantId"])
+    .index("by_provider_object", ["providerObjectId"]),
+
+  /** P1-B webhook ledger. Server-only; providerEventId is unique. */
+  providerEvents: defineTable({
+    provider: V.paymentProvider,
+    providerEventId: v.string(),
+    type: v.string(),
+    providerObjectId: v.optional(v.string()),
+    receivedAt: v.number(),
+  }).index("by_provider_event", ["provider", "providerEventId"]),
 
   researchJobs: defineTable({
     providerRunId: v.optional(v.string()),
