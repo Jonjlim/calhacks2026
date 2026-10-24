@@ -891,3 +891,14 @@ Dev 3 may write extraction results as JSON fixtures matching `ProposedClue`.
 Dev 4 may ship 3–6 `manual_fixture` listings labeled as fixtures, plus one live-normalized listing after the spike.
 
 Do not silently promote fixtures to `source: "apify"`.
+
+### `giftWorlds` (opt-in zoom-out summaries)
+
+| | |
+| --- | --- |
+| Owner | Dev 3 (backend), Dev 1 (UI / world scene) |
+| Mutations | `shareWorld({ roomId, recipientAlias?, highlightClueIds? })`, `unshareWorld({ roomId })` (organizer only) |
+| Queries | `getMyWorldShare({ roomId })` (members), `listWorlds({ limit? })` (any signed-in user) |
+| Output | `PublicWorld { id, isSample, mine, occasion, recipientAlias, budgetBand, friends, inputs: { kind, count }[], highlights: string[] (≤3, ≤80 chars), state: "exploring" \| "chosen", outcome?: { title, priceMinor?, priceStatus, source }, sharedAt }` plus `WorldAggregate` |
+| Privacy | Never exposes room id, user ids, invite token, real names, chats, contribution limits, or private imports. Highlights are organizer-picked active clue lines with names replaced; sensitive text is rejected. |
+| Errors | `unauthorized`, `validation_failed`, `refused` (sample seeding disabled) |
