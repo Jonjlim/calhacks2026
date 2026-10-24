@@ -2,8 +2,9 @@
 
 import { useConvex, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useSession } from "@/components/providers/ConvexClientProvider";
@@ -18,12 +19,19 @@ import {
   recommendationsQuery,
   roomQuery,
 } from "@/lib/mocks/queries";
+import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
+import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
 import { RoomLayout } from "./RoomLayout";
 import type { RoomActions, RoomData } from "./types";
 
-export function RoomScreen({ roomId }: { roomId: string }) {
+export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surface?: RoomSurface }) {
   const convex = useConvex();
-  return convex ? <LiveRoomGate roomId={roomId} /> : <PreviewRoom roomId={roomId} />;
+  const router = useRouter();
+  // A phone opening the shared-stage URL is sent to its controller (and vice versa a laptop stays on the stage).
+  useEffect(() => {
+    if (surface === "stage" && guessSurface() === "phone") router.replace(phonePath(roomId));
+  }, [surface, roomId, router]);
+  return convex ? <LiveRoomGate roomId={roomId} surface={surface} /> : <PreviewRoom roomId={roomId} />;
 }
 
 /** No backend configured: render fixtures read-only and say so. */
@@ -49,7 +57,7 @@ const ROOM_ID_SHAPE = /^[a-z0-9]{20,40}$/;
 
 const NOT_A_ROOM: AppError = { code: "not_found", message: "That link doesn't point to a gift room." };
 
-function LiveRoomGate({ roomId }: { roomId: string }) {
+function LiveRoomGate({ roomId, surface }: { roomId: string; surface: RoomSurface }) {
   const session = useSession();
   if (!ROOM_ID_SHAPE.test(roomId)) return <RoomAccessError error={NOT_A_ROOM} />;
   if (session.status === "error") {
@@ -64,7 +72,7 @@ function LiveRoomGate({ roomId }: { roomId: string }) {
   if (session.status !== "ready") return <RoomMessage title="Opening the room…" />;
   return (
     <ErrorBoundary fallback={<RoomMessage title="The room could not load"><p>A backend request failed. Reload to try again; this does not mean the room was deleted.</p></RoomMessage>}>
-      <LiveRoom roomId={roomId as Id<"rooms">} />
+      <LiveRoom roomId={roomId as Id<"rooms">} surface={surface} />
     </ErrorBoundary>
   );
 }
@@ -73,7 +81,7 @@ function value<T>(res: Result<T> | undefined, fallback: T): T {
   return res && res.ok ? res.value : fallback;
 }
 
-function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
+function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurface }) {
   const args = { roomId };
   const roomRes = useQuery(api.rooms.getRoom, args);
   const messagesRes = useQuery(api.messages.listMessages, args);
@@ -168,18 +176,22 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
     activity: activityRes?.ok ? activityRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
   };
-  const unavailable = <RoomLayout data={{ ...data, councilUnavailable: true }} actions={actions} />;
+  const unavailable = <RoomSurfaceView surface={surface} data={{ ...data, councilUnavailable: true }} actions={actions} />;
   return (
     <ErrorBoundary fallback={unavailable}>
-      <RoomWithCouncil roomId={roomId} data={data} actions={actions} />
+      <RoomWithCouncil roomId={roomId} data={data} actions={actions} surface={surface} />
     </ErrorBoundary>
   );
 }
 
 /** An optional council query must not turn a valid gift room into “not found”. */
-function RoomWithCouncil({ roomId, data, actions }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions }) {
+function RoomWithCouncil({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
   const result = useQuery(api.councilRoom.state, { roomId });
-  return <RoomLayout data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
+  return <RoomSurfaceView surface={surface} data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
+}
+
+function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {
+  return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {

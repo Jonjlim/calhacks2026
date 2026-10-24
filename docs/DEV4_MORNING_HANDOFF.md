@@ -99,3 +99,23 @@ Private clue isolation, live voting, live cap privacy, and browser approval
 invalidation remain unverified in this deployment. Server-side logs were requested
 from Alex. No paid provider calls, purchases, shared-branch pushes or deployments
 were performed by this test.
+
+## Shared-dev publication preparation (October 24, after personal dev setup)
+
+Alex configured personal dev deployment `cool-bat-724`, set up auth, and added the
+four model/product variables. A live API preflight on that deployment passed two
+independent sign-ins, room creation/invite/join, a two-member room read, and an
+empty `councilRoom:state` response without AI or Apify calls. Alex then reported
+the browser flow works. This is distinct from the earlier production failure.
+
+Before publishing, fetched shared dev at `18bcd59` and integrated its desktop
+stage / phone controller, real invite QR and avatar changes. Kept Alan’s photo,
+private clue review, chat, activity/stats and optional sharing tools accessible
+through the stage’s room-tools drawer and the phone’s collapsible room tools.
+This is integration wiring, not a replacement for either developer’s layout.
+Kept the newer surface routing and the council failure isolation. Restored the
+team’s exact lockfile after installing its existing pinned QR dependency.
+
+The initial merged checks passed 364 tests (3 live-only skipped) and app/Convex
+TypeScript. Production build and final remote race check are required before the
+requested shared-dev push. No production Convex deployment is part of this push.

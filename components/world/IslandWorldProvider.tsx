@@ -20,9 +20,14 @@ export interface RoomWorld {
   roomId: string;
   events: CouncilEvent[];
   decorations: DecorationSpec[];
-  participants: { id: string; displayName: string }[];
+  participants: { id: string; displayName: string; joinedAt?: number }[];
   clues: { id: string; kind: string; publisherId: string }[];
+  /** Clicking a meaningful object in the scene opens its readable overlay in the DOM. */
+  onPick?: (target: PickTarget) => void;
 }
+
+/** Things in the 3D room a viewer can click to read about. */
+export type PickTarget = { kind: "jar"; jar: "wish" | "interest" | "moment" } | { kind: "scout" } | { kind: "charm" } | { kind: "agent"; actor: CouncilActor };
 /** @deprecated kept for older imports; use RoomWorld. */
 export type IslandCouncil = RoomWorld;
 
@@ -57,7 +62,9 @@ export function useIslandWorld() {
 /** Root-layout owner: route changes replace DOM panels while this Canvas stays mounted. */
 export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const roomId = pathname.startsWith("/room/") ? pathname.split("/")[2] : undefined;
+  // The phone controller (/room/:id/phone) never loads the 3D world.
+  const phone = pathname.startsWith("/room/") && pathname.split("/")[3] === "phone";
+  const roomId = pathname.startsWith("/room/") && !phone ? pathname.split("/")[2] : undefined;
   const visible = pathname === "/" || !!roomId;
   const reducedMotion = useReducedMotion() ?? false;
   const phase = useIntroPhase();

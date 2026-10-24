@@ -3,7 +3,8 @@
 import { useFrame } from "@react-three/fiber";
 import { Component, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { AVATAR_IDS, AVATAR_WORLD_SCALE, StorybookAvatar } from "@/components/characters/StorybookAvatar";
+import { AVATAR_WORLD_SCALE, StorybookAvatar } from "@/components/characters/StorybookAvatar";
+import { avatarForIndex, inJoinOrder } from "@/lib/room/avatars";
 import { CouncilMember } from "@/components/council/CouncilMember";
 import { Decoration } from "@/components/council/Decoration";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilEvent, decorationsFrom, reduceCouncil } from "@/lib/council/contracts";
@@ -48,8 +49,6 @@ const JARS = {
   moment: { x: 0.55, z: 0.15, tint: "#f3b9c4" },
 } as const;
 
-/** Spirit used for each friend, by join order: stable and the same for everyone in the room. */
-export const avatarForIndex = (i: number) => AVATAR_IDS[i % AVATAR_IDS.length]!;
 
 function buildRoom(): KitBuilder {
   const kit = new KitBuilder();
@@ -251,13 +250,49 @@ function HangingLantern({ x, z, phase }: { x: number; z: number; phase: number }
   );
 }
 
-function Jar({ kind }: { kind: keyof typeof JARS }) {
-  const j = JARS[kind];
+/** Folded notes stacked inside a jar: one per real memory, so the fill is the count. */
+function JarNotes({ count, tint }: { count: number; tint: string }) {
+  const notes = useMemo(() => {
+    const rng = mulberry32(count * 13 + 7);
+    return Array.from({ length: Math.min(count, 9) }, (_, i) => ({ y: 0.06 + i * 0.03, ry: rng() * 6, rz: (rng() - 0.5) * 0.4, x: (rng() - 0.5) * 0.08, z: (rng() - 0.5) * 0.08 }));
+  }, [count]);
   return (
-    <group position={[j.x, TABLE_Y + 0.05, j.z]}>
+    <>
+      {notes.map((n, i) => (
+        <mesh key={i} position={[n.x, n.y, n.z]} rotation={[0, n.ry, n.rz]} material={paint(i % 3 ? "note-paper" : `note-${tint}`, { color: i % 3 ? "#fbf3e3" : tint })}>
+          <boxGeometry args={[0.13, 0.018, 0.09]} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+export function Jar({ kind, count, onPick, scale = 1, position }: { kind: keyof typeof JARS; count: number; onPick?: () => void; scale?: number; position?: [number, number, number] }) {
+  const j = JARS[kind];
+  const [hover, setHover] = useState(false);
+  useEffect(() => () => void (document.body.style.cursor = ""), []);
+  return (
+    <group
+      position={position ?? [j.x, TABLE_Y + 0.05, j.z]}
+      scale={scale * (hover ? 1.08 : 1)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick?.();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        document.body.style.cursor = "";
+      }}
+    >
+      <JarNotes count={count} tint={j.tint} />
       <mesh position={[0, 0.17, 0]}>
         <cylinderGeometry args={[0.14, 0.13, 0.34, 18, 1, true]} />
-        <meshToonMaterial color={j.tint} transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} />
+        <meshToonMaterial color={j.tint} transparent opacity={hover ? 0.55 : 0.4} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <mesh position={[0, 0.36, 0]} material={paint("jar-cork", { color: "#a9774f" })}>
         <cylinderGeometry args={[0.09, 0.1, 0.05, 12]} />
@@ -265,6 +300,43 @@ function Jar({ kind }: { kind: keyof typeof JARS }) {
       <mesh position={[0, 0.03, 0]} material={paint(`jar-glow-${kind}`, { color: j.tint })}>
         <cylinderGeometry args={[0.13, 0.13, 0.04, 14]} />
       </mesh>
+    </group>
+  );
+}
+
+/** The Scout lays real results on the table as small paper cards, one per approved gift (from its completed event). */
+function ScoutCards({ count, onPick }: { count: number; onPick?: () => void }) {
+  const s = seat(SEATS.scout, INTERIOR.tableRadius - 0.45);
+  const [hover, setHover] = useState(false);
+  if (count <= 0) return null;
+  return (
+    <group
+      position={[s.x, TABLE_Y + 0.06, s.z]}
+      rotation={[0, s.faceY + Math.PI, 0]}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick?.();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        setHover(false);
+        document.body.style.cursor = "";
+      }}
+    >
+      {Array.from({ length: Math.min(count, 5) }, (_, i) => (
+        <group key={i} position={[(i - (Math.min(count, 5) - 1) / 2) * 0.17, i * 0.004 + (hover ? 0.03 : 0), Math.abs(i - 2) * 0.03]} rotation={[-Math.PI / 2, 0, (i - 2) * 0.16]}>
+          <mesh material={paint("gift-card", { color: "#fbf3e3" })}>
+            <planeGeometry args={[0.15, 0.2]} />
+          </mesh>
+          <mesh position={[0, 0.03, 0.001]} material={paint(`gift-card-photo-${i % 3}`, { color: ["#e0a24a", "#a9cde6", "#e48fb0"][i % 3] })}>
+            <planeGeometry args={[0.11, 0.08]} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
@@ -300,11 +372,25 @@ function MemoryNote({ from, jar, onDone }: { from: THREE.Vector3; jar: keyof typ
   );
 }
 
-function Agent({ actor, events, animate, onStatus }: { actor: CouncilActor; events: CouncilEvent[]; animate: boolean; onStatus: (actor: CouncilActor, s: "ready" | "failed") => void }) {
+function Agent({ actor, events, animate, onStatus, onPick }: { actor: CouncilActor; events: CouncilEvent[]; animate: boolean; onStatus: (actor: CouncilActor, s: "ready" | "failed") => void; onPick?: () => void }) {
   const state = useMemo(() => reduceCouncil(events)[actor], [events, actor]);
   const ready = useCallback(() => onStatus(actor, "ready"), [actor, onStatus]);
   const s = seat(SEATS[actor], INTERIOR.tableRadius + 0.45);
-  return <CouncilMember state={state} position={[s.x, 0, s.z]} rotationY={s.faceY} scale={0.6} animate={animate} onReady={ready} />;
+  return (
+    <group
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick?.();
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        document.body.style.cursor = "pointer";
+      }}
+      onPointerOut={() => (document.body.style.cursor = "")}
+    >
+      <CouncilMember state={state} position={[s.x, 0, s.z]} rotationY={s.faceY} scale={0.6} animate={animate} onReady={ready} />
+    </group>
+  );
 }
 
 /** A model that fails to load reports it (the page offers a retry) instead of showing a stand-in robot. */
@@ -328,7 +414,7 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
   onAssetStatus: (actor: CouncilActor, s: "ready" | "failed") => void;
 }) {
   // Friends on the near arc, in join order.
-  const friends = useMemo(() => world.participants.map((p, i) => {
+  const friends = useMemo(() => inJoinOrder(world.participants).map((p, i) => {
     const n = world.participants.length;
     const turns = 0.18 + (n === 1 ? 0.32 : (i / (n - 1)) * 0.64);
     const s = seat(turns, INTERIOR.tableRadius + 0.75);
@@ -337,7 +423,8 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
 
   // Notes fly only for memories shared during this visit, never on refresh.
   const known = useRef<Set<string> | null>(null);
-  const [notes, setNotes] = useState<{ id: string; from: THREE.Vector3; jar: keyof typeof JARS }[]>([]);
+  const [notes, setNotes] = useState<{ id: string; from: THREE.Vector3; jar: keyof typeof JARS; by?: string }[]>([]);
+  const [cheering, setCheering] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (known.current === null) {
       known.current = new Set(world.clues.map((c) => c.id));
@@ -350,10 +437,24 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
       ...n,
       ...fresh.map((c) => {
         const f = friends.find((p) => p.id === c.publisherId) ?? friends[0];
-        return { id: c.id, from: new THREE.Vector3(f?.x ?? 0, 1.1, f?.z ?? 1.5), jar: jarFor(c.kind) };
+        return { id: c.id, from: new THREE.Vector3(f?.x ?? 0, 1.1, f?.z ?? 1.5), jar: jarFor(c.kind), by: f?.id };
       }),
     ]);
   }, [world.clues, friends]);
+
+  // Jar fill = real active memories of that kind (persisted, so a refresh shows the same fill).
+  const jarCounts = useMemo(() => {
+    const c = { wish: 0, interest: 0, moment: 0 };
+    for (const clue of world.clues) c[jarFor(clue.kind)]++;
+    return c;
+  }, [world.clues]);
+  // Scout's cards only from its real completed event.
+  const scoutCount = useMemo(() => {
+    const m = reduceCouncil(world.events).scout;
+    if (m.status !== "completed") return 0;
+    const done = [...world.events].reverse().find((e) => e.actor === "keeper" && e.status === "completed") ?? [...world.events].reverse().find((e) => e.actor === "scout" && e.status === "completed");
+    return Math.max(1, done?.result?.count ?? 1);
+  }, [world.events]);
 
   // The newest charm hovers over the table until the friends carry it out.
   const charm = useMemo(() => decorationsFrom(world.events).at(-1) ?? null, [world.events]);
@@ -373,24 +474,38 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
       <Room />
       <TowerProps keeperAngle={SEATS.keeper * Math.PI} />
       {(Object.keys(JARS) as (keyof typeof JARS)[]).map((k) => (
-        <Jar key={k} kind={k} />
+        <Jar key={k} kind={k} count={jarCounts[k]} onPick={() => world.onPick?.({ kind: "jar", jar: k })} />
       ))}
+      <ScoutCards count={scoutCount} onPick={() => world.onPick?.({ kind: "scout" })} />
       {COUNCIL_ACTORS.map((actor) => (
         <ModelBoundary key={actor} actor={actor} onStatus={onAssetStatus}>
           <Suspense fallback={null}>
-            <Agent actor={actor} events={world.events} animate={animate} onStatus={onAssetStatus} />
+            <Agent actor={actor} events={world.events} animate={animate} onStatus={onAssetStatus} onPick={() => world.onPick?.({ kind: "agent", actor })} />
           </Suspense>
         </ModelBoundary>
       ))}
       <Suspense fallback={null}>
         {friends.map((f) => (
           <group key={f.id} position={[f.x, 0, f.z]} rotation={[0, f.faceY, 0]}>
-            <StorybookAvatar avatar={f.avatar} clip="Idle" scale={AVATAR_WORLD_SCALE * 0.95} />
+            <StorybookAvatar
+              avatar={f.avatar}
+              clip={cheering.has(f.id) ? "Celebrate" : "Idle"}
+              onClipFinished={() => setCheering((s) => { const next = new Set(s); next.delete(f.id); return next; })}
+              scale={AVATAR_WORLD_SCALE * 0.95}
+            />
           </group>
         ))}
       </Suspense>
       {notes.map((n) => (
-        <MemoryNote key={n.id} from={n.from} jar={n.jar} onDone={() => setNotes((all) => all.filter((x) => x.id !== n.id))} />
+        <MemoryNote
+          key={n.id}
+          from={n.from}
+          jar={n.jar}
+          onDone={() => {
+            setNotes((all) => all.filter((x) => x.id !== n.id));
+            if (n.by) setCheering((s) => new Set(s).add(n.by!));
+          }}
+        />
       ))}
       {charm && (
         <group ref={charmRef} position={[0, TABLE_Y + 0.75, 0]}>
