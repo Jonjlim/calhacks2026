@@ -10,7 +10,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
-import { discardSourceMedia } from "./media";
+import { withdrawEvidenceSource } from "./lib/evidence";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
 import { err, memberError, ok } from "./lib/result";
@@ -104,39 +104,7 @@ export const deleteEvidence = mutation({
     if (!member.ok || member.me._id !== source.participantId) return err<null>("not_found", "Evidence not found.");
     if (source.deletedAt !== undefined) return ok(null);
 
-    const now = Date.now();
-    await ctx.db.patch(sourceId, { deletedAt: now, sourceRevision: source.sourceRevision + 1 });
-
-    const messages = await ctx.db
-      .query("privateMessages")
-      .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
-      .collect();
-    for (const m of messages) await ctx.db.delete(m._id);
-    // Unread uploads are deleted with the source.
-    await discardSourceMedia(ctx, sourceId, "deleted");
-
-    let publishedChanged = false;
-    const proposed = await ctx.db
-      .query("proposedClues")
-      .withIndex("by_source", (q) => q.eq("sourceId", sourceId))
-      .collect();
-    for (const clue of proposed) {
-      if (clue.status !== "rejected") {
-        await ctx.db.patch(clue._id, { status: "source_withdrawn", sourceMessageIds: [] });
-      }
-      const published = await ctx.db
-        .query("publishedClues")
-        .withIndex("by_proposed_clue", (q) => q.eq("proposedClueId", clue._id))
-        .collect();
-      for (const pub of published) {
-        await ctx.db.patch(pub._id, {
-          status: pub.status === "active" ? "source_withdrawn" : pub.status,
-          excerpt: undefined,
-          sourceMessageIds: [],
-        });
-        if (pub.status === "active") publishedChanged = true;
-      }
-    }
+    const { publishedChanged } = await withdrawEvidenceSource(ctx, source);
     if (publishedChanged) await bumpKnowledgeRevision(ctx, source.roomId);
     return ok(null);
   },
