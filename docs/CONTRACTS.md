@@ -482,7 +482,7 @@ Each operation lists owner, consumers, input, output, access, and errors so anot
 | --- | --- |
 | Owner | Dev 2 |
 | Consumers | Dev 1 |
-| Input | `{ title, recipientDisplayName, occasion, deadlineAt?, budgetMinor? }` |
+| Input | `{ title, recipientDisplayName, occasion, deadlineAt?, budgetMinor?, displayName? }` (`displayName` is the organizer's participant name) |
 | Output | `{ room, participant, inviteToken }` |
 | Access | Authenticated user |
 | Errors | `validation_failed` |

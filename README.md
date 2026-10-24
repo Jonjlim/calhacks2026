@@ -82,6 +82,27 @@ Solo mode is a one-participant room, not a second product.
 
 ## Current status
 
-Documentation and team plan only. No application code, Convex deployment, product API integration, or payment provider setup exists yet. Do not demo this repository as a working product.
+Baseline scaffold only. The Next.js app, Convex schema, and every endpoint in [docs/CONTRACTS.md](docs/CONTRACTS.md) exist as typed stubs that return `{ ok: false, error: { code: "unknown" } }` until their owner implements them. The room UI renders from in-memory mocks in `lib/mocks/`. No product API, LLM, or payment provider is integrated. Do not demo this repository as a working product.
+
+## Development
+
+```bash
+npm install
+npx convex dev      # first run: log in and create/link the team project; writes .env.local
+npm run dev         # in a second terminal; http://localhost:3000
+```
+
+The UI runs without Convex when `NEXT_PUBLIC_CONVEX_URL` is unset, so mock-only frontend work does not need a deployment. Checks: `npm run typecheck`, `npm test`, `npm run build`.
+
+Where each workstream starts:
+
+| Owner | Start here |
+| --- | --- |
+| Dev 1 | `app/`, `components/`, mocks in `lib/mocks/queries.ts` |
+| Dev 2 | `convex/schema.ts`, `convex/rooms.ts`, `messages.ts`, `clues.ts`, `proposals.ts`, `allocations.ts`, `jobs.ts`, `votes.ts`, `convex/lib/auth.ts` |
+| Dev 3 | `convex/agents/`, agent schemas in `lib/validation.ts` |
+| Dev 4 | `convex/research/`, listing schema in `lib/validation.ts`; `convex/payments/` only for P1-B |
+
+Shared types live in `lib/contracts/index.ts` and mirror `docs/CONTRACTS.md`. Each stub names its task ID (for example `BE-002`) in its `notImplemented(...)` call.
 
 Cal Hacks 13.0 · October 2026
