@@ -8,16 +8,12 @@
  * @module
  */
 
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
 import type * as agents_buyer from "../agents/buyer.js";
 import type * as agents_engine from "../agents/engine.js";
 import type * as agents_extract from "../agents/extract.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_policy from "../agents/policy.js";
+import type * as agents_presentation from "../agents/presentation.js";
 import type * as agents_recipient from "../agents/recipient.js";
 import type * as agents_recipientPolicy from "../agents/recipientPolicy.js";
 import type * as agents_runtime from "../agents/runtime.js";
@@ -34,27 +30,31 @@ import type * as lib_result from "../lib/result.js";
 import type * as lib_views from "../lib/views.js";
 import type * as messages from "../messages.js";
 import type * as proposals from "../proposals.js";
+import type * as research_brief from "../research/brief.js";
+import type * as research_catalog from "../research/catalog.js";
+import type * as research_fixtures_maya from "../research/fixtures/maya.js";
 import type * as research_normalize from "../research/normalize.js";
+import type * as research_provider from "../research/provider.js";
 import type * as research_research from "../research/research.js";
 import type * as research_score from "../research/score.js";
+import type * as research_text from "../research/text.js";
 import type * as rooms from "../rooms.js";
 import type * as validators from "../validators.js";
 import type * as votes from "../votes.js";
 
-/**
- * A utility for referencing Convex functions in your app's API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
 declare const fullApi: ApiFromModules<{
   "agents/buyer": typeof agents_buyer;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;
   "agents/model": typeof agents_model;
   "agents/policy": typeof agents_policy;
+  "agents/presentation": typeof agents_presentation;
   "agents/recipient": typeof agents_recipient;
   "agents/recipientPolicy": typeof agents_recipientPolicy;
   "agents/runtime": typeof agents_runtime;
@@ -71,17 +71,40 @@ declare const fullApi: ApiFromModules<{
   "lib/views": typeof lib_views;
   messages: typeof messages;
   proposals: typeof proposals;
+  "research/brief": typeof research_brief;
+  "research/catalog": typeof research_catalog;
+  "research/fixtures/maya": typeof research_fixtures_maya;
   "research/normalize": typeof research_normalize;
+  "research/provider": typeof research_provider;
   "research/research": typeof research_research;
   "research/score": typeof research_score;
+  "research/text": typeof research_text;
   rooms: typeof rooms;
   validators: typeof validators;
   votes: typeof votes;
 }>;
+
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 export declare const api: FilterApi<
   typeof fullApi,
   FunctionReference<any, "public">
 >;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">
