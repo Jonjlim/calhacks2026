@@ -304,6 +304,26 @@ interface ProductListing {
 - Preserve bundle/size text. Source links remain the observed Google Shopping URLs; they are not merchant checkout links.
 - Provider-only fields, opaque page tokens, and helper URLs never enter normalized listings.
 
+### Derived product presentation (RC-008 / RC-016)
+
+**Owner:** Dev 4. **Consumer:** Dev 1. These are pure helpers; no database migration or endpoint changes.
+
+```ts
+interface PriceFreshness {
+  kind: "recent" | "aging" | "stale" | "unknown" | "unavailable";
+  label: string;
+  needsRefresh: boolean;
+  observedAt?: number;
+  ageMs?: number;
+  nextChangeAt?: number;
+}
+```
+
+- `getPriceFreshness(listing, now, { sourceFailed? })` lives in `lib/research/freshness.ts`. The caller supplies a Unix millisecond clock: under 30 minutes is recent, 30 minutes through just under 6 hours is aging, and 6 hours onward is stale. A source failure or explicitly stale listing also needs refresh. Unknown prices remain unknown; invalid listings are unavailable. Invalid/future timestamps never count as recent.
+- `nextChangeAt` tells the UI when the age category changes. Recompute with the client's clock on a timer or visibility change; a Convex query does not rerun merely because wall-clock time passes. No automatic refresh request or price/proposal mutation is performed.
+- `hasProductImageUrl(listing)` validates an HTTPS thumbnail URL; it does not fetch the image or guarantee that the remote image loads. Dev 1 should show a placeholder on missing/failed images.
+- Ranking ties compare total score, personal relevance, then budget fit, then presence of a valid HTTPS image URL, and finally listing ID. Images do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.

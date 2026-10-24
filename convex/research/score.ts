@@ -9,6 +9,7 @@
  */
 import type { ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
+import { hasProductImageUrl } from "../../lib/research/images";
 import { cluePhrase, contentTokens, isUnconfirmedObservation, shoppingMatchTokens, shoppingPhrase } from "./text";
 
 export const SCORE_WEIGHTS = {
@@ -133,7 +134,12 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     };
   });
 
-  ranked.sort((a, b) => b.score - a.score || a.listingId.localeCompare(b.listingId));
+  const images = new Map(kept.map(listing => [listing.id, hasProductImageUrl(listing)]));
+  ranked.sort((a, b) => b.score - a.score
+    || b.personalRelevance - a.personalRelevance
+    || b.budgetFit - a.budgetFit
+    || Number(images.get(b.listingId)) - Number(images.get(a.listingId))
+    || a.listingId.localeCompare(b.listingId));
   return ranked.slice(0, Math.max(0, input.limit ?? DEFAULT_RANK_LIMIT));
 }
 
