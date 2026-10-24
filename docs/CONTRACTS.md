@@ -916,3 +916,44 @@ type TrendObservation = TrendContext & {
 Reject mismatched seed terms, malformed metrics and missing context. Deduplicate within seed/geo/window/kind/query. Discovery candidates must retain all literal seed tokens, reject obvious local-service/informational intent, and retain the observation as provenance. This lexical gate can miss useful synonyms and admit non-gifts; it is not personal relevance or purchase approval. Current production `trendSignal` stays zero.
 
 The alternate Actor's exact label `Past 90 days` maps to requested `today 3-m`; other windows/geos are rejected. Ignore the known `Pottery Barn` brand phrase when checking a pottery category match, matching the production collision rule.
+
+### Local TikTok fashion observations
+
+Owner: Dev 4. Consumers: local spike/replay/tests only. Additive types, no Convex migration or production ranking change. Keep this separate from Google search-growth observations: these are individual post snapshots, not growth measurements.
+
+```ts
+interface FashionSampleContext {
+  seedTerm: string;     // public style query
+  windowStart: number;  // inclusive Unix ms, independently enforced
+  windowEnd: number;    // inclusive Unix ms
+  retrievedAt: number;
+}
+interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;   // normalized public URL handle, for dedup/counting only
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;       // lifetime count at retrieval, not count within the window
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;  // proposed shopping query; not a published recipient preference
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;        // e.g. Mentioned in 3 sampled recent posts
+}
+```
+
+Reject invalid/non-public source URLs, private-account flags, missing dates and dates outside the window; deduplicate post IDs before counting. Derived suggestions require explicit garment mentions in captions/hashtags and at least two distinct creators whose posts are not flagged as ads. Unknown ad status is not proof of organic content. Limit vocabulary to documented denim garment patterns for this spike. A query may carry `vintage` from the user's public seed when the supporting posts explicitly mention vintage. No image recognition, platform-wide popularity, geographic reach or growth claims.
+
+Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
+
+The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.

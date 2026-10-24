@@ -272,7 +272,7 @@ RC-001, RC-002, RC-003.
 | RC-011 | Per-contributor auth + capture | P1-B | RC-010 |
 | RC-012 | Webhook idempotency + reconcile | P1-B | RC-011 |
 | RC-013 | Cancel / refund / partial-capture recovery | P1-B | RC-012 |
-| RC-014 | Local trend discovery spike complete; production TrendObservation + sourced badge still pending (see DEV4_TRENDS_SPIKE.md) | P2 | RC-005 |
+| RC-014 | Local search-trend and TikTok fashion spikes complete; production observation + sourced discovery view still pending (see DEV4_TRENDS_SPIKE.md and DEV4_TIKTOK_SPIKE.md) | P2 | RC-005 |
 | RC-015 | Second product source or custom Actor | P2 | RC-003 |
 | RC-016 | Keep source photos: validate `imageUrl`, prefer listings with photos in the visible set, test it — done in p0 (see “Derived product presentation (RC-008 / RC-016)” in [CONTRACTS.md](CONTRACTS.md)) | P0 | RC-003, RC-005 |
 | RC-017 | Photo-derived style clues through the merged confirmed-clue path (no separate `SearchBrief` field; see “Confirmed visual preferences in research” in [CONTRACTS.md](CONTRACTS.md)); fixture tests | P0 | RC-005, AI-018 |

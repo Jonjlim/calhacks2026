@@ -8,6 +8,37 @@
 
 export type Currency = "USD";
 
+export interface FashionSampleContext {
+  seedTerm: string;
+  windowStart: number;
+  windowEnd: number;
+  retrievedAt: number;
+}
+
+export interface TikTokFashionPost {
+  source: "tiktok";
+  postId: string;
+  sourceUrl: string;
+  creatorKey: string;
+  caption: string;
+  hashtags: string[];
+  publishedAt: number;
+  retrievedAt: number;
+  views?: number;
+  likes?: number;
+  shares?: number;
+  advertising: "flagged" | "not_flagged" | "unknown";
+}
+
+export interface FashionDiscovery {
+  kind: "sampled_style";
+  garment: string;
+  searchQuery: string;
+  postUrls: string[];
+  distinctCreators: number;
+  label: string;
+}
+
 /** RC-014 local experiment; term-level evidence, not product popularity. */
 export interface TrendContext {
   seedTerm: string;

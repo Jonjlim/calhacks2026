@@ -1,0 +1,60 @@
+{
+  "provenance": {
+    "actor": "johnvc~google-shopping-api-google-shopping-products-prices-deals",
+    "build": "0.0.142",
+    "runId": "Ls3NBfPgxENwdXbXp",
+    "query": "vintage loose fit jeans",
+    "retrievedAt": 1792837916684,
+    "originalProductCount": 40,
+    "elapsedMs": 32583
+  },
+  "data": [
+    {
+      "search_parameters": {
+        "gl": "us"
+      },
+      "shopping_results": [
+        {
+          "title": "Old Navy Men's 90'S Loose Jeans",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=vintage loose fit jeans&prds=catalogid:5550899224652967001,productid:14921536802415710122,headlineOfferDocid:17551238179825364640,imageDocid:5478535201619648114,rds:PC_8440954389935871136|PROD_PC_8440954389935871136,gpcid:8440954389935871136,mid:576462863548802197,pvt:a&hl=en&gl=us&udm=28",
+          "price": "$27.49",
+          "extracted_price": 27.49,
+          "thumbnail": "https://encrypted-tbn2.gstatic.com/shopping?q=tbn:ANd9GcSFk5c6G2KJyuD0hg48R-8K488D5OZnxVsH8tVX_mP--dT_OLEGcWyFOriSkWF6xNK0UQ1sY-kg63ODMZK8-KAiPr-kE1gZwIT11IiFJoW5IByiAmNzXz0NNQ",
+          "source": "Old Navy"
+        },
+        {
+          "title": "Levi's Men's Extra Baggy Jeans",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=vintage loose fit jeans&prds=catalogid:14841360397272467522,productid:12630349630689107853,headlineOfferDocid:3934589338183307449,imageDocid:7005962998213644823,rds:PC_7306620365214107086|PROD_PC_7306620365214107086,gpcid:7306620365214107086,mid:576462878523864577,pvt:a&hl=en&gl=us&udm=28",
+          "price": "$44.97",
+          "extracted_price": 44.97,
+          "thumbnail": "https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcT5bjANX9JaY0HFrDdfHSjbfu8m3tBKGMPJPnHJUi4_z4RQojulYgN0meVzkJpYAnhrvrxlqeCfHZKlxoWHymNLWtnqep3Om4xroatuFMH-cvLyAkHbIrJHSw",
+          "source": "Levi's"
+        },
+        {
+          "title": "' Men's90S Loose Jeans by Gap Size",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=vintage loose fit jeans&prds=catalogid:9910856193460184092,productid:1148240632717940956,headlineOfferDocid:1813092768924076515,imageDocid:11413727866860326212,rds:PC_2352437029361261331|PROD_PC_2352437029361261331,gpcid:2352437029361261331,mid:576462820339077895,pvt:a&hl=en&gl=us&udm=28",
+          "price": "$47.00",
+          "extracted_price": 47,
+          "thumbnail": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRiLi9A2sbjAtppDlZXtjdlckHzT3zWb0SL6mqn3Us3EpHRnlhZkPyXDy5mb4opj9pr0HOv0sVlmHvHlSm2UaOAswG4pyfODvatxJNGZSae7EQxozRgZUC0ejs",
+          "source": "Gap"
+        },
+        {
+          "title": "AE Super High-Waisted Baggy Wide-Leg Jean Women's",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=vintage loose fit jeans&prds=catalogid:16341870949830709858,productid:15376203148186360423,headlineOfferDocid:673580347229783313,imageDocid:14530069919197231489,rds:PC_2189422018624017543|PROD_PC_2189422018624017543,gpcid:1437820878306520711,mid:576462896859430695,pvt:a&hl=en&gl=us&udm=28",
+          "price": "$20.99",
+          "extracted_price": 20.99,
+          "thumbnail": "https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcQmrj504LQ11OLGIdiV1tdvHoNGHahgBXGLfCzOXGVfKEA-4K5eVfhDTnGi4u1guFw-5vfMsOPXpAAZcJUhVJNFDZMaS1hlFdqYB2ipoCGy0Oh4iSXURfaf",
+          "source": "American Eagle Outfitters"
+        },
+        {
+          "title": "men Vintage Baggy Jeans Oversized Wide Leg Denim Pants Relaxed Streetwear Style",
+          "product_link": "https://www.google.com/search?ibp=oshop&q=vintage loose fit jeans&prds=catalogid:9460830083874341500,productid:17593750233417469696,headlineOfferDocid:3103147966956609814,imageDocid:15890926788022413207,gpcid:2777576812683094997,mid:576462915363166554,pvt:a&hl=en&gl=us&udm=28",
+          "price": "$56.81",
+          "extracted_price": 56.81,
+          "thumbnail": "https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcRJftRBZg_X5wOOnsr7QsYNtUEqjny_OQDn_fjn_eBtFl2JeO5yaMRWmKCfLSwn4AZiNOADB3LxPyC2S9qBeF1C24SOTrcIXIyRmkmWdyiV_xFvpKjepi9gwQ",
+          "source": "Etsy - Seller"
+        }
+      ]
+    }
+  ]
+}
