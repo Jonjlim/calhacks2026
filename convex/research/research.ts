@@ -267,3 +267,49 @@ export const pollResearch = internalAction({
     return null;
   },
 });
+
+type InvalidationResult = Result<{ listingId: Id<"productListings">; cleared: number }>;
+
+/**
+ * Clear the deal first through Dev 2's hook, then mark the observation invalid.
+ * Nested mutations share this transaction: a frozen-deal refusal changes neither.
+ */
+async function invalidateObservation(
+  ctx: MutationCtx,
+  listing: Doc<"productListings">,
+): Promise<InvalidationResult> {
+  const cleared = await ctx.runMutation(internal.proposals.clearSelectionsForListing, {
+    listingId: listing._id,
+  });
+  if (!cleared.ok) return cleared;
+  if (listing.status !== "invalid") await ctx.db.patch(listing._id, { status: "invalid" });
+  return ok({ listingId: listing._id, cleared: cleared.value.cleared });
+}
+
+/** Human override: only the organizer can retire a listing in their room. */
+export const invalidateListing = mutation({
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
+  handler: async (ctx, args): Promise<InvalidationResult> => {
+    const member = await requireMember(ctx, args.roomId);
+    if (!member.ok) return err(member.code, "Room membership required.");
+    if (member.me.role !== "organizer") {
+      return err("unauthorized", "Only the organizer can invalidate a listing.");
+    }
+    const listing = await ctx.db.get(args.listingId);
+    if (!listing || listing.roomId !== args.roomId) return err("not_found", "Listing not found.");
+    return invalidateObservation(ctx, listing);
+  },
+});
+
+/**
+ * Trusted server-only entry point for a future verified source check.
+ * Not an LLM tool; no automatic stock inference or URL checking is implemented here.
+ */
+export const invalidateListingInternal = internalMutation({
+  args: { listingId: v.id("productListings") },
+  handler: async (ctx, { listingId }): Promise<InvalidationResult> => {
+    const listing = await ctx.db.get(listingId);
+    if (!listing) return err("not_found", "Listing not found.");
+    return invalidateObservation(ctx, listing);
+  },
+});

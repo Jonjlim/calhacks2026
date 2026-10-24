@@ -641,6 +641,19 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Room member |
 | Errors | `unauthorized` |
 
+### `research.invalidateListing` (RC-007)
+
+**Owner:** Dev 4. **Consumers:** Dev 1 (organizer control); verified server-side source checks use the internal equivalent.
+
+- Public mutation input: `{ roomId, listingId }`; output: `Result<{ listingId, cleared: number }>`.
+- Only that room's organizer may invalidate its listing. Outsiders and ordinary members get unauthorized; foreign-room/missing listing IDs get not_found.
+- Uses `internal.proposals.clearSelectionsForListing` and marks the listing invalid in one transaction. A matching active selection is cleared, its proposal superseded, and live approvals invalidated. Existing deal snapshots remain for history.
+- Returns invalid_revision without changing anything if the selected proposal is locked for payment. It does not cancel authorizations, capture, refund, or perform recovery.
+- Repeating the operation returns cleared: 0 and cannot clear a different replacement gift. An unselected listing does not disturb the current proposal.
+- `internal.research.research.invalidateListingInternal({ listingId })` provides the same behavior for trusted server code. It is not exposed as a model tool.
+- Invalid listings disappear from recommendations and cannot be selected again. A clue mismatch or old price does not itself establish that a listing is invalid.
+- This task adds the transition, not automatic stock verification, merchant URL probing, price refresh, or a frontend button. No schema migration or existing endpoint changes.
+
 ### `selectGift`
 
 | | |
