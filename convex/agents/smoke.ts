@@ -119,6 +119,41 @@ async function recipient() {
   };
 }
 
+/** Direct request with published clues but no candidates yet: expect a search, not silence. */
+async function buyerSearch() {
+  const decision = await decideBuyer(
+    {
+      roomId: "synthetic-room",
+      jobId: "synthetic-job",
+      recipientDisplayName: "Maya",
+      occasion: "Birthday",
+      budgetMinor: 6000,
+      knowledgeRevision: 2,
+      mode: "quiet",
+      trigger: "human",
+      recipientAgentEnabled: false,
+      researchRunning: false,
+      askedSlots: [],
+      recentMessages: [
+        {
+          id: "synthetic-message",
+          author: "participant",
+          text: "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
+        },
+      ],
+      publishedClues: [
+        { id: "c1", kind: "interest", text: "Wants to try a beginner pottery class." },
+        { id: "c2", kind: "exclusion", text: "Does not want more candles." },
+      ],
+      listings: [],
+      recommendations: [],
+    } as unknown as BuyerSnapshot,
+    configuredModel(),
+  );
+  return decision;
+}
+
+export const buyerSearchSynthetic = internalAction({ args: {}, handler: buyerSearch });
 export const extractSynthetic = internalAction({ args: {}, handler: extraction });
 export const buyerSynthetic = internalAction({ args: {}, handler: buyer });
 export const recipientSynthetic = internalAction({ args: {}, handler: recipient });

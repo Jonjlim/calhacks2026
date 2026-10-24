@@ -254,17 +254,32 @@ export async function decideBuyer(
           needsFollowup: false,
         };
   }
-  const decision = await validatedModelCall(
-    model,
-    {
-      role: "buyer",
-      input: { snapshot, outputSchema: z.toJSONSchema(agentDecisionSchema) },
-      instructions:
-        BASE_INSTRUCTIONS +
-        `\nYou are the buyer facilitator. Listen when humans are talking to each other. Ask at most one useful, short question. Never repeat an open or answered slot. Search only from published clues. Recommend at most three supplied listings with real evidence connections; prefer reusing suitable cached candidates over another search. When knowledge changes, inspect excluded and previousRecommendationListingIds to understand what no longer fits. A research_completed or knowledge_changed trigger is an automatic continuation: recommend or clarify, or listen/wait when needed; NEVER search or query_recipient. Never recommend a listing without supporting published clues. query_recipient on a human turn asks a separate permissioned agent; do not ask for private messages. needsFollowup must be false. Extracting imports is a separate user-triggered workflow. Match outputSchema exactly.`,
-    },
-    agentDecisionSchema,
-  );
+  const call = (reminder?: string) =>
+    validatedModelCall(
+      model,
+      {
+        role: "buyer",
+        input: {
+          snapshot,
+          ...(reminder ? { reminder } : {}),
+          outputSchema: z.toJSONSchema(agentDecisionSchema),
+        },
+        instructions:
+          BASE_INSTRUCTIONS +
+          `\nYou are the buyer facilitator. Decide in this order. (1) If trigger is "human" and mode is "auto", or the latest participant message addresses @unwrap, you were directly invited to act: never answer listen or wait. (2) With published clues but no supplied listings or recommendations, and research not running, choose search with a searchBrief built only from published clues, the budget, and exclusions or ownership clues; do not wait for listings that only a search can create. (3) With supplied recommendations that cite published clues, choose recommend. (4) Choose clarify only if one missing fact blocks a useful search. (5) listen applies only when humans are talking to each other and nobody addressed you; wait applies only while researchRunning is true. Ask at most one useful, short question. Never repeat an open or answered slot. Search only from published clues. Recommend at most three supplied listings with real evidence connections; prefer reusing suitable cached candidates over another search. When knowledge changes, inspect excluded and previousRecommendationListingIds to understand what no longer fits. A research_completed or knowledge_changed trigger is an automatic continuation: recommend or clarify, or listen/wait when needed; NEVER search or query_recipient. Never recommend a listing without supporting published clues. query_recipient on a human turn asks a separate permissioned agent; do not ask for private messages. needsFollowup must be false. Extracting imports is a separate user-triggered workflow. Match outputSchema exactly.`,
+      },
+      agentDecisionSchema,
+    );
+  let decision = await call();
+  // Directly invited but silent: one corrective retry, then accept whatever comes back.
+  if (
+    snapshot.trigger === "human" &&
+    !snapshot.researchRunning &&
+    (decision.intent === "listen" || decision.intent === "wait")
+  )
+    decision = await call(
+      "You were directly invited to act and nothing is running. listen and wait are not allowed now. Choose search, recommend, clarify or query_recipient.",
+    );
   return validateDecision(decision, snapshot);
 }
 
