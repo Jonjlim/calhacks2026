@@ -170,7 +170,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
       {/* The memory game floats over the tower while the room is still gathering. */}
       {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
-        <MemoryQuest recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
+        <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
       )}
 
       {/* Phase bar */}

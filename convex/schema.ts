@@ -328,6 +328,12 @@ export default defineSchema({
     .index("by_room", ["roomId"])
     .index("by_shared", ["sharedAt"]),
 
+  /** One row per agent idea suggestion, for the per-room rate limit. No content is stored. */
+  ideaCalls: defineTable({
+    roomId: v.id("rooms"),
+    createdAt: v.number(),
+  }).index("by_room", ["roomId", "createdAt"]),
+
   recipientProfiles: defineTable({
     roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
   }).index("by_room", ["roomId"]),

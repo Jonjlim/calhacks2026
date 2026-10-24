@@ -11,6 +11,7 @@
 import type * as agents_buyer from "../agents/buyer.js";
 import type * as agents_engine from "../agents/engine.js";
 import type * as agents_extract from "../agents/extract.js";
+import type * as agents_ideas from "../agents/ideas.js";
 import type * as agents_mediaRuntime from "../agents/mediaRuntime.js";
 import type * as agents_model from "../agents/model.js";
 import type * as agents_photo from "../agents/photo.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   "agents/buyer": typeof agents_buyer;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;
+  "agents/ideas": typeof agents_ideas;
   "agents/mediaRuntime": typeof agents_mediaRuntime;
   "agents/model": typeof agents_model;
   "agents/photo": typeof agents_photo;
