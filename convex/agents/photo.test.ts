@@ -194,9 +194,13 @@ async function setup() {
     });
     return { roomId, alice, bob };
   });
-  const store = (type = "image/jpeg") =>
-    t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([1, 2, 3])], { type })));
-  return { t, ids, store, alice: t.withIdentity({ subject: "alice" }), bob: t.withIdentity({ subject: "bob" }) };
+  const alice = t.withIdentity({ subject: "alice" });
+  // Uploads are claimable only against the uploader's own upload-URL grant, as in the browser flow.
+  const store = async (type = "image/jpeg") => {
+    value(await alice.mutation(api.media.generateEvidenceUploadUrl, { roomId: ids.roomId }));
+    return t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array([1, 2, 3])], { type })));
+  };
+  return { t, ids, store, alice, bob: t.withIdentity({ subject: "bob" }) };
 }
 function value<T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T {
   if (!r.ok) throw new Error(JSON.stringify(r.error));
