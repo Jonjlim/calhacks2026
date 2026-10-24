@@ -51,6 +51,7 @@ import type * as research_text from "../research/text.js";
 import type * as rooms from "../rooms.js";
 import type * as validators from "../validators.js";
 import type * as votes from "../votes.js";
+import type * as worlds from "../worlds.js";
 
 import type {
   ApiFromModules,
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   rooms: typeof rooms;
   validators: typeof validators;
   votes: typeof votes;
+  worlds: typeof worlds;
 }>;
 
 /**

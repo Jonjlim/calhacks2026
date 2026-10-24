@@ -110,6 +110,14 @@ export const listingStatus = v.union(
   v.literal("stale"),
 );
 
+export const budgetBand = v.union(
+  v.literal("under_25"),
+  v.literal("25_50"),
+  v.literal("50_100"),
+  v.literal("100_plus"),
+  v.literal("unknown"),
+);
+
 export const selectionStatus = v.union(v.literal("active"), v.literal("cleared"));
 
 export const allocationShare = v.object({

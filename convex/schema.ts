@@ -298,6 +298,36 @@ export default defineSchema({
     citations: v.optional(V.agentCitations),
   }).index("by_room", ["roomId"]),
 
+  /**
+   * Opt-in public summaries of gift sessions ("zoom out" view). Holds only what the organizer
+   * approved: coarse inputs, up to three chosen clue lines, and the final pick. No room id,
+   * names, invite token, private imports, caps, or participant ids are ever exposed to readers.
+   */
+  giftWorlds: defineTable({
+    roomId: v.optional(v.id("rooms")),
+    ownerUserId: v.optional(v.string()),
+    isSample: v.boolean(),
+    occasion: v.string(),
+    recipientAlias: v.string(),
+    budgetBand: V.budgetBand,
+    friends: v.number(),
+    inputs: v.array(v.object({ kind: V.clueKind, count: v.number() })),
+    highlights: v.array(v.string()),
+    state: v.union(v.literal("exploring"), v.literal("chosen")),
+    outcome: v.optional(
+      v.object({
+        title: v.string(),
+        priceMinor: v.optional(v.number()),
+        priceStatus: V.priceStatus,
+        source: V.listingSource,
+      }),
+    ),
+    sharedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_shared", ["sharedAt"]),
+
   recipientProfiles: defineTable({
     roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
   }).index("by_room", ["roomId"]),
