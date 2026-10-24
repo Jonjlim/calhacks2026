@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ActivityFeed } from "@/components/agents/ActivityFeed";
+import { RecipientDemo } from "@/components/agents/RecipientDemo";
 import { LiveChat } from "@/components/chat/LiveChat";
 import { LiveClues } from "@/components/clues/LiveClues";
 import { LiveShortlist } from "@/components/products/LiveShortlist";
@@ -42,6 +43,7 @@ export function LiveRoom({ roomId }: { roomId: string }) {
       </section>
       <section className="flex flex-col gap-6">
         <LiveClues roomId={id} />
+        <RecipientDemo roomId={id} isOrganizer={room.value.me.role === "organizer"} />
       </section>
     </main>
   );

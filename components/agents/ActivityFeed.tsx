@@ -31,6 +31,10 @@ export function ActivityFeed({ roomId }: { roomId: Id<"rooms"> }) {
   }
 
   const events = activity.value?.events ?? [];
+  // The ask (buyer/handoff) and the reply (recipient/completed) are recorded together per job; show them as one exchange.
+  const exchangeJobs = new Set(
+    events.filter((e) => e.actor === "recipient").map((e) => e.jobId),
+  );
   const jobs = activity.value?.jobs ?? [];
   const active = jobs.filter((j) => ["pending", "running"].includes(j.status));
   const retryable = jobs.filter((j) => j.canRetry);
@@ -38,19 +42,32 @@ export function ActivityFeed({ roomId }: { roomId: Id<"rooms"> }) {
   return (
     <Panel title="Agent activity">
       {activity.loading && <p className="text-sm text-plum-soft">Loading…</p>}
-      {activity.error && <p className="text-sm text-coral">{activity.error.message}</p>}
+      {activity.error && (
+        <p className="text-sm text-coral">{activity.error.message}</p>
+      )}
       {activity.value && !activity.value.capabilities.modelConfigured && (
         <p className="mb-2 rounded bg-coral/15 p-2 text-sm text-coral">
           No model is configured on this deployment, so agents cannot answer.
         </p>
       )}
       {active.length > 0 && (
-        <p className="mb-2 text-sm text-plum-soft">{active.length} agent task(s) in progress…</p>
+        <p className="mb-2 text-sm text-plum-soft">
+          {active.length} agent task(s) in progress…
+        </p>
       )}
       {retryable.map((j) => (
-        <div key={j.id} className="mb-2 flex items-center justify-between rounded border border-coral/40 p-2 text-sm">
-          <span>A {j.kind.replace("_", " ")} task {j.status}.</span>
-          <button type="button" onClick={() => onRetry(j.id)} className="rounded border px-2 py-1">
+        <div
+          key={j.id}
+          className="mb-2 flex items-center justify-between rounded border border-coral/40 p-2 text-sm"
+        >
+          <span>
+            A {j.kind.replace("_", " ")} task {j.status}.
+          </span>
+          <button
+            type="button"
+            onClick={() => onRetry(j.id)}
+            className="rounded border px-2 py-1"
+          >
             Retry
           </button>
         </div>
@@ -59,17 +76,55 @@ export function ActivityFeed({ roomId }: { roomId: Id<"rooms"> }) {
         {events
           .slice()
           .reverse()
-          .map((e) => (
-            <li key={e.id} className={e.kind === "failed" ? "text-coral" : ""}>
-              <span className="font-medium">{ACTOR_LABEL[e.actor] ?? e.actor}</span>{" "}
-              <span className="text-plum-soft">· {e.kind}</span> — {e.summary}
-            </li>
-          ))}
+          .filter(
+            (e) =>
+              !(
+                e.actor === "buyer" &&
+                e.kind === "handoff" &&
+                exchangeJobs.has(e.jobId) &&
+                e.summary.startsWith("Asked the recipient agent")
+              ),
+          )
+          .map((e) =>
+            e.actor === "recipient" ? (
+              <li
+                key={e.id}
+                className="rounded border border-plum/20 bg-plum/5 p-2"
+              >
+                <p className="text-xs font-medium uppercase tracking-wide text-plum">
+                  Buyer agent ↔ Recipient agent
+                </p>
+                <p className="text-plum-soft">
+                  Buyer asked the recipient agent a gift question.
+                </p>
+                <p>
+                  <span className="font-medium">Recipient agent</span> —{" "}
+                  {e.summary}
+                </p>
+              </li>
+            ) : (
+              <li
+                key={e.id}
+                className={e.kind === "failed" ? "text-coral" : ""}
+              >
+                <span className="font-medium">
+                  {ACTOR_LABEL[e.actor] ?? e.actor}
+                </span>{" "}
+                <span className="text-plum-soft">· {e.kind}</span> — {e.summary}
+              </li>
+            ),
+          )}
         {activity.value && events.length === 0 && (
-          <li className="text-plum-soft">No agent activity yet. Mention @unwrap or press Ask Unwrap.</li>
+          <li className="text-plum-soft">
+            No agent activity yet. Mention @unwrap or press Ask Unwrap.
+          </li>
         )}
       </ul>
-      {error && <p role="alert" className="mt-2 text-sm text-coral">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-coral">
+          {error}
+        </p>
+      )}
     </Panel>
   );
 }
