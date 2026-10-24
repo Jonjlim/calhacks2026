@@ -115,6 +115,7 @@ const VISIBLE_STYLE_ITEMS = new Set([
 export function shoppingMatchTokens(text: string): string[] {
   const phrase = text.toLowerCase()
     .replace(/\brock[\s-]+climbing\b/g, "climbing")
+    .replace(/\bwheel[\s-]+throwing\b/g, "pottery wheel")
     .replace(/\bearth[\s-]+(?:tones?|toned)\b/g, "earthtone");
   const tokens = contentTokens(phrase).map(token => SHOPPING_ALIASES[token] ?? token);
   const result = new Set(tokens);
