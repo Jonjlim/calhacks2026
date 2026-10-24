@@ -74,6 +74,24 @@ export function shoppingPhrase(text: string): string {
     .trim();
 }
 
+/**
+ * Retail brands whose names contain hobby words. "Pottery Barn" sells home
+ * decor, so its name is not evidence that a vase suits a pottery hobbyist.
+ * Small explicit list; studio names like "Farmhouse Pottery" stay matchable.
+ */
+const BRAND_PHRASES = [/\bpottery\s+barn(?:\s+(?:kids|teen))?\b/g, /\bbass\s+pro(?:\s+shops)?\b/g];
+
+export function withoutBrandPhrases(text: string): string {
+  return BRAND_PHRASES.reduce((t, brand) => t.replace(brand, " "), text.toLowerCase());
+}
+
+/** Things you do the hobby with, as opposed to decor that mentions it. Stemmed forms. */
+const HANDS_ON_TOKENS = new Set(["kit", "class", "tool", "starter", "supply", "supplie", "course"]);
+
+export function isHandsOnItem(text: string): boolean {
+  return contentTokens(text).some((token) => HANDS_ON_TOKENS.has(token));
+}
+
 const SHOPPING_ALIASES: Record<string, string> = {
   minimalist: "minimal",
   retro: "vintage",
