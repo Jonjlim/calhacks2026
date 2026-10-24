@@ -24,7 +24,7 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 | Next.js + React + TS + Tailwind | Confirmed starting point. One app for solo and group. |
 | Convex | Confirmed. Authoritative room state, reactive queries, membership. |
 | One tool-capable LLM + Zod | Confirmed. Provider and model ID are **unverified** until Phase 0. |
-| Apify as first product source | **Unverified.** Need one actor that returns purchasable listings. A supported shopping search API may replace it. |
+| Apify as first product source | **Conditional go for discovery.** RC-002: `johnvc/google-shopping-api-google-shopping-products-prices-deals`, build `0.0.142`, passed two live searches (40 products each). Links are Google Shopping URLs; direct merchant navigation and final prices remain unverified. Results and limitations: [DEV4_SOURCE_SPIKE.md](DEV4_SOURCE_SPIKE.md). |
 | React Flow | Proposed for the map. P0 may ship a simpler graph or list if it threatens the critical path. |
 | Motion / CSS | Confirmed for lightweight, state-honest animation. |
 | Stripe test mode, manual capture | P1 only. **Unverified** against current sponsor rules. Visa eligibility is not implied by Stripe. |
