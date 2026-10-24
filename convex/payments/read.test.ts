@@ -6,7 +6,7 @@ const input: StripePaymentReadInput = { expected: { binding, amountMinor: 2500, 
 const session: StripeTestSession = { id: "cs_test_123", binding, amountMinor: 2500, currency: "USD", status: "open", paymentStatus: "unpaid" };
 const intent: StripeTestIntent = { id: "pi_123", binding, amountMinor: 2500, currency: "USD", captureMethod: "manual", status: "requires_capture", amountReceivedMinor: 0, amountCapturableMinor: 2500 };
 function setup(s = session) {
-  return { retrieveCheckout: vi.fn().mockResolvedValue({ kind: "ok", value: s }), retrieveIntent: vi.fn().mockResolvedValue({ kind: "ok", value: intent }), retrieveRefund: vi.fn().mockResolvedValue({ kind: "ok", value: { id: "re_123", paymentIntentId: intent.id, amountMinor: 2500, status: "succeeded" } }) };
+  return { retrieveCheckout: vi.fn().mockResolvedValue({ kind: "ok", value: s }), retrieveIntent: vi.fn().mockResolvedValue({ kind: "ok", value: intent }), listIntentRefunds: vi.fn().mockResolvedValue({ kind: "ok", value: [] }) };
 }
 
 describe("read-only Stripe reconciliation", () => {
@@ -14,6 +14,7 @@ describe("read-only Stripe reconciliation", () => {
     const reader = setup();
     expect(await readStripePayment(input, reader)).toMatchObject({ kind: "ok", value: { status: "authorization_pending", checkoutSessionId: session.id, capturedMinor: 0 } });
     expect(reader.retrieveIntent).not.toHaveBeenCalled();
+    expect(reader.listIntentRefunds).not.toHaveBeenCalled();
   });
   it("observes expired unpaid Checkout as canceled only when no intent is known", async () => {
     expect(await readStripePayment(input, setup({ ...session, status: "expired" }))).toMatchObject({ kind: "ok", value: { status: "canceled" } });
@@ -42,8 +43,34 @@ describe("read-only Stripe reconciliation", () => {
   it("reconciles tracked refunds once each from current provider state", async () => {
     const reader = setup({ ...session, paymentIntentId: intent.id });
     reader.retrieveIntent.mockResolvedValueOnce({ kind: "ok", value: { ...intent, status: "succeeded", amountReceivedMinor: 2500, amountCapturableMinor: 0 } });
+    reader.listIntentRefunds.mockResolvedValueOnce({ kind: "ok", value: [{ id: "re_123", paymentIntentId: intent.id, amountMinor: 2500, status: "succeeded" }] });
     expect(await readStripePayment({ ...input, refundIds: ["re_123", "re_123"] }, reader)).toMatchObject({ kind: "ok", value: { status: "refunded", refundedMinor: 2500 } });
-    expect(reader.retrieveRefund).toHaveBeenCalledTimes(1);
+    expect(reader.listIntentRefunds).toHaveBeenCalledExactlyOnceWith(intent.id);
+  });
+  it("discovers a refund whose write response and ID were lost", async () => {
+    const reader = setup({ ...session, paymentIntentId: intent.id });
+    reader.retrieveIntent.mockResolvedValueOnce({ kind: "ok", value: { ...intent, status: "succeeded", amountReceivedMinor: 2500, amountCapturableMinor: 0 } });
+    reader.listIntentRefunds.mockResolvedValueOnce({ kind: "ok", value: [{ id: "re_untracked", paymentIntentId: intent.id, amountMinor: 2500, status: "succeeded" }] });
+    expect(await readStripePayment(input, reader)).toMatchObject({ kind: "ok", value: { status: "refunded", refundedMinor: 2500 } });
+    expect(reader.listIntentRefunds).toHaveBeenCalledExactlyOnceWith(intent.id);
+  });
+  it.each(["pending", "failed"])("discovers an untracked %s refund without reporting a clean capture", async status => {
+    const reader = setup({ ...session, paymentIntentId: intent.id });
+    reader.retrieveIntent.mockResolvedValueOnce({ kind: "ok", value: { ...intent, status: "succeeded", amountReceivedMinor: 2500, amountCapturableMinor: 0 } });
+    reader.listIntentRefunds.mockResolvedValueOnce({ kind: "ok", value: [{ id: "re_untracked", paymentIntentId: intent.id, amountMinor: 2500, status }] });
+    expect(await readStripePayment(input, reader)).toMatchObject({ kind: "ok", value: { status: status === "pending" ? "refund_pending" : "action_required", refundedMinor: 0 } });
+  });
+  it("leaves a missing tracked refund or incomplete provider list uncertain", async () => {
+    const reader = setup({ ...session, paymentIntentId: intent.id });
+    reader.retrieveIntent.mockResolvedValue({ kind: "ok", value: { ...intent, status: "succeeded", amountReceivedMinor: 2500, amountCapturableMinor: 0 } });
+    expect((await readStripePayment({ ...input, refundIds: ["re_missing"] }, reader)).kind).toBe("uncertain");
+    reader.listIntentRefunds.mockResolvedValueOnce({ kind: "uncertain", message: "Incomplete provider page" });
+    expect((await readStripePayment(input, reader)).kind).toBe("uncertain");
+  });
+  it("does not scan refunds for an uncaptured authorization", async () => {
+    const reader = setup({ ...session, paymentIntentId: intent.id });
+    expect(await readStripePayment(input, reader)).toMatchObject({ kind: "ok", value: { status: "authorized" } });
+    expect(reader.listIntentRefunds).not.toHaveBeenCalled();
   });
   it("leaves interrupted reads uncertain and never invokes a write", async () => {
     const reader = setup();

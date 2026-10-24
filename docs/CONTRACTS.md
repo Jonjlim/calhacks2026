@@ -1158,7 +1158,19 @@ refunds, unfreezes a room or declares the merchant order complete.
 
 `readStripePayment(input: StripePaymentReadInput, reader)` fetches the current
 Checkout and/or PaymentIntent, compares frozen amount/bindings/known object IDs,
-then retrieves up to ten distinct tracked refunds and builds the observation.
+then discovers refunds by PaymentIntent before reporting any captured funds.
+`listIntentRefunds(intentId): Promise<StripeAdapterResult<StripeTestRefund[]>>`
+verifies the test-mode parent and reads a single filtered page of up to 100
+refunds. A truncated page, foreign intent, duplicate ID or invalid object stays
+uncertain. All results use the existing allowlisted refund DTO; payer details
+are discarded. This recovers refunds whose create response was lost before
+their ID could be stored. Up to ten distinct `refundIds` may still be supplied
+as previously tracked references; each must appear in that complete fresh list.
+Missing tracked refunds stay uncertain rather than treating the list as empty.
+No list call is needed when no captured funds and no tracked refunds exist.
+An empty list cannot prove an unresolved refund write failed: the durable
+operation fence remains the state layer's responsibility, and this read never
+permits an automatic retry.
 No write method is available on its reader port. An open session with no intent
 is pending; an expired session with no intent is canceled. A previously known
 intent is always retrieved even if its session has expired. Completed Checkout
@@ -1167,6 +1179,12 @@ without a retrievable intent stays unresolved. A payment observation can omit
 `checkoutSessionId` when supplied. The input comes from the state layer, not a
 browser. Repeated/out-of-order webhook notifications lead to fresh reads, not
 blind replay of their embedded status.
+
+Owner: Dev 4; consumer: Dev 2's future payment worker. The reader port now uses
+`listIntentRefunds` instead of individual `retrieveRefund` calls. Existing input
+and output DTOs are unchanged; no current production caller or database migration
+is affected. `retrieveRefund` remains available for individual reference checks.
+Provider reference: [Stripe list refunds](https://docs.stripe.com/api/refunds/list).
 
 ```ts
 interface StripePaymentExpectation {

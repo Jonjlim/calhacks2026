@@ -137,6 +137,46 @@ describe("Stripe sandbox transport", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("lists a complete refund history for a verified test intent and strips payer data", async () => {
+    const { adapter, fetcher } = setup();
+    fetcher.mockResolvedValueOnce(Response.json({ ...intent, status: "succeeded", amount_received: 2500, amount_capturable: 0 }))
+      .mockResolvedValueOnce(Response.json({ object: "list", has_more: false, data: [
+        { id: "re_untracked", object: "refund", payment_intent: intent.id, amount: 2500, currency: "usd", status: "succeeded", customer: "private", destination_details: { card: "private" } },
+      ] }));
+    expect(await adapter.listIntentRefunds(intent.id)).toEqual({ kind: "ok", value: [
+      { id: "re_untracked", paymentIntentId: intent.id, amountMinor: 2500, status: "succeeded" },
+    ] });
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "https://api.stripe.com/v1/payment_intents/pi_123", "https://api.stripe.com/v1/refunds?payment_intent=pi_123&limit=100",
+    ]);
+    expect(fetcher.mock.calls.every(([, options]) => options?.method === "GET")).toBe(true);
+  });
+
+  it("does not list refunds for a live or mismatched parent", async () => {
+    for (const parent of [{ ...intent, livemode: true }, { ...intent, id: "pi_other" }]) {
+      const { adapter, fetcher } = setup(parent);
+      expect((await adapter.listIntentRefunds(intent.id)).kind).toBe("uncertain");
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("leaves truncated, foreign, duplicate and impossible refund histories unresolved", async () => {
+    const refund = { id: "re_123", object: "refund", payment_intent: intent.id, amount: 1000, currency: "usd", status: "succeeded" };
+    for (const history of [
+      { object: "list", has_more: true, data: [refund] },
+      { object: "list", has_more: false, data: [{ ...refund, payment_intent: "pi_other" }] },
+      { object: "list", has_more: false, data: [refund, refund] },
+      { object: "list", has_more: false, data: [{ ...refund, amount: 2501 }] },
+      { object: "list", has_more: false, data: [{ ...refund, currency: "eur" }] },
+    ]) {
+      const { adapter, fetcher } = setup();
+      fetcher.mockResolvedValueOnce(Response.json({ ...intent, status: "succeeded", amount_received: 2500, amount_capturable: 0 }))
+        .mockResolvedValueOnce(Response.json(history));
+      expect((await adapter.listIntentRefunds(intent.id)).kind).toBe("uncertain");
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    }
+  });
+
   it("rejects raw card details or other unexpected checkout inputs", async () => {
     const { adapter, fetcher } = setup();
     expect((await adapter.createCheckout({ ...input, cardNumber: "synthetic-unaccepted-field" } as typeof input)).kind).toBe("failed");

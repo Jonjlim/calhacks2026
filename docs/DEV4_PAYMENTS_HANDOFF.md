@@ -7,7 +7,7 @@ This is not an enabled end-to-end payment feature. P0 still ends at pledges.
 
 - `convex/payments/stripe.ts`: hosted Checkout creation (manual authorization or organizer collection), session retrieval/expiry, intent retrieval/capture, refund creation/retrieval. Fixed Stripe host and API version, test keys only, USD integer cents, revision/participant/attempt metadata, per-operation idempotency keys, bounded responses, no automatic POST retry and no raw provider errors/card data in results.
 - `convex/payments/webhook.ts`: raw UTF-8 body HMAC verification, five-minute past/future tolerance, rotated v1 signatures, test-event envelope validation. Returns event/object references only.
-- `convex/payments/read.ts`: fresh provider reads for an existing stored attempt. A completed redirect is not success. A known intent is retrieved even if Checkout expired. Tracked refunds are deduplicated and bounded; only GET methods exist on this reader port.
+- `convex/payments/read.ts`: fresh provider reads for an existing stored attempt. A completed redirect is not success. A known intent is retrieved even if Checkout expired. Captured payments discover refunds through `listIntentRefunds`, including refunds whose create response/ID was lost. One complete page of up to 100 is required; truncation or a missing tracked refund stays uncertain. Only GET methods exist on this reader port.
 - `convex/payments/reconcile.ts`: provider observations tied to the expected amount and room/revision/member/attempt. Full authorization, full capture, partial capture, customer action, cancellation and partial/pending/full refunds remain distinct. No database writes or authorization decisions.
 
 The signatures and DTOs are in CONTRACTS.md and lib/contracts/index.ts. These

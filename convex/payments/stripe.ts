@@ -33,6 +33,7 @@ const refundSchema = z.object({
   payment_intent: intentId, amount: cents.min(1), currency: z.literal("usd"),
   status: z.enum(["pending", "requires_action", "succeeded", "failed", "canceled"]),
 });
+const refundListSchema = z.object({ object: z.literal("list"), has_more: z.literal(false), data: z.array(refundSchema).max(100) });
 const failed = (message: string): StripeAdapterResult<never> => ({ kind: "failed", message });
 const uncertain = (message: string): StripeAdapterResult<never> => ({ kind: "uncertain", message });
 
@@ -137,6 +138,25 @@ export function createStripeTestAdapter(config: { secretKey: string; frontendOri
     },
     captureIntent(id: string, key: string) {
       return intentId.safeParse(id).success ? intent(`payment_intents/${id}/capture`, "POST", key) : Promise.resolve(failed("Invalid PaymentIntent ID."));
+    },
+    async listIntentRefunds(id: string): Promise<StripeAdapterResult<StripeTestRefund[]>> {
+      if (!intentId.safeParse(id).success) return failed("Invalid PaymentIntent ID.");
+      // Refund objects have no livemode: validate the parent before listing any.
+      const parent = await intent(`payment_intents/${id}`);
+      if (parent.kind !== "ok") return parent;
+      const result = await request(`refunds?payment_intent=${id}&limit=100`);
+      if (result.kind !== "ok") return result;
+      const parsed = refundListSchema.safeParse(result.value);
+      if (!parsed.success) return uncertain("Stripe refund history is incomplete or unsupported.");
+      const seen = new Set<string>();
+      const refunds: StripeTestRefund[] = [];
+      for (const r of parsed.data.data) {
+        if (r.payment_intent !== id || r.amount > parent.value.amountReceivedMinor || seen.has(r.id))
+          return uncertain("Stripe refund history does not match the test payment.");
+        seen.add(r.id);
+        refunds.push({ id: r.id, paymentIntentId: r.payment_intent, amountMinor: r.amount, status: r.status });
+      }
+      return { kind: "ok", value: refunds };
     },
     async retrieveRefund(id: string): Promise<StripeAdapterResult<StripeTestRefund>> {
       if (!/^re_[A-Za-z0-9]+$/.test(id)) return failed("Invalid refund ID.");

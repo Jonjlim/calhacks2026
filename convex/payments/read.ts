@@ -3,7 +3,7 @@ import type { StripeAdapterResult, StripePaymentObservation, StripePaymentReadIn
 import type { createStripeTestAdapter } from "./stripe";
 import { observeStripePayment } from "./reconcile";
 
-type StripeReader = Pick<ReturnType<typeof createStripeTestAdapter>, "retrieveCheckout" | "retrieveIntent" | "retrieveRefund">;
+type StripeReader = Pick<ReturnType<typeof createStripeTestAdapter>, "retrieveCheckout" | "retrieveIntent" | "listIntentRefunds">;
 const invalid = (): StripeAdapterResult<never> => ({ kind: "failed", message: "Provider references do not match the stored payment attempt." });
 const unresolved = (): StripeAdapterResult<never> => ({ kind: "uncertain", message: "Payment state is unresolved; no additional payment operation was started." });
 
@@ -38,10 +38,15 @@ async function readPayment(input: StripePaymentReadInput, reader: StripeReader):
   if (intent.value.id !== intentId) return invalid();
   const base = observeStripePayment({ expected: { ...expected, paymentIntentId: intentId }, intent: intent.value });
   if (base.kind !== "ok") return base;
-  const refunds = await Promise.all(refundIds.map(id => reader.retrieveRefund(id)));
-  for (const refund of refunds) if (refund.kind !== "ok") return refund;
+  // Do not assume a missing locally stored refund ID means no refund happened:
+  // its POST response may have been lost, or it may have been issued in Stripe.
+  const refunds = intent.value.amountReceivedMinor > 0 || refundIds.length
+    ? await reader.listIntentRefunds(intentId)
+    : { kind: "ok" as const, value: [] };
+  if (refunds.kind !== "ok") return refunds;
+  if (refundIds.some(id => !refunds.value.some(refund => refund.id === id))) return unresolved();
   const observation = observeStripePayment({ expected: { ...expected, paymentIntentId: intentId }, intent: intent.value,
-    refunds: refunds.flatMap(result => result.kind === "ok" ? [result.value] : []),
+    refunds: refunds.value,
   });
   return observation.kind === "ok" && checkoutSessionId
     ? { kind: "ok", value: { ...observation.value, checkoutSessionId } }
