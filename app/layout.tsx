@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
+import { Caveat, Cormorant_Garamond, Figtree } from "next/font/google";
 import type { ReactNode } from "react";
 import { ConvexClientProvider } from "@/components/providers/ConvexClientProvider";
 import "./globals.css";
+
+const display = Cormorant_Garamond({ subsets: ["latin"], weight: ["500", "600"], variable: "--font-cormorant", display: "swap" });
+const sans = Figtree({ subsets: ["latin"], variable: "--font-figtree", display: "swap" });
+const hand = Caveat({ subsets: ["latin"], weight: ["500"], variable: "--font-caveat", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Unwrap",
@@ -10,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${display.variable} ${sans.variable} ${hand.variable}`}>
       <body className="min-h-screen antialiased">
         <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
