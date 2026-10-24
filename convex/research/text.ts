@@ -1,0 +1,108 @@
+/**
+ * Plain-code text helpers shared by brief building and scoring. Owner: Dev 4.
+ * Deliberately simple keyword matching: deterministic, testable, and easy to
+ * replace with a Dev 3 model-generated brief behind the same function shapes.
+ */
+
+const FRAMING_PREFIX =
+  /^(?:(?:she|he|they|maya)\s+)?(?:(?:really|kind of|kinda|also)\s+)?(?:is\s+|are\s+)?(?:interested in|into|likes?|loves?|enjoys?|wants?(?: to)?(?: (?:try|take|learn|get|do))?|wishes?(?: for)?|would love(?: to)?(?: (?:try|take|learn|get))?|already (?:owns?|has|have|bought|got)|owns?|has|have|bought|got|hates?|dislikes?|(?:does not|doesn't|don't|do not) (?:like|want|need)|no more|not)\s+/i;
+
+const LEADING_ARTICLE = /^(?:a|an|the|some|more|another|any)\s+/i;
+const TRAILING_FILLER = /\s+(?:lately|recently|this year|next year|anymore|any more|again|too)$/i;
+
+const STOPWORDS = new Set([
+  "a", "an", "and", "any", "for", "her", "his", "in", "of", "on", "or", "some",
+  "the", "their", "them", "to", "with", "she", "he", "they", "it", "its", "is",
+  "set", "piece", "pcs", "pc",
+]);
+
+/** Synonyms that should count as the same word when matching titles. */
+const CANONICAL: Record<string, string> = {
+  beginner: "starter",
+  beginners: "starter",
+  classes: "class",
+  lesson: "class",
+  lessons: "class",
+  workshop: "class",
+};
+
+/** Strips framing like "Already owns a" from a clue so only the subject remains. */
+export function cluePhrase(text: string): string {
+  let phrase = text.trim().replace(/[.!?]+$/, "").trim();
+  phrase = phrase.replace(FRAMING_PREFIX, "");
+  phrase = phrase.replace(LEADING_ARTICLE, "");
+  phrase = phrase.replace(TRAILING_FILLER, "");
+  return phrase.trim().toLowerCase();
+}
+
+function stem(word: string): string {
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+/** Lowercase content tokens with stopwords removed and simple synonyms merged. */
+export function contentTokens(text: string): string[] {
+  const tokens = text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 1 && !STOPWORDS.has(t))
+    .map((t) => CANONICAL[t] ?? stem(t))
+    .map((t) => CANONICAL[t] ?? t);
+  return [...new Set(tokens)];
+}
+
+/**
+ * Wording guard, not an image classifier. A visual observation or a tentative
+ * guess must be reviewed/reclassified before it can drive search or ownership.
+ */
+export function isUnconfirmedObservation(text: string): boolean {
+  const subject = text.trim().toLowerCase()
+    .replace(/^(?:she|he|they|maya|the recipient)\s+/, "")
+    .replace(/^(?:is|are|was|were)\s+/, "");
+  return /^(?:might|may|could|possibly|probably|seems?|appears?|looks? like)\b/.test(subject)
+    || /^(?:(?:seen|shown|pictured|photographed|observed)(?:\s+to be)?\s+)?(?:wearing|holding|carrying|using|standing|posing)\b/.test(subject)
+    || /^(?:in|from) (?:this |the |a )?(?:photo|picture|image)\b/.test(subject);
+}
+
+/** Remove generic preference framing; leave actual product/style words intact. */
+export function shoppingPhrase(text: string): string {
+  return cluePhrase(text)
+    .replace(/^(?:prefers?|drawn to)\s+/, "")
+    .replace(/\s+(?:style|styles|aesthetic|look)$/, "")
+    .trim();
+}
+
+const SHOPPING_ALIASES: Record<string, string> = {
+  minimalist: "minimal",
+  retro: "vintage",
+  jean: "denim",
+  jeans: "denim",
+  climbing: "climb",
+  climber: "climb",
+};
+const JEWELRY_ITEMS = new Set(["jewelry", "jewellery", "earring", "necklace", "bracelet", "pendant", "bangle"]);
+const PALETTE_COLORS = new Set(["olive", "terracotta", "beige", "tan", "brown"]);
+const VISIBLE_STYLE_ITEMS = new Set([
+  "jacket", "shirt", "tshirt", "sweater", "hoodie", "scarf", "tote", "bag",
+  "blanket", "cushion", "vase", "planter", "mug", "hat", "cap", "trouser", "pant",
+]);
+
+/**
+ * Small, explicit catalog vocabulary for positive preference matching only.
+ * Ownership/exclusion matching continues to use literal contentTokens so e.g.
+ * owning jeans does not imply owning every denim product.
+ */
+export function shoppingMatchTokens(text: string): string[] {
+  const phrase = text.toLowerCase()
+    .replace(/\brock[\s-]+climbing\b/g, "climbing")
+    .replace(/\bearth[\s-]+(?:tones?|toned)\b/g, "earthtone");
+  const tokens = contentTokens(phrase).map(token => SHOPPING_ALIASES[token] ?? token);
+  const result = new Set(tokens);
+  if (tokens.some(token => JEWELRY_ITEMS.has(token))) result.add("jewelry");
+  // "Olive oil" is not a style match. Require a visible goods category too.
+  if (tokens.some(token => PALETTE_COLORS.has(token))
+    && tokens.some(token => VISIBLE_STYLE_ITEMS.has(token))) result.add("earthtone");
+  return [...result];
+}

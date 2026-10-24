@@ -15,3 +15,8 @@ next-env.d.ts
 .DS_Store
 npm-debug.log*
 coverage/
+
+# Local source-spike responses and run reports
+work/research-spike/
+.vercel
+.env*
