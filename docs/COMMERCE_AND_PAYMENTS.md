@@ -148,8 +148,9 @@ Confirmed design constraints:
 - No raw card details in our code. Use Stripe Checkout, Payment Element, or the sponsor’s hosted equivalent.
 - Each `PaymentAttempt` references exactly one `revisionId` and one `participantId`.
 - Authorize (manual capture) per contributor, then capture only when the revision is still current and required approvals/authorizations are valid.
-- Freeze room edits when group status becomes `capturing`.
-- Cancel obsolete uncaptured authorizations when a revision is superseded.
+- Freeze room edits when group status becomes `capturing`. They stay frozen through `test_funded` and `recovery_pending`.
+- Cancel obsolete uncaptured authorizations when a revision is superseded. Edits during `authorizing`, `ready_to_capture`, or `blocked` supersede the revision and record `cancellation_pending` on live attempts.
+- The whole flow is off unless the deployment sets `PAYMENTS_SANDBOX_ENABLED=true`. Implementation: `convex/payments/stateMachine.ts` (pure) and `convex/payments/state.ts` (BE-015).
 - Track refunds and cancellations independently from the new revision.
 
 LLM output cannot create attempts or capture.

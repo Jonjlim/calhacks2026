@@ -14,7 +14,12 @@ export async function getUserId(ctx: Pick<QueryCtx, "auth">): Promise<string | n
   return await getAuthUserId(ctx);
 }
 
-export async function getMembership(
+/** A room the organizer deleted is gone for every caller, even while its rows are still being purged. */
+export function isLiveRoom(room: Doc<"rooms"> | null): room is Doc<"rooms"> {
+  return room !== null && room.deletedAt === undefined;
+}
+
+async function findParticipant(
   ctx: QueryCtx,
   roomId: Id<"rooms">,
 ): Promise<Doc<"participants"> | null> {
@@ -26,18 +31,27 @@ export async function getMembership(
     .unique();
 }
 
+/** The caller's participant row, or null when signed out, not a member, or the room is deleted. */
+export async function getMembership(
+  ctx: QueryCtx,
+  roomId: Id<"rooms">,
+): Promise<Doc<"participants"> | null> {
+  if (!isLiveRoom(await ctx.db.get(roomId))) return null;
+  return await findParticipant(ctx, roomId);
+}
+
 export type MemberContext =
   | { ok: true; room: Doc<"rooms">; me: Doc<"participants"> }
   | { ok: false; code: "unauthorized" | "not_found" };
 
 /**
- * Loads the room and the caller's participant row. Missing rooms and
- * non-members both come back as failures; callers map them to AppErrors.
+ * Loads the room and the caller's participant row. Missing or deleted rooms
+ * and non-members both come back as failures; callers map them to AppErrors.
  */
 export async function requireMember(ctx: QueryCtx, roomId: Id<"rooms">): Promise<MemberContext> {
   const room = await ctx.db.get(roomId);
-  if (!room) return { ok: false, code: "not_found" };
-  const me = await getMembership(ctx, roomId);
+  if (!isLiveRoom(room)) return { ok: false, code: "not_found" };
+  const me = await findParticipant(ctx, roomId);
   if (!me) return { ok: false, code: "unauthorized" };
   return { ok: true, room, me };
 }
