@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { CLUE_KIND_LABELS } from "@/components/clues/labels";
@@ -51,6 +51,18 @@ function AggregateStrip({ aggregate }: { aggregate: WorldAggregate }) {
 }
 
 export function WorldsGallery() {
+  const convex = useConvex();
+  if (!convex) return (
+    <main className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10">
+      <Link href="/" className="text-sm text-coral underline">Back to Unwrap</Link>
+      <h1 className="text-3xl font-semibold text-plum">Other gift worlds</h1>
+      <p role="status" className="text-plum-soft">Shared worlds need a connected backend. No live gift sessions are available in this offline preview.</p>
+    </main>
+  );
+  return <LiveWorldsGallery />;
+}
+
+function LiveWorldsGallery() {
   const result = useQuery(api.worlds.listWorlds, {});
   const seed = useMutation(api.worlds.seedSampleWorlds);
   const seeded = useRef(false);
