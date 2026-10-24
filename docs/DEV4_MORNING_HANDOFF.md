@@ -145,3 +145,21 @@ event deduplication and state transitions are still absent, so no client payment
 endpoint or UI has been enabled. Live sandbox spike, post-authorization cancellation,
 refund polling and multi-contributor recovery remain open. Payment work stays local
 for the money/state integration review; the earlier dev push did not contain it.
+
+## Independent backend work while Alex was away (October 24, about 11:20 local)
+
+- `075b576`: completed read-only Stripe recovery helpers and an auditable sandbox spike. Provider reads compare amount, intent IDs and room/revision/member/attempt bindings; refunds are fresh, bounded and deduplicated. Full vs partial capture/refund and unresolved states remain distinct. Raw failures stay sanitized.
+- Actual sandbox check on personal dev cool-bat-724 passed create → retrieve → expire of one $1 synthetic Checkout. No card entered, funds authorized/captured or refund executed. Run 29a37712-0039-47a8-9d69-1d72f2fa2720. The configured secret was read into memory only, never printed or saved. Initial missing-key checks made no Stripe requests.
+- `136db89`: removed the fifty-request limit that could hide a valid older successful shortlist, and fenced superseded lost workers as stale before the timeout path. This avoids blocking a fresh explicit search with an old unresolved request. Both bugs have regression tests.
+- Validation: 438 passed / 3 live-only skipped with `npm test -- --maxWorkers=2`; app and Convex TypeScript passed. A simultaneous default-parallel run hit five-second timeouts; no assertions were weakened. Limited-concurrency verification passed all tests.
+- Synced backend code to **personal dev cool-bat-724 only** with `npx convex dev --once`; functions ready at 11:20:08. No production deployment, shared-branch push or secret/environment modification was performed.
+- Payment adapter/recovery work remains in local commits for review. End-to-end payments are not enabled: Dev 2 still needs durable attempt/event storage, operation claims, approvals/current-revision checks, state transitions and the webhook route. See DEV4_PAYMENTS_HANDOFF.md. Verified signature parsing alone is not durable webhook handling.
+
+Remaining task status: RC-010 has verified hosted-session primitives, not a finished
+user-facing Checkout flow. RC-011 has capture primitives but not multi-contributor
+orchestration. RC-012 has signature verification plus fresh provider reconciliation,
+not durable database deduplication. RC-013 has expiry/refund primitives and recovery
+observations; real post-authorization cancellation and group recovery still need
+acceptance. RC-014 remains recorded discovery context, not live discovery fetching;
+RC-015 (optional additional product source) is not implemented. Do not call these
+full milestones complete from adapter/unit test results.
