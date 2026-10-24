@@ -226,6 +226,16 @@ describe("citation recovery", () => {
       citations: { listingIds: ["l2"] },
     });
   });
+  it("builds an automatic follow-up from the records when the model returns malformed output twice", async () => {
+    const model = vi.fn().mockResolvedValue({ nonsense: true });
+    const result = await decideBuyer(recSnapshot(), model);
+    expect(model).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ intent: "recommend", citations: { listingIds: ["l2"] } });
+    // A human-addressed turn does not get a silent substitute for what they asked.
+    await expect(decideBuyer({ ...recSnapshot(), trigger: "human" }, model)).rejects.toMatchObject({
+      code: "validation_failed",
+    });
+  });
   it("still fails when there is nothing grounded to fall back on", async () => {
     const model = vi.fn().mockResolvedValue(bad);
     await expect(

@@ -9,7 +9,7 @@ import { CouncilMember } from "@/components/council/CouncilMember";
 import { Decoration } from "@/components/council/Decoration";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilEvent, decorationsFrom, reduceCouncil } from "@/lib/council/contracts";
 import { COUNCIL_MODELS } from "@/lib/council/animation";
-import { useGLTF } from "@react-three/drei";
+import { Environment, Lightformer, useGLTF } from "@react-three/drei";
 import { KitBuilder } from "../kit";
 import { KitParts } from "../islands/shared";
 import { InkOutline } from "../painterly/InkOutline";
@@ -18,12 +18,13 @@ import { flat, paint } from "../painterly/materials";
 import { plasterTexture, stoneTexture, woodTexture } from "../painterly/textures";
 import type { RoomWorld } from "../IslandWorldProvider";
 import { INTERIOR, INTERIOR_ORIGIN } from "./stageLayout";
+import { sampleRoutine, stationFor, AGENT_ROUTINES } from "./agentRoutines";
 import { TowerProps } from "./TowerProps";
 
 /**
  * Inside the storybook tower: the AI Council's round table. The five agents
- * stand on the far side and animate only from persisted task events; the
- * friends' spirits gather on the near side. Each newly shared memory is a
+ * roam the perimeter, pause at their workstations for persisted tasks, and
+ * leave the centre-front spot to the player and the friends' spirits. Each newly shared memory is a
  * folded note that floats into the jar for its kind; when the Muse finishes,
  * the charm it designed rises over the table, ready to be carried outside.
  */
@@ -375,20 +376,61 @@ function MemoryNote({ from, jar, onDone }: { from: THREE.Vector3; jar: keyof typ
 function Agent({ actor, events, animate, onStatus, onPick }: { actor: CouncilActor; events: CouncilEvent[]; animate: boolean; onStatus: (actor: CouncilActor, s: "ready" | "failed") => void; onPick?: () => void }) {
   const state = useMemo(() => reduceCouncil(events)[actor], [events, actor]);
   const ready = useCallback(() => onStatus(actor, "ready"), [actor, onStatus]);
-  const s = seat(SEATS[actor], INTERIOR.tableRadius + 0.45);
+  const root = useRef<THREE.Group>(null);
+  const elapsed = useRef(0);
+  const initial = useMemo(() => sampleRoutine(actor, 0), [actor]);
+  const [activity, setActivity] = useState<import("@/lib/council/animation").CouncilClip>(initial.clip);
+  const activityRef = useRef<string | undefined>(initial.clip);
+  const [reacting, setReacting] = useState(false);
+  const reactionRemaining = useRef(0);
+  const previousSequence = useRef(state.sequence);
+  useEffect(() => {
+    if (state.sequence !== previousSequence.current && state.status === "completed") {
+      reactionRemaining.current = 3;
+      setReacting(true);
+    }
+    previousSequence.current = state.sequence;
+  }, [state.sequence, state.status]);
+  useFrame((_, dt) => {
+    const g = root.current;
+    if (!g || !animate) return;
+    const delta = Math.min(dt, 0.05);
+    const inReaction = reactionRemaining.current > 0;
+    reactionRemaining.current = Math.max(0, reactionRemaining.current - delta);
+    // Pause the background routine while a real task is in progress, so it resumes naturally.
+    if (state.status !== "started" && !inReaction) elapsed.current += delta;
+
+    if (!inReaction && reacting) setReacting(false);
+    const plan = sampleRoutine(actor, elapsed.current);
+    const station = state.status === "started" ? stationFor(actor) : null;
+    const target = inReaction ? { x: g.position.x, z: g.position.z } : station ?? plan;
+    // Polar movement stays in a clear aisle even when a real task interrupts a patrol.
+    const angle = Math.atan2(g.position.z, g.position.x);
+    const want = Math.atan2(target.z, target.x);
+    const turn = Math.atan2(Math.sin(want - angle), Math.cos(want - angle));
+    const radius = Math.hypot(g.position.x, g.position.z);
+    const wantRadius = Math.hypot(target.x, target.z);
+    const speed = AGENT_ROUTINES[actor].speed;
+    const nextAngle = angle + THREE.MathUtils.clamp(turn, -speed * delta / radius, speed * delta / radius);
+    const nextRadius = radius + THREE.MathUtils.clamp(wantRadius - radius, -speed * delta, speed * delta);
+    const oldX = g.position.x, oldZ = g.position.z;
+    g.position.set(Math.cos(nextAngle) * nextRadius, 0, Math.sin(nextAngle) * nextRadius);
+    const moving = Math.hypot(g.position.x - oldX, g.position.z - oldZ) > 0.0001;
+    const look = station?.lookAt ?? plan.lookAt;
+    const face = moving ? Math.atan2(g.position.x - oldX, g.position.z - oldZ) : Math.atan2(look[0] - g.position.x, look[1] - g.position.z);
+    g.rotation.y += Math.atan2(Math.sin(face - g.rotation.y), Math.cos(face - g.rotation.y)) * (1 - Math.exp(-delta * 5));
+    const nextActivity = moving ? "walk" : plan.clip;
+    if (activityRef.current !== nextActivity) { activityRef.current = nextActivity; setActivity(nextActivity); }
+    g.userData.moving = moving;
+  });
   return (
-    <group
-      onClick={(e) => {
-        e.stopPropagation();
-        onPick?.();
-      }}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        document.body.style.cursor = "pointer";
-      }}
+    <group ref={root} position={[initial.x, 0, initial.z]} userData={{ councilActor: actor, roaming: true }}
+      onClick={(e) => { e.stopPropagation(); onPick?.(); }}
+      onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
       onPointerOut={() => (document.body.style.cursor = "")}
     >
-      <CouncilMember state={state} position={[s.x, 0, s.z]} rotationY={s.faceY} scale={0.6} animate={animate} onReady={ready} />
+      <CouncilMember state={state} position={[0, 0, 0]} scale={0.6} animate={animate} onReady={ready}
+        clipOverride={reacting || (state.status === "started" && activity !== "walk") || state.status === "failed" ? undefined : activity} />
     </group>
   );
 }
@@ -413,13 +455,18 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
   animate: boolean;
   onAssetStatus: (actor: CouncilActor, s: "ready" | "failed") => void;
 }) {
-  // Friends on the near arc, in join order.
-  const friends = useMemo(() => inJoinOrder(world.participants).map((p, i) => {
-    const n = world.participants.length;
-    const turns = 0.18 + (n === 1 ? 0.32 : (i / (n - 1)) * 0.64);
-    const s = seat(turns, INTERIOR.tableRadius + 0.75);
-    return { ...p, avatar: avatarForIndex(i), x: s.x, z: s.z, faceY: s.faceY };
-  }), [world.participants]);
+  // The viewer owns the centre-front spot. Friends join on either side; agents use the perimeter.
+  const friends = useMemo(() => {
+    const ordered = inJoinOrder(world.participants);
+    const viewer = ordered.find(p => p.id === world.viewerId) ?? ordered[0];
+    const front = viewer ? [viewer, ...ordered.filter(p => p.id !== viewer.id)] : ordered;
+    return front.map((p, i) => {
+      const side = i % 2 === 1 ? -1 : 1;
+      const x = i === 0 ? 0 : side * (0.75 + Math.floor((i - 1) / 2) * 0.65);
+      const z = i === 0 ? 2.1 : 2.25 + Math.floor((i - 1) / 2) * 0.25;
+      return { ...p, avatar: avatarForIndex(ordered.findIndex(o => o.id === p.id)), x, z, faceY: Math.atan2(-x, -z) };
+    });
+  }, [world.participants, world.viewerId]);
 
   // Notes fly only for memories shared during this visit, never on refresh.
   const known = useRef<Set<string> | null>(null);
@@ -469,6 +516,13 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
   return (
     <group position={INTERIOR_ORIGIN}>
       <ambientLight intensity={0.35} color="#ffe6c8" />
+      {/* A small, locally generated reflection map gives the ceramic robots soft window light.
+          One capture only; no external HDRI, background change or ongoing postprocessing. */}
+      <Environment resolution={128} frames={1} environmentIntensity={0.8}>
+        <Lightformer form="rect" color="#fff0d8" intensity={2} position={[-3, 4, 3]} target={[0, 0, 0]} scale={[5, 5, 1]} />
+        <Lightformer form="rect" color="#d7eaff" intensity={1.5} position={[3, 2, -2]} target={[0, 0, 0]} scale={[4, 4, 1]} />
+        <Lightformer form="rect" color="#f7e9d0" intensity={0.7} position={[0, 5, 0]} target={[0, 0, 0]} scale={[6, 6, 1]} />
+      </Environment>
       <HangingLantern x={-1.2} z={0.3} phase={0} />
       <HangingLantern x={1.3} z={-0.6} phase={2} />
       <Room />
@@ -486,7 +540,7 @@ export function TowerInterior({ world, animate, onAssetStatus }: {
       ))}
       <Suspense fallback={null}>
         {friends.map((f) => (
-          <group key={f.id} position={[f.x, 0, f.z]} rotation={[0, f.faceY, 0]}>
+          <group key={f.id} position={[f.x, 0, f.z]} rotation={[0, f.faceY, 0]} userData={{ participantId: f.id, playerFront: f.id === (world.viewerId ?? friends[0]?.id) }}>
             <StorybookAvatar
               avatar={f.avatar}
               clip={cheering.has(f.id) ? "Celebrate" : "Idle"}

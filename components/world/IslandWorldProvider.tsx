@@ -18,6 +18,7 @@ const WorldCanvas = dynamic(() => import("./WorldCanvas"), { ssr: false });
  */
 export interface RoomWorld {
   roomId: string;
+  viewerId?: string;
   events: CouncilEvent[];
   decorations: DecorationSpec[];
   participants: { id: string; displayName: string; joinedAt?: number }[];
@@ -64,9 +65,19 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   // The phone controller (/room/:id/phone) never loads the 3D world.
   const phone = pathname.startsWith("/room/") && pathname.split("/")[3] === "phone";
+  const map = pathname.startsWith("/room/") && pathname.split("/")[3] === "map";
   const roomId = pathname.startsWith("/room/") && !phone ? pathname.split("/")[2] : undefined;
-  const visible = pathname === "/" || !!roomId;
-  const reducedMotion = useReducedMotion() ?? false;
+  const visible = pathname === "/" || (!!roomId && !map);
+  const initialMotionPreference = useReducedMotion() ?? false;
+  const [liveMotionPreference, setLiveMotionPreference] = useState<boolean | null>(null);
+  const reducedMotion = liveMotionPreference ?? initialMotionPreference;
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setLiveMotionPreference(preference.matches);
+    update();
+    preference.addEventListener("change", update);
+    return () => preference.removeEventListener("change", update);
+  }, []);
   const phase = useIntroPhase();
   const unwrap = useUnwrapPhase();
   const [webgl, setWebgl] = useState<boolean | null>(null);

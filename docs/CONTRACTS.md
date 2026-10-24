@@ -8,6 +8,18 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Shared memory tree integration (Dev 3 / Dev 1, October 24)
+
+The room map offers a sky-tree exploration view and an arrangement view over the same published clues, suggestions, listings, selection and approvals. Scene positions and vibe attraction are presentation only; changing a vibe never publishes a preference. A separate human confirmation is required to publish it.
+
+- Existing membership-scoped `map.getMapState`, `moveNode`, `moveCursor`, `listCursors`, `growSeed`, and `plantSprout` retain their endpoints. Suggestions stay labelled agent/preset ideas until a human confirms they are true. Growth commits and planting recheck the active seed and room membership; stale seeds cannot grow/publish branches.
+- `map.setFeedback({roomId, listingId, kind: "owned" | "price"})` creates an attributed, idempotent reaction for that member and listing. Owned explicitly publishes a room-visible manual ownership clue tied to the observed listing title, bumps knowledge, and reranks cached candidates. Price records a personal reaction only; it does not assert recipient knowledge, change a budget/private cap, or trigger paid research. `map.undoFeedback({feedbackId})` is author-only and withdraws only its own backing ownership clue when applicable. Feedback is shared with attribution; personal price reactions dim only that viewer's candidate. Additive `mapFeedback` table; no migration of existing rows.
+- `getMapState` adds `feedback`, including the attributed reaction, its ID and the observed listing needed to keep a rejected island inspectable. Other members' private contribution limits, imports and recipient records never enter this projection.
+- `map.editMemory({clueId, expectedText, text})` permits only the publisher to edit an active manual memory, rejects stale text, and bumps knowledge. Imported clues keep their source/review workflow; other members can contribute a new memory instead of rewriting someone else's evidence.
+- Gift island actions call the existing `selectGift` (organizer) or `castVote` (contributor). Real proposal revisions and approval states are subscribed to; no simulated approval enters the live map. Existing proposal permissions and private-cap projection remain authoritative.
+
+Owners/consumers: Dev 3 owns map actions and lifecycle checks; Dev 1 owns the shared room surfaces; Dev 2 owns unchanged selection/proposal operations; Dev 4 supplies unchanged sourced listings. The 3D scene is lazy loaded, bounded to a focused subset, with a button/list fallback and the arrangement view retained. Private evidence remains in the existing room tools.
+
 ### Member 3 research continuation (2026-10-24)
 
 Owner: Dev 3; shared consumers: Dev 1 (message evidence/activity), Dev 2 (human messages/knowledge hooks), Dev 4 (catalog/research completion).
@@ -767,8 +779,9 @@ P0 manual room clue for preferences/exclusions without an import.
 - Storage adapter for the existing searchBrief validator: omit roomId from researchJobs.brief because it already lives on researchJobs; restore it when calling the provider. Shared SearchBrief still includes roomId. This is explicit compatibility handling, not a schema migration.
 - Pending job insertion and worker scheduling occur in one mutation. The provider uses verified Actor build 0.0.142, one US search page, 120-second provider timeout and a $0.20 maximum run charge.
 - Only pending jobs can claim a provider start. Network ambiguity becomes uncertain; no automatic paid POST retry. Run IDs are retained in durable scheduled poll arguments. If a start response is lost before returning the run ID, operators must check Apify Console; automatic run discovery/reconciliation is not implemented.
+- Provider responses are streamed with a 750,000-byte ceiling before JSON parsing or Convex mutation arguments. Empty, truncated, oversized or malformed replies stay uncertain; no POST retry is issued. Redirects are refused. Poll replies must match the requested alphanumeric run ID before their dataset is read; invalid run/dataset IDs are rejected before contacting the provider. These checks add no client fields, provider or schema changes (Dev 4 owner).
 - Completion inserts normalized listings and succeeds atomically, at most once. It rejects changed knowledgeRevision or any newer research request. Ordering uses the room index's creation-order suffix, not completion time.
-- listRecommendations uses the latest successful request among the 50 most recent room jobs. While a refresh is pending/failed, the previous successful candidate pool remains available. It re-ranks against all current active clues on each read, includes only visible ranked listings, and does not trust stored recommendation rows. Changing clues after a successful search can update the ranking without another provider run.
+- listRecommendations independently selects the latest successful request using the room index, even after more than 50 failed requests. While a refresh is pending/failed, the previous successful candidate pool remains available. It re-ranks against all current active clues on each read, includes only visible ranked listings, and does not trust stored recommendation rows. Changing clues after a successful search can update the ranking without another provider run.
 - Query recommendations have stable derived IDs (job ID + listing ID) and request timestamps. Product retrievedAt is the observed retrieval time; clients compute price-age labels from it.
 - Research-specific claim/completion/poll mutations live in research.ts. Dev 2's generic jobs.ts and schema are unchanged. Research timeouts cannot restart the paid provider automatically.
 
@@ -1111,3 +1124,289 @@ price or platform-wide trend. Existing server budget, exclusions, revision check
 one-direction shopping worker still apply. The context participates in input-version fencing.
 No TikTok request, automatic paid discovery, new provider or deployment is enabled by this
 bridge. Live refresh/persistence and user-visible discovery provenance are still pending.
+
+### Stripe test adapter boundary (Dev 4, P1-B in progress)
+
+Owner: Dev 4 transport/signature verification. Consumer: Dev 2 payment state machine.
+This is a server-only helper contract, not a public action. No client, model or agent
+may call it directly. RC-010..013 are not complete until durable state, endpoint
+wiring, sandbox acceptance and recovery checks pass.
+
+`createStripeTestAdapter({ secretKey, frontendOrigin }, fetcher?)` exposes
+`createCheckout(input)`, `retrieveCheckout(id)`, `expireCheckout(id, key)`,
+`retrieveIntent(id)`, `captureIntent(id, key)`, and `refundIntent(id, amountMinor, key)`.
+Every write requires an idempotency key. Input IDs bind room, immutable revision,
+participant and stored payment attempt. `mode: "authorize"` requests manual capture;
+`mode: "collect"` is organizer-only test collection after the caller's policy check.
+The adapter accepts only test secret/restricted keys and validates `livemode: false`
+on provider objects. Only USD, integer cents and hosted Stripe Checkout are supported.
+Checkout accepts 50..99,999,999 cents; smaller shares are refused, never rounded up.
+
+The caller must persist intent before the request, enforce membership/own-share or
+organizer policy, require current approved revision and known permitted total, and
+freeze edits before capture. The adapter does not authorize these operations.
+Provider responses are reduced to allowlisted IDs, amounts and status fields; no
+client secrets, payer details or raw errors escape. Failures return `failed` or
+`uncertain`, never invented success. No automatic retries; reconciliation retrieves
+provider state. Checkout redirects carry no success authority. Expiring an open
+Checkout is not cancellation of a completed authorization or a refund.
+
+`verifyStripeTestEvent(rawBody, signature, signingSecret, nowMs)` checks HMAC-SHA256
+against the unmodified UTF-8 body, at least one v1 signature and a 300-second
+past/future tolerance, then validates a test-mode event envelope. It returns only
+an event ID/type and provider object reference. Dev 2 must durably deduplicate event
+IDs and retrieve the provider object before applying a transition. Verification
+alone does not grant a payment, capture, cancellation or refund state.
+
+Additive shared types are `StripeCheckoutInput`, `StripeTestSession`,
+`StripeTestIntent`, `StripeTestRefund`, `StripeTestEvent`, `StripePaymentBinding` and `StripeAdapterResult<T>`. Provider sessions/intents must carry the four binding IDs in metadata; the allowlisted DTO returns them so the state layer can compare them to its stored attempt. Mismatched requested/provider object IDs are unresolved, never accepted.
+No database migration or payment-enabled UI is introduced by the helper work.
+
+```ts
+export interface StripeCheckoutInput {
+  roomId: string;
+  revisionId: string;
+  participantId: string;
+  attemptId: string;
+  amountMinor: number;
+  currency: "USD";
+  mode: "authorize" | "collect";
+  idempotencyKey: string;
+}
+export type StripePaymentBinding = Pick<StripeCheckoutInput, "roomId" | "revisionId" | "participantId" | "attemptId">;
+export interface StripeTestSession {
+  id: string;
+  binding: StripePaymentBinding;
+  checkoutUrl?: string;
+  status: "open" | "complete" | "expired";
+  paymentStatus: "paid" | "unpaid" | "no_payment_required";
+  paymentIntentId?: string;
+  amountMinor: number;
+  currency: "USD";
+}
+export interface StripeTestIntent {
+  id: string;
+  binding: StripePaymentBinding;
+  status: "requires_payment_method" | "requires_confirmation" | "requires_action" | "processing" | "requires_capture" | "canceled" | "succeeded";
+  amountMinor: number;
+  amountCapturableMinor: number;
+  amountReceivedMinor: number;
+  currency: "USD";
+  captureMethod: "automatic" | "automatic_async" | "manual";
+}
+export interface StripeTestRefund {
+  id: string;
+  paymentIntentId: string;
+  amountMinor: number;
+  status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled";
+}
+export interface StripeTestEvent {
+  id: string;
+  type: string;
+  objectId: string;
+  objectType: string;
+}
+export type StripeAdapterResult<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "failed" | "uncertain"; message: string };
+```
+
+### Stripe reconciliation helpers (Dev 4 provider observations)
+
+`retrieveRefund(refundId)` fetches a refund and verifies its parent PaymentIntent is
+in test mode. `observeStripePayment({ expected, intent, refunds? })` returns an
+allowlisted provider observation, not a database transition. `expected` contains
+`binding: StripePaymentBinding`, the frozen `amountMinor`, expected `mode`, and
+an optional already-bound PaymentIntent id. A mismatch refuses the observation.
+
+The observation reports `status: PaymentAttempt["status"]`, `paymentIntentId`,
+`capturedMinor`, `refundedMinor` and a bounded reason. A full observed capture is
+`captured`; a partial capture is `action_required`. Known succeeded refunds are
+deduplicated by provider id and summed in cents. Only a sum exactly equal to the
+captured amount is `refunded`; partial or pending recovery is not full refund.
+A fresh intent awaiting a payment method is pending, not a fabricated failure.
+Caller retrieves provider state after a verified webhook and durably applies the
+observation under Dev 2's event-id/revision fences. This helper never captures,
+refunds, unfreezes a room or declares the merchant order complete.
+
+`readStripePayment(input: StripePaymentReadInput, reader)` fetches the current
+Checkout and/or PaymentIntent, compares frozen amount/bindings/known object IDs,
+then discovers refunds by PaymentIntent before reporting any captured funds.
+`listIntentRefunds(intentId): Promise<StripeAdapterResult<StripeTestRefund[]>>`
+verifies the test-mode parent and reads a single filtered page of up to 100
+refunds. A truncated page, foreign intent, duplicate ID or invalid object stays
+uncertain. All results use the existing allowlisted refund DTO; payer details
+are discarded. This recovers refunds whose create response was lost before
+their ID could be stored. Up to ten distinct `refundIds` may still be supplied
+as previously tracked references; each must appear in that complete fresh list.
+Missing tracked refunds stay uncertain rather than treating the list as empty.
+No list call is needed when no captured funds and no tracked refunds exist.
+An empty list cannot prove an unresolved refund write failed: the durable
+operation fence remains the state layer's responsibility, and this read never
+permits an automatic retry.
+No write method is available on its reader port. An open session with no intent
+is pending; an expired session with no intent is canceled. A previously known
+intent is always retrieved even if its session has expired. Completed Checkout
+without a retrievable intent stays unresolved. A payment observation can omit
+`paymentIntentId` before the provider has created one and includes the observed
+`checkoutSessionId` when supplied. The input comes from the state layer, not a
+browser. Repeated/out-of-order webhook notifications lead to fresh reads, not
+blind replay of their embedded status.
+
+Owner: Dev 4; consumer: Dev 2's future payment worker. The reader port now uses
+`listIntentRefunds` instead of individual `retrieveRefund` calls. Existing input
+and output DTOs are unchanged; no current production caller or database migration
+is affected. `retrieveRefund` remains available for individual reference checks.
+Provider reference: [Stripe list refunds](https://docs.stripe.com/api/refunds/list).
+
+```ts
+interface StripePaymentExpectation {
+  binding: StripePaymentBinding;
+  amountMinor: number;
+  mode: "authorize" | "collect";
+  paymentIntentId?: string;
+}
+interface StripePaymentObservation {
+  status: PaymentAttempt["status"];
+  paymentIntentId?: string;
+  checkoutSessionId?: string;
+  capturedMinor: number;
+  refundedMinor: number;
+  reason: string;
+}
+interface StripePaymentReadInput {
+  expected: StripePaymentExpectation;
+  checkoutSessionId?: string;
+  paymentIntentId?: string;
+  refundIds?: string[];
+}
+```
+
+Research candidate retention fix: the room-scoped catalog query selects the newest
+successful research job independently from the latest request. It does not discard
+that pool after fifty later failed/uncertain jobs. Both reads use the existing room
+index; no global table scan or schema migration is introduced.
+
+
+A research watchdog first fences the request against the room's current knowledge
+and newest requested job. A superseded lost worker becomes `stale`, not `uncertain`;
+only an unresolved current request becomes uncertain and queues a status follow-up.
+This prevents old unresolved inputs from blocking a later explicitly requested
+search while preserving the no-automatic-paid-retry rule for current uncertainty.
+
+### Live fashion discovery jobs (RC-014, Dev 4)
+
+Owner: Dev 4 research. Consumers: Dev 1 discovery cards; Dev 3 optional search tools.
+This adds a room-indexed `fashionJobs` table, isolated from payment and agent tables.
+The new table has no migration of existing rows. UI and buyer-agent wiring are
+separate consumers; existing research requests remain compatible.
+BE-017 integration: deleting a room cancels open fashion jobs and purges every
+fashion row through the room index in the job-first deletion phase. Fashion
+workers refuse rooms marked `deletedAt` and members who have left, so late
+provider responses cannot recreate data after access revocation.
+
+- `research/fashion.startDiscovery({roomId, idempotencyKey})` is a membership-checked
+  mutation. It derives only `denim outfit` or `vintage denim outfit` from active,
+  confirmed published interest/wish clues. Raw private evidence, names and arbitrary
+  user queries never reach the social provider. It persists pending before scheduling
+  one bounded Actor start. Same-key retries reuse the job; same-seed open/uncertain
+  jobs block duplicate paid starts. A current succeeded sample is reused for 24 hours.
+  A known superseded run is fenced stale before a human explicitly requests the
+  new revision; an unknown paid-start outcome without a run ID stays blocked for
+  operator review even after knowledge changes.
+- `research/fashion.resumeDiscovery({roomId, jobId})` polls an existing known run
+  after uncertainty. It never creates a new Actor run. Unknown-start outcomes need
+  operator reconciliation. Changed room knowledge makes a job stale.
+- `research/fashion.getDiscovery({roomId})` returns `Result<FashionDiscoveryView>`.
+  Only room members can see the current room's latest status and usable sample.
+  A sample includes provider Actor/build/run provenance, original 30-day window,
+  retrieval time, supporting published clue IDs, garment queries and TikTok post
+  URLs. No raw captions, creator profiles, media URLs or private imports are stored.
+  Ads are excluded by the existing normalizer; unflagged/unknown is not organic.
+  Labels say sampled mentions, never viral, growing or platform-wide popularity.
+- The pinned GoFetch Actor uses at most 20 results, no profile/comment expansion,
+  one keyword and a $0.50 cap. Provider response limits and no-POST-retry rules apply.
+  A lost worker becomes uncertain. Completion rechecks room knowledge and current
+  confirmed clues; future/stale samples cannot be offered for shopping.
+- Existing `research/research.startResearch` adds optional `fashionJobId`. If supplied,
+  it must be a succeeded, fresh, same-room job for current knowledge. The first sourced
+  direction becomes the one shopping query. If a valid sample has no corroborated
+  directions, keep the ordinary published-clue brief; an empty social result never
+  blocks gift search or invents a trend. Budget, exclusions and ordinary job fences
+  remain server-owned. Discovery does not publish a recipient preference or establish
+  product popularity, sizing, stock, garment age or purchase suitability.
+
+```ts
+interface FashionDiscoverySample {
+  mode: "live_sample";
+  label: string;
+  actor: string;
+  build: string;
+  providerRunId: string;
+  context: FashionSampleContext;
+  supportingPublishedClueIds: string[];
+  directions: FashionDiscovery[];
+  evidenceSummary?: { returnedRows: number; validRecentPosts: number; excludedAdvertisingPosts: number };
+}
+interface FashionDiscoveryJobView {
+  id: string;
+  status: ResearchJob["status"];
+  createdAt: number;
+  lastError?: string;
+  canResume: boolean;
+}
+interface FashionDiscoveryView {
+  latestJob: FashionDiscoveryJobView | null;
+  sample: (FashionDiscoverySample & { jobId: string }) | null;
+}
+```
+
+`evidenceSummary` counts actual returned rows, normalized/deduplicated posts inside
+the requested time window, and explicitly flagged advertisements among those
+posts. Unknown advertising is not organic. It supports an honest empty-result
+message; it is not a popularity score. Optional for compatibility with existing
+stored samples from the first personal-dev check.
+
+### Canceling an uncaptured Stripe authorization (Dev 4, RC-013)
+
+`cancelAuthorization(intentId, idempotencyKey)` first retrieves the test-mode
+PaymentIntent. Only manual `requires_capture` intents with zero captured funds
+may be canceled; already-canceled zero-balance intents are returned from the read.
+Other states need reconciliation or refunds. Every write requires a persisted
+operation claim and stable key from Dev 2, and is never automatically retried.
+Only an observed canceled intent with zero received/capturable cents is accepted.
+This does not authorize cancellation or implement group recovery. Real sandbox
+hold cancellation remains unverified; current reference:
+https://docs.stripe.com/api/payment_intents/cancel.
+
+### Organizer Checkout worker port (Dev 4 → Dev 2)
+
+`runOrganizerCheckout(store, adapter)` consumes a server-only durable claim port;
+it is not a public action or authorization policy. `store.claim()` must verify the
+human organizer, current approved revision/total/conditions and enabled test mode,
+then atomically return a persisted claim (or existing reference/pending result).
+Only a newly claimed operation may POST. Every claim supplies the immutable
+`StripeCheckoutInput` with `mode: "collect"` and its stored idempotency key.
+`store.settle(claimId, result)` durably records the provider outcome under the
+operation fence and returns true only if committed for that claim. No Checkout
+URL is released until settlement succeeds. A database interruption after provider
+success remains uncertain; a second worker never blindly creates a new session.
+
+An existing reference is retrieved and checked against the same expected amount,
+USD currency and all four binding IDs. Expired/completed sessions are not replaced
+with another charge attempt. Only an observed open matching session supplies a
+Checkout link; returning from that link is still not payment confirmation. The
+runner uses the existing session/adapter DTOs. It requires Dev 2's implementation
+of the two durable store methods before a public endpoint can use it.
+
+```ts
+interface OrganizerCheckoutClaim {
+  claimId: string;
+  input: StripeCheckoutInput;
+  checkoutSessionId?: string;
+}
+interface OrganizerCheckoutStore {
+  claim(): Promise<StripeAdapterResult<OrganizerCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+```

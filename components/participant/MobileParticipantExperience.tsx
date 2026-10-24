@@ -7,7 +7,7 @@ import { RoomCouncilPanel } from "@/components/council/RoomCouncilPanel";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
 import { RoomAgentTools } from "@/components/room/RoomAgentTools";
-import { ShareMemory } from "@/components/room/ShareMemory";
+import { MemoryQuest } from "@/components/room/MemoryQuest";
 import type { RoomActions, RoomData } from "@/components/room/types";
 import type { Id } from "@/convex/_generated/dataModel";
 import type { PublishedClue } from "@/lib/contracts";
@@ -139,7 +139,7 @@ function CollectScreen({ data, actions, mine, allActive, isOrganizer, onBack, ph
         <p className="font-hand text-[22px] leading-tight text-dusk/60">a little magic starts with a memory</p>
         <h2 className="font-display text-[32px] leading-[1.05]">What do you remember about {room.recipientDisplayName}?</h2>
       </div>
-      <ShareMemory roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} variant="phone" />
+      <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} variant="phone" />
       <MyNotes mine={mine} />
       {isOrganizer && allActive > 0 && phase === "collect" && (
         <Card className="flex flex-col gap-3">

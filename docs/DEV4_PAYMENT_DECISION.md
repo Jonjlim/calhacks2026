@@ -1,6 +1,6 @@
 # Dev 4 payment decision (RC-009)
 
-Status: **proposed `no-pay` for P0. Needs team confirmation at the next checkpoint.**
+Status: **P0 remains pledges. P1-B adapter implementation started at Alex’s request; sandbox acceptance and Dev 2 state wiring pending.**
 
 Date: 2026-10-24. Owner: Dev 4. Consumers: Dev 2 (BE-015), Dev 1 (pledge copy), everyone (pitch).
 
@@ -23,7 +23,7 @@ Date: 2026-10-24. Owner: Dev 4. Consumers: Dev 2 (BE-015), Dev 1 (pledge copy), 
 
 - UI copy says "pledge" and "approve your share", never "pay" or "charged".
 - Drop the "nobody fronts the cost" line from the pitch while `no-pay` holds.
-- `convex/payments/` stays empty.
+- `convex/payments/` now contains isolated adapter work, but no payment-enabled public endpoints or UI.
 
 ## When to upgrade to `organizer-only`
 
@@ -35,3 +35,21 @@ All of these, by hour 22:
 4. Someone reads the current sponsor rules and records whether Stripe test mode counts.
 
 If any is missing, stay `no-pay`.
+
+## Updated execution, October 24
+
+The earlier website-not-wired rationale is historical. The integrated frontend and
+personal development deployment now exist. Alex requested progressing through the
+remaining priorities rather than blocking all P1 work on final P0 checks. Start the
+Dev 4 transport/signature work independently with mocks; do not call it a finished
+Checkout or multi-contributor feature. Real sandbox checks require a test key,
+webhook configuration and the Dev 2 durable state/freeze integration. No money or
+membership authority moves into the adapter.
+
+## Sandbox connectivity verified
+
+On cool-bat-724, one synthetic $1 manual-capture Checkout was created, retrieved
+and expired successfully. No card entry or authorization/capture/refund occurred.
+This verifies the hosted-session adapter connection, not the complete payment
+feature or webhook delivery. The durable state/event layer remains the next joint
+integration. See DEV4_PAYMENTS_HANDOFF.md for exact completed code and dependencies.

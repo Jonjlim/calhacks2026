@@ -405,7 +405,7 @@ export const deleteRoom = mutation({
 
     const now = Date.now();
     await ctx.db.patch(roomId, { deletedAt: now });
-    for (const table of ["agentJobs", "researchJobs"] as const) {
+    for (const table of ["agentJobs", "researchJobs", "fashionJobs"] as const) {
       const jobs = await ctx.db
         .query(table)
         .withIndex("by_room", (q) => q.eq("roomId", roomId))

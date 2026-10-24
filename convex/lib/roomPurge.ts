@@ -29,6 +29,9 @@ async function deleteStorage(ctx: MutationCtx, storageId: Id<"_storage">) {
 const researchJobs: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("researchJobs").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
+const fashionJobs: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("fashionJobs").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+
 const agentJobs: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("agentJobs").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
@@ -171,6 +174,7 @@ const participants: Purger = async (ctx, roomId, limit) =>
 
 /** Order matters: jobs first (see file comment), private data next, membership last. */
 export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
+  ["fashionJobs", fashionJobs],
   ["researchJobs", researchJobs],
   ["agentJobs", agentJobs],
   ["councilRuns", councilRuns],
