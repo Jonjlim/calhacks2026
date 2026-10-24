@@ -597,6 +597,19 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Room member |
 | Errors | `unauthorized`, `stale_job`, `provider_timeout` |
 
+### Research execution semantics (RC-004 / RC-006)
+
+**Owner:** Dev 4. Uses Dev 2's requireMember and insertResearchJob helpers. Client endpoint signatures are unchanged.
+
+- startResearch validates active same-room published clues and integer-cent budgets, then uses buildSearchBrief. Reusing a request key with changed inputs is validation_failed. Matching open input fingerprints reuse the existing job.
+- Storage adapter for the existing searchBrief validator: omit roomId from researchJobs.brief because it already lives on researchJobs; restore it when calling the provider. Shared SearchBrief still includes roomId. This is explicit compatibility handling, not a schema migration.
+- Pending job insertion and worker scheduling occur in one mutation. The provider uses verified Actor build 0.0.142, one US search page, 120-second provider timeout and a $0.20 maximum run charge.
+- Only pending jobs can claim a provider start. Network ambiguity becomes uncertain; no automatic paid POST retry. Run IDs are retained in durable scheduled poll arguments. If a start response is lost before returning the run ID, operators must check Apify Console; automatic run discovery/reconciliation is not implemented.
+- Completion inserts normalized listings and succeeds atomically, at most once. It rejects changed knowledgeRevision or any newer research request. Ordering uses the room index's creation-order suffix, not completion time.
+- listRecommendations uses the latest successful request among the 50 most recent room jobs. While a refresh is pending/failed, the previous successful candidate pool remains available. It re-ranks against all current active clues on each read, includes only visible ranked listings, and does not trust stored recommendation rows. Changing clues after a successful search can update the ranking without another provider run.
+- Query recommendations have stable derived IDs (job ID + listing ID) and request timestamps. Product retrievedAt is the observed retrieval time; clients compute price-age labels from it.
+- Research-specific claim/completion/poll mutations live in research.ts. Dev 2's generic jobs.ts and schema are unchanged. Research timeouts cannot restart the paid provider automatically.
+
 ### `listRecommendations`
 
 | | |

@@ -315,3 +315,11 @@ Dev 3 can run extraction and agent decisions in actions that write the documente
 Dev 4 can normalize one live search into `ProductListing` and score against fixture published clues.
 
 Integration checkpoints are in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
+## Dev 4 research integration (RC-004 / RC-006)
+
+The research mutation uses Dev 2's membership and job-insertion helpers. Pure brief/ranking functions are provided by the parallel Dev 4 workstream. Provider start/poll/dataset calls run in Convex actions with APIFY_TOKEN from deployment environment variables. Durable scheduled polls retain provider run IDs; a watchdog marks stranded workers uncertain.
+
+A completion transaction validates current knowledge and request order before writing listings. The recommendations query re-ranks the latest successful candidate pool against current room clues. No extra services or queues are introduced. The existing brief validator remains unchanged: research explicitly stores the brief without duplicated roomId and restores it at the provider boundary.
+
+Local tests mock paid provider traffic. This checkout still needs the team's Convex deployment configuration and its APIFY_TOKEN before a deployed end-to-end test. Do not create a competing team deployment just for Dev 4. Anonymous-auth setup belongs to Dev 2 / frontend integration.

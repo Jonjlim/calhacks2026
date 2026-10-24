@@ -34,7 +34,7 @@ An automated candidate pass only checks shape; it does not certify a purchasable
 
 ## Boundaries
 
-This standalone local tool is not the production research pipeline and does not write Convex listings. Production calls will run in Convex actions, use authoritative pending jobs, membership checks, deduplication and stale-job suppression. No shared contracts change in RC-002. Next task: normalize a real recorded response into ProductListing (RC-003).
+This standalone local tool is not the production research pipeline and does not write Convex listings. Production calls will run in Convex actions, use authoritative pending jobs, membership checks, deduplication and stale-job suppression. No shared contracts change in RC-002. RC-003 normalization is implemented and tested against a minimal reviewed sample. RC-004 now connects the provider to Convex jobs; a deployed live integration test remains pending.
 
 API references:
 - https://docs.apify.com/api/v2/actors-runs-post
