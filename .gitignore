@@ -18,3 +18,5 @@ coverage/
 
 # Local source-spike responses and run reports
 work/research-spike/
+.vercel
+.env*
