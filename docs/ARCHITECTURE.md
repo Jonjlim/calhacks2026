@@ -389,3 +389,24 @@ Official API references: https://docs.stripe.com/api/checkout/sessions/create,
 https://docs.stripe.com/api/checkout/sessions/expire,
 https://docs.stripe.com/api/payment_intents/capture,
 https://docs.stripe.com/api/refunds/create and https://docs.stripe.com/webhooks.
+
+### D17 — Explicit persisted public-style discovery (2026-10-24)
+
+Dev 4 adds a research-owned `fashionJobs` table through `research/fashionSchema.ts`;
+`schema.ts` only includes that additive fragment. Existing rows and money/agent
+state are unchanged. Membership-checked mutations explicitly start one pinned
+GoFetch TikTok search (`xmolodtsov~tiktok-search-scraper`, build `0.1.39`, max20
+posts, cap $0.50). Pending is stored before any external call; uncertain starts
+are not retried. Known runs can resume GET polling. Current confirmed denim clues
+produce a fixed public seed; private imports and arbitrary queries are excluded.
+Only sanitized derived style directions, source links and original provenance are
+persisted. A 24-hour cache and current-knowledge fence apply at reads and shopping.
+`startResearch` accepts an optional discovery job reference; old callers are unchanged.
+UI cards and Alan's optional tool use remain consumer integration work.
+
+The Actor/input combination had one successful standalone spike; the new persisted
+pipeline is **unverified live** until deployed and accepted. Fixture tests do not
+establish current provider reliability or platform-wide trends. No new product
+source, AI provider or database is added. The fixed Stripe adapter additionally
+supports canceling a zero-capture manual hold, per current official API docs;
+actual hosted-Checkout hold cancellation remains **unverified live**.

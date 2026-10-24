@@ -19,9 +19,11 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import * as V from "./validators";
+import { fashionTables } from "./research/fashionSchema";
 
 export default defineSchema({
   ...authTables,
+  ...fashionTables,
 
   rooms: defineTable({
     title: v.string(),

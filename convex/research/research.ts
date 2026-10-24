@@ -17,6 +17,7 @@ import { normalizeDataset } from "./normalize";
 import { readCatalog } from "./catalog";
 import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
+import { usableFashionJob } from "./fashion";
 
 type StoredBrief = NonNullable<Doc<"researchJobs">["brief"]>;
 type ClaimedJob = { brief: SearchBrief } | null;
@@ -44,6 +45,7 @@ export const startResearch = mutation({
     publishedClueIds: v.array(v.id("publishedClues")),
     budgetMinor: v.optional(v.number()),
     idempotencyKey: v.string(),
+    fashionJobId: v.optional(v.id("fashionJobs")),
   },
   handler: async (ctx, args): Promise<Result<{ jobId: Id<"researchJobs"> }>> => {
     const member = await requireMember(ctx, args.roomId);
@@ -71,8 +73,16 @@ export const startResearch = mutation({
       ...(budgetMinor === undefined ? {} : { budgetMinor }), occasion: room.occasion,
     });
     if (!brief.queryTerms.length) return err("validation_failed", "Publish an interest or wish before searching.");
+    if (args.fashionJobId) {
+      const discovery = await usableFashionJob(ctx, room._id, args.fashionJobId);
+      const direction = discovery?.sample?.directions[0];
+      if (!direction || !discovery?.supportingPublishedClueIds.every(id => clueIds.includes(id)))
+        return err("stale_job", "Use a fresh discovery supported by the current search's published clues.");
+      brief.queryTerms = [direction.searchQuery];
+    }
     // Canonical collision-free input fingerprint. It contains no raw imports or private caps.
-    const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null]);
+    const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null,
+      ...(args.fashionJobId ? [args.fashionJobId] : [])]);
     const previous = await ctx.db.query("researchJobs")
       .withIndex("by_room_idempotency", q => q.eq("roomId", room._id).eq("idempotencyKey", key)).unique();
     if (previous) return previous.inputHash === inputHash
