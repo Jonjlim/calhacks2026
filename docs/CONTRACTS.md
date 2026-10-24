@@ -94,7 +94,9 @@ interface Room {
 }
 ```
 
-Access: members read; organizer updates metadata. `inviteToken` is for join, not for private data.
+Access: members read; organizer updates metadata (`rooms.updateRoom`). `inviteToken` is for join, not for private data.
+
+Server-only `deletedAt?: number` is set by `rooms.deleteRoom`. From that moment every membership check, invite lookup, and `listMyRooms` treats the room as missing (`not_found`) while `internal.rooms.purgeRoomBatch` removes its rows. Deleted rooms are never returned, so `Room` does not carry the field.
 
 ### Participant
 
@@ -124,8 +126,11 @@ interface ChatMessage {
   body: string;
   createdAt: number;
   clientIdempotencyKey: string;
+  deletedAt?: number; // author deleted it: body is "" and the row stays as a tombstone
 }
 ```
+
+`messages.deleteMessage` overwrites the stored body rather than filtering it, so readers that use `chatMessages` directly (the buyer-agent snapshot) never see deleted text. `room.latestMessageId` and job fences may keep pointing at a tombstone.
 
 ### Evidence source
 
@@ -887,6 +892,10 @@ All are membership-checked and return `Result<T>`.
 | `votes.listVotes` | query | `{ roomId }` | `{ listingId, tally, myVote? }[]` | Member |
 | `votes.clearVote` | mutation | `{ roomId, listingId }` | `{ listingId, tally }` | Member |
 | `jobs.listRoomJobs` | query | `{ roomId }` | recent agent + research job statuses | Member; `extract` jobs only to their owner |
+| `rooms.updateRoom` | mutation | `{ roomId, title?, recipientDisplayName?, occasion?, deadlineAt?: number \| null, budgetMinor?: number \| null }` | `Room` | Organizer. Omitted = unchanged, `null` clears the optional field. Same validation as `createRoom`. Budget is a hint; caps, allocation, and the revision are untouched |
+| `messages.deleteMessage` | mutation | `{ messageId }` | `ChatMessage` tombstone (`body: ""`, `deletedAt`) | Author of a `participant` message (`unauthorized` otherwise). `buyer_agent` messages return `refused` for everyone, organizer included. Idempotent; does not enqueue an agent turn |
+| `rooms.leaveRoom` | mutation | `{ roomId, deletePrivateData?: boolean }` | `null` | Contributor. Deletes their participant row, cap, and votes; cancels open agent jobs acting as them; recomputes the proposal (new revision without their share, prior approvals invalidated). Published clues and chat stay. With `deletePrivateData`, also hard-deletes their evidence, private messages, stored files, proposed clues, and their `agentEvents`; published clues derived from that evidence become `source_withdrawn` (excerpt dropped, `proposedClueId` unlinked). Organizer gets `refused`; a frozen revision (`capturing`/`test_funded`/`recovery_pending`) gets `invalid_revision` |
+| `rooms.deleteRoom` | mutation | `{ roomId, confirmTitle }` | `null` | Organizer; `confirmTitle` must equal the title after trimming (`validation_failed`). Sets `room.deletedAt` (access ends immediately), cancels open agent/research jobs, and schedules `purgeRoomBatch`. `invalid_revision` while the revision is frozen or any payment attempt is non-terminal (other than `not_started`) |
 
 Server-only hooks for other workstreams (internal functions or helpers, not client-callable):
 
@@ -898,6 +907,7 @@ Server-only hooks for other workstreams (internal functions or helpers, not clie
 | `internal.jobs.setAgentJobStatus` / `setResearchJobStatus` | Dev 3 / Dev 4 | Enforced transitions; terminal states return `stale_job` |
 | `enqueueAgentJob`, `insertResearchJob`, `agentInputHash`, `isResearchJobCurrent` (exported from `convex/jobs.ts`) | Dev 3 / Dev 4 | Create job rows inside your own mutation with `inputHash` / `idempotencyKey` dedupe |
 | `internal.proposals.clearSelectionsForListing({ listingId })` | Dev 4 RC-007 | Clears a selection of an invalidated listing and supersedes its revision |
+| `internal.rooms.purgeRoomBatch({ roomId })` | Dev 2 BE-017 | Deletes up to 256 rows of a room marked `deletedAt` and reschedules itself; finally deletes the room. Order: research/agent jobs and council runs first (so in-flight commits find no job), then private data, public data, revisions with approvals and payment attempts, listings, worlds, participants. Stored evidence files are deleted with their `evidenceMedia` rows. No-op for rooms that are not marked deleted. `providerEvents` (webhook ledger, no room id) are kept |
 
 ### `queryRecipientAgent` (P1-A)
 

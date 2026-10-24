@@ -119,6 +119,8 @@ export interface ChatMessage {
   responseAgentJobId?: string;
   replyToSlot?: string;
   citations?: AgentCitations;
+  /** Author deleted the message; body is "" and the row is a tombstone. */
+  deletedAt?: number;
 }
 
 export interface AgentCitations {

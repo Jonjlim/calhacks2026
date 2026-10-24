@@ -111,7 +111,8 @@ Organizer is not a superuser over private imports or caps.
 
 ## Permission revocation
 
-- Leave room → lose `public_room` reads. Private rows remain until deletion.
+- Leave room (`rooms.leaveRoom`) → participant row, cap, and votes are deleted, so every `public_room` read returns `unauthorized`. The proposal is recomputed without their share and prior approvals are invalidated. Their published clues and chat stay room-visible. Private rows remain unless they pass `deletePrivateData`, which hard-deletes their evidence, private messages, stored files, and proposed clues and tombstones published clues derived from that evidence. The organizer cannot leave; they delete the room. Leaving is refused while payment is frozen.
+- Delete chat message (`messages.deleteMessage`) → author-only; the body is overwritten and the row stays as a tombstone. Buyer-agent messages are not deletable.
 - Withdraw published clue → hidden from future snapshots; recommendations that solely depended on it should be rescored.
 - Delete import → tombstone source, proposed clues, and any published clue that opted to include the excerpt from that source.
 - Revoke recipient category grant → further `AgentQuery`s of that category return `refused`; do not retro-edit chat history, but do not reuse cached replies for new recommendations without a refresh.
@@ -126,8 +127,8 @@ Hackathon default: delete-with-the-room.
 | Contributor deletes an import | Immediate tombstone; no undelete required |
 | Photo, screenshot, or voice note is read | File deleted from storage immediately, whether reading succeeded or failed |
 | Uploaded file never imported, or imported but never read | Unimported files are deleted after one hour; imported files still unread after 24 hours are deleted and the source is marked `failed` (`cleanup.sweepStaleUploads`) |
-| Participant leaves | Membership ended; optional delete of their private rows |
-| Room deleted by organizer | Cascade all room-scoped documents |
+| Participant leaves | Membership ended; optional delete of their private rows (`deletePrivateData`) |
+| Room deleted by organizer | Access ends in the same transaction (`deletedAt`); open jobs are canceled; `purgeRoomBatch` deletes all room-scoped documents and stored files in batches. Refused while payment is frozen or attempts are unsettled |
 | After the hackathon | Tear down the Convex deployment; do not keep demo imports |
 
 No long-term retention policy is required for the weekend. Do not export private tables to sponsor tools or notebooks.

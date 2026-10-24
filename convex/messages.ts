@@ -81,7 +81,35 @@ export const listMessages = query({
       .withIndex("by_room", (q) => q.eq("roomId", roomId))
       .order("desc")
       .take(TRANSCRIPT_WINDOW);
-    return ok(recent.reverse());
+    return ok(recent.reverse().map((msg) => (msg.deletedAt === undefined ? msg : { ...msg, body: "" })));
+  },
+});
+
+/**
+ * Author deletes their own message. The row stays as a tombstone (body
+ * overwritten with "", `deletedAt` set) so agent job fences, answered
+ * questions, and room.latestMessageId keep pointing at a real row, and the
+ * buyer-agent snapshot (which reads chatMessages directly) never sees the
+ * old text. Buyer-agent messages cannot be deleted by anyone, organizer
+ * included. Deleting does not enqueue an agent turn.
+ */
+export const deleteMessage = mutation({
+  args: { messageId: v.id("chatMessages") },
+  handler: async (ctx, { messageId }) => {
+    const message = await ctx.db.get(messageId);
+    if (!message) return err<Doc<"chatMessages">>("not_found", "Message not found.");
+    const member = await requireMember(ctx, message.roomId);
+    if (!member.ok) return memberError<Doc<"chatMessages">>(member.code);
+    if (message.authorKind !== "participant") {
+      return err<Doc<"chatMessages">>("refused", "Assistant messages can't be deleted.");
+    }
+    if (message.participantId !== member.me._id) {
+      return err<Doc<"chatMessages">>("unauthorized", "You can only delete your own messages.");
+    }
+    if (message.deletedAt === undefined) {
+      await ctx.db.patch(messageId, { body: "", deletedAt: Date.now() });
+    }
+    return ok((await ctx.db.get(messageId))!);
   },
 });
 
