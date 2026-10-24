@@ -40,13 +40,16 @@ type Beat =
   | { step: "board"; cat: Category; picked: Idea[]; board: Board | null; error?: string }
   | { step: "write"; cat: Category; picked: Idea[] };
 
-export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBackstage }: {
+export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBackstage, variant = "stage" }: {
   roomId: Id<"rooms">;
   recipientName: string;
   clues: PublishedClue[];
   addMemory: RoomActions["addManualClue"];
-  onOpenBackstage: () => void;
+  onOpenBackstage?: () => void;
+  /** stage: floats over the 3D tower. phone: sits in the phone controller's page. */
+  variant?: "stage" | "phone";
 }) {
+  const phone = variant === "phone";
   const reduced = useReducedMotion() ?? false;
   const suggest = useAction(api.agents.ideas.suggestIdeas);
   const [beat, setBeat] = useState<Beat>({ step: "ask" });
@@ -91,7 +94,7 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
     void loadBoard(cat, [...picked, idea]);
   }, [addMemory, loadBoard]);
 
-  if (collapsed) {
+  if (collapsed && !phone) {
     return (
       <button className="pointer-events-auto absolute top-24 left-1/2 -translate-x-1/2 rounded-full paper-card px-4 py-2 text-[14px] shadow-sm" onClick={() => setCollapsed(false)}>
         Add a memory of {recipientName}
@@ -99,15 +102,16 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
     );
   }
 
-  const shadow = "[text-shadow:0_2px_18px_rgba(40,24,40,0.6)]";
+  // Over the 3D scene text is light with a soft shadow; on the phone it sits on paper.
+  const shadow = phone ? "text-dusk!" : "[text-shadow:0_2px_18px_rgba(40,24,40,0.6)]";
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-24 flex flex-col items-center px-4" aria-live="polite">
+    <div className={phone ? "relative flex w-full flex-col items-center" : "pointer-events-none absolute inset-x-0 top-24 flex flex-col items-center px-4"} aria-live="polite">
       <AnimatePresence mode="wait">
         {beat.step === "ask" && (
           <motion.div key="ask" className="pointer-events-auto flex max-w-[720px] flex-col items-center gap-4"
             initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
-            <h2 className={`text-center font-display text-[clamp(26px,3.4vw,40px)] leading-tight text-paper ${shadow}`}>{lead.ask(recipientName)}</h2>
+            {!phone && <h2 className={`text-center font-display text-[clamp(26px,3.4vw,40px)] leading-tight text-paper ${shadow}`}>{lead.ask(recipientName)}</h2>}
             <div className="flex flex-wrap justify-center gap-2.5">
               {ordered.map((c, i) => (
                 <Floaty key={c.kind} i={i} reduced={reduced}>
@@ -118,10 +122,12 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
                 </Floaty>
               ))}
             </div>
-            <div className={`flex gap-4 text-[12.5px] text-paper/85 ${shadow}`}>
-              <button className="underline-offset-4 hover:underline" onClick={onOpenBackstage}>Paste a conversation or add a photo</button>
-              <button className="underline-offset-4 hover:underline" onClick={() => setCollapsed(true)}>Hide</button>
-            </div>
+            {!phone && (
+              <div className={`flex gap-4 text-[12.5px] text-paper/85 ${shadow}`}>
+                {onOpenBackstage && <button className="underline-offset-4 hover:underline" onClick={onOpenBackstage}>Paste a conversation or add a photo</button>}
+                <button className="underline-offset-4 hover:underline" onClick={() => setCollapsed(true)}>Hide</button>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -132,16 +138,16 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
             {beat.picked.length > 0 && (
               <p className="rounded-full bg-paper/85 px-3 py-1 text-[12.5px] text-dusk/80">In the jars: {beat.picked.map((p) => p.label).join(" · ")}</p>
             )}
-            <div className="grid w-full grid-cols-3 gap-3 sm:grid-cols-4">
+            <div className={`grid w-full gap-3 ${phone ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-4"}`}>
               {beat.board
                 ? beat.board.options.map((idea, i) => (
                     <IdeaCard key={`${beat.picked.length}-${idea.label}`} idea={idea} i={i} reduced={reduced} busy={flying !== null} flying={flying === idea.label}
                       onPick={() => pick(beat.cat, beat.picked, idea)} />
                   ))
-                : !beat.error && Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[118px] animate-pulse rounded-[18px] bg-paper/35" />)}
+                : !beat.error && Array.from({ length: 6 }, (_, i) => <div key={i} className={`h-[118px] animate-pulse rounded-[18px] ${phone ? "bg-dusk/10" : "bg-paper/35"}`} />)}
               <motion.button type="button" onClick={() => setBeat({ step: "write", cat: beat.cat, picked: beat.picked })}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-                className="flex h-[118px] flex-col items-center justify-center gap-1 rounded-[18px] border-2 border-dashed border-paper/70 bg-paper/20 text-paper backdrop-blur-sm hover:bg-paper/30">
+                className={`flex h-[118px] flex-col items-center justify-center gap-1 rounded-[18px] border-2 border-dashed ${phone ? "border-dusk/25 bg-white/50 text-dusk" : "border-paper/70 bg-paper/20 text-paper backdrop-blur-sm hover:bg-paper/30"}`}>
                 <span className="text-[30px]" aria-hidden>✏️</span>
                 <span className="text-[13.5px] font-semibold">Something else</span>
               </motion.button>
@@ -151,7 +157,7 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
                 {beat.error} <button className="ml-2 underline" onClick={() => loadBoard(beat.cat, beat.picked)}>Try again</button>
               </p>
             )}
-            <div className={`flex gap-4 text-[13px] text-paper ${shadow}`}>
+            <div className={`flex gap-4 text-[13px] ${phone ? "text-dusk/70" : `text-paper ${shadow}`}`}>
               <button className="underline-offset-4 hover:underline" onClick={() => { request.current++; setBeat({ step: "ask" }); }}>← Other kinds of memories</button>
               {beat.picked.length > 0 && <button className="font-semibold underline-offset-4 hover:underline" onClick={() => { request.current++; setBeat({ step: "ask" }); }}>That’s all for now</button>}
             </div>
@@ -174,7 +180,7 @@ export function MemoryQuest({ roomId, recipientName, clues, addMemory, onOpenBac
 
       <AnimatePresence>
         {toast && (
-          <motion.div key={toast.id} className="pointer-events-none absolute top-[min(62vh,520px)] rounded-2xl bg-[#fff7e6] px-4 py-2.5 text-[14.5px] text-dusk shadow-[0_14px_30px_-14px_rgba(40,24,40,0.6)]"
+          <motion.div key={toast.id} className={`pointer-events-none ${phone ? "mt-3" : "absolute top-[min(62vh,520px)]"} rounded-2xl bg-[#fff7e6] px-4 py-2.5 text-[14.5px] text-dusk shadow-[0_14px_30px_-14px_rgba(40,24,40,0.6)]`}
             initial={{ opacity: 0, scale: 0.7, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ type: "spring", stiffness: 320, damping: 18 }}
             onAnimationComplete={() => setTimeout(() => setToast((t) => (t?.id === toast.id ? null : t)), 1800)}>
             <strong style={{ color: COUNCIL_TINT[toast.agent] }}>{COUNCIL_LABEL[toast.agent]}:</strong> {toast.text}
