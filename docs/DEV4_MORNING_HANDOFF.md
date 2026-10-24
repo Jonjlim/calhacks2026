@@ -126,3 +126,22 @@ merge `03d6262`, including `/room/[roomId]/phone`. Final fetch showed zero remot
 commits missing from this branch. Alex authorized the shared-dev push. This is
 source integration, not a production Convex deployment or a new live-browser
 acceptance claim for the merged phone surface.
+
+## P1-B adapter work started at Alex’s request
+
+P0 implementation/acceptance is no longer used to block independent Dev 4 P1 work.
+Implemented a test-only Stripe REST adapter for hosted organizer collection or
+manual authorization, Checkout/intent retrieval, open-session expiry, explicit
+capture and refunds; added raw-body webhook signature verification. Outbound writes
+require idempotency keys; provider objects require test mode, exact requested IDs,
+USD amounts and revision/participant/attempt metadata. Pending/uncertain states
+remain explicit; the helper neither authorizes operations nor writes payment state.
+
+Validation: 47 new payment tests; full suite 411 passed / 3 live-only skipped;
+app and Convex TypeScript passed. All payment tests use synthetic provider responses;
+no actual Stripe call, charge, capture, refund or webhook acceptance was performed.
+Alex is configuring a test key privately. Dev 2’s payment tables, durable claims,
+event deduplication and state transitions are still absent, so no client payment
+endpoint or UI has been enabled. Live sandbox spike, post-authorization cancellation,
+refund polling and multi-contributor recovery remain open. Payment work stays local
+for the money/state integration review; the earlier dev push did not contain it.

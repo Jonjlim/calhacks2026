@@ -544,3 +544,51 @@ export interface FashionAgentContext {
   supportingPublishedClueIds: string[];
   directions: FashionDiscovery[];
 }
+
+// Server-only Stripe transport DTOs; never payment authorization or browser success signals.
+export interface StripeCheckoutInput {
+  roomId: string;
+  revisionId: string;
+  participantId: string;
+  attemptId: string;
+  amountMinor: number;
+  currency: "USD";
+  mode: "authorize" | "collect";
+  idempotencyKey: string;
+}
+export type StripePaymentBinding = Pick<StripeCheckoutInput, "roomId" | "revisionId" | "participantId" | "attemptId">;
+export interface StripeTestSession {
+  id: string;
+  binding: StripePaymentBinding;
+  checkoutUrl?: string;
+  status: "open" | "complete" | "expired";
+  paymentStatus: "paid" | "unpaid" | "no_payment_required";
+  paymentIntentId?: string;
+  amountMinor: number;
+  currency: "USD";
+}
+export interface StripeTestIntent {
+  id: string;
+  binding: StripePaymentBinding;
+  status: "requires_payment_method" | "requires_confirmation" | "requires_action" | "processing" | "requires_capture" | "canceled" | "succeeded";
+  amountMinor: number;
+  amountCapturableMinor: number;
+  amountReceivedMinor: number;
+  currency: "USD";
+  captureMethod: "automatic" | "automatic_async" | "manual";
+}
+export interface StripeTestRefund {
+  id: string;
+  paymentIntentId: string;
+  amountMinor: number;
+  status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled";
+}
+export interface StripeTestEvent {
+  id: string;
+  type: string;
+  objectId: string;
+  objectType: string;
+}
+export type StripeAdapterResult<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "failed" | "uncertain"; message: string };

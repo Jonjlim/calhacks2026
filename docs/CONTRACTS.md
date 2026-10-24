@@ -1051,3 +1051,89 @@ price or platform-wide trend. Existing server budget, exclusions, revision check
 one-direction shopping worker still apply. The context participates in input-version fencing.
 No TikTok request, automatic paid discovery, new provider or deployment is enabled by this
 bridge. Live refresh/persistence and user-visible discovery provenance are still pending.
+
+### Stripe test adapter boundary (Dev 4, P1-B in progress)
+
+Owner: Dev 4 transport/signature verification. Consumer: Dev 2 payment state machine.
+This is a server-only helper contract, not a public action. No client, model or agent
+may call it directly. RC-010..013 are not complete until durable state, endpoint
+wiring, sandbox acceptance and recovery checks pass.
+
+`createStripeTestAdapter({ secretKey, frontendOrigin }, fetcher?)` exposes
+`createCheckout(input)`, `retrieveCheckout(id)`, `expireCheckout(id, key)`,
+`retrieveIntent(id)`, `captureIntent(id, key)`, and `refundIntent(id, amountMinor, key)`.
+Every write requires an idempotency key. Input IDs bind room, immutable revision,
+participant and stored payment attempt. `mode: "authorize"` requests manual capture;
+`mode: "collect"` is organizer-only test collection after the caller's policy check.
+The adapter accepts only test secret/restricted keys and validates `livemode: false`
+on provider objects. Only USD, integer cents and hosted Stripe Checkout are supported.
+Checkout accepts 50..99,999,999 cents; smaller shares are refused, never rounded up.
+
+The caller must persist intent before the request, enforce membership/own-share or
+organizer policy, require current approved revision and known permitted total, and
+freeze edits before capture. The adapter does not authorize these operations.
+Provider responses are reduced to allowlisted IDs, amounts and status fields; no
+client secrets, payer details or raw errors escape. Failures return `failed` or
+`uncertain`, never invented success. No automatic retries; reconciliation retrieves
+provider state. Checkout redirects carry no success authority. Expiring an open
+Checkout is not cancellation of a completed authorization or a refund.
+
+`verifyStripeTestEvent(rawBody, signature, signingSecret, nowMs)` checks HMAC-SHA256
+against the unmodified UTF-8 body, at least one v1 signature and a 300-second
+past/future tolerance, then validates a test-mode event envelope. It returns only
+an event ID/type and provider object reference. Dev 2 must durably deduplicate event
+IDs and retrieve the provider object before applying a transition. Verification
+alone does not grant a payment, capture, cancellation or refund state.
+
+Additive shared types are `StripeCheckoutInput`, `StripeTestSession`,
+`StripeTestIntent`, `StripeTestRefund`, `StripeTestEvent`, `StripePaymentBinding` and `StripeAdapterResult<T>`. Provider sessions/intents must carry the four binding IDs in metadata; the allowlisted DTO returns them so the state layer can compare them to its stored attempt. Mismatched requested/provider object IDs are unresolved, never accepted.
+No database migration or payment-enabled UI is introduced by the helper work.
+
+```ts
+export interface StripeCheckoutInput {
+  roomId: string;
+  revisionId: string;
+  participantId: string;
+  attemptId: string;
+  amountMinor: number;
+  currency: "USD";
+  mode: "authorize" | "collect";
+  idempotencyKey: string;
+}
+export type StripePaymentBinding = Pick<StripeCheckoutInput, "roomId" | "revisionId" | "participantId" | "attemptId">;
+export interface StripeTestSession {
+  id: string;
+  binding: StripePaymentBinding;
+  checkoutUrl?: string;
+  status: "open" | "complete" | "expired";
+  paymentStatus: "paid" | "unpaid" | "no_payment_required";
+  paymentIntentId?: string;
+  amountMinor: number;
+  currency: "USD";
+}
+export interface StripeTestIntent {
+  id: string;
+  binding: StripePaymentBinding;
+  status: "requires_payment_method" | "requires_confirmation" | "requires_action" | "processing" | "requires_capture" | "canceled" | "succeeded";
+  amountMinor: number;
+  amountCapturableMinor: number;
+  amountReceivedMinor: number;
+  currency: "USD";
+  captureMethod: "automatic" | "automatic_async" | "manual";
+}
+export interface StripeTestRefund {
+  id: string;
+  paymentIntentId: string;
+  amountMinor: number;
+  status: "pending" | "requires_action" | "succeeded" | "failed" | "canceled";
+}
+export interface StripeTestEvent {
+  id: string;
+  type: string;
+  objectId: string;
+  objectType: string;
+}
+export type StripeAdapterResult<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "failed" | "uncertain"; message: string };
+```

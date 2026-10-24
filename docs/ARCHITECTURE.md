@@ -375,3 +375,17 @@ recorded source-backed directions from the verified spike, with original dates a
 existing shopping worker still receives one chosen query and owns product facts. This
 validates the handoff without turning the standalone TikTok spike into an automatic paid
 pipeline. Live refresh and displayed social provenance remain pending.
+
+### D16 — Begin isolated Stripe sandbox adapter work (2026-10-24)
+
+Alex requested advancing P1 alongside final P0 acceptance. Dev 4 starts server-only
+Stripe REST transport and raw-body webhook verification against mocks. Stripe is
+**unverified for this project** until an actual sandbox Checkout/webhook spike
+passes. No extra SDK, database, public endpoint, capture scheduler or payment UI
+is enabled. P0 stays usable without Stripe; the current product still ends at
+pledges. Dev 2 retains payment state, current-revision approval checks, freeze rules
+and durable event idempotency. API requests pin `2025-06-30.basil` for reproducibility.
+Official API references: https://docs.stripe.com/api/checkout/sessions/create,
+https://docs.stripe.com/api/checkout/sessions/expire,
+https://docs.stripe.com/api/payment_intents/capture,
+https://docs.stripe.com/api/refunds/create and https://docs.stripe.com/webhooks.
