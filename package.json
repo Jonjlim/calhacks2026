@@ -15,7 +15,7 @@
     "convex:deploy:dev": "convex dev --once",
     "convex:deploy:prod": "convex deploy --yes",
     "convex:deploy:prod:dry": "convex deploy --yes --dry-run",
-    "agents:smoke": "UNWRAP_LIVE_AGENT_SMOKE=1 node --env-file-if-exists=.env --env-file-if-exists=.env.local node_modules/vitest/vitest.mjs run convex/agents/live-smoke.test.ts"
+    "agents:smoke": "UNWRAP_LIVE_AGENT_SMOKE=1 vitest run convex/agents/live-smoke.test.ts"
   },
   "dependencies": {
     "@auth/core": "0.41.3",

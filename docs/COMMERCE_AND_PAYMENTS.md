@@ -25,8 +25,6 @@ Required fields:
 
 Optional: `variant`, `imageUrl`, `sellerName`, `shippingMinor`, `shippingStatus`.
 
-`imageUrl` is optional in the type but expected on P0 cards. Keep the source's public thumbnail, prefer listings with photos when choosing the visible candidates, and show a labeled “no photo from source” placeholder otherwise. Never substitute a stock or AI-generated image for a real product.
-
 A listing without `sourceUrl` or `retrievedAt` is discarded. A model-written product is not a listing.
 
 `manual_fixture` is allowed for unit tests and offline rehearsal. The UI must label fixtures and cached rows. Bright Data (if ever used) forbids mocked demo data; do not enter that track with fixtures.

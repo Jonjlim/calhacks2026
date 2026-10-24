@@ -10,10 +10,7 @@
 import type { ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
 import { hasProductImageUrl } from "../../lib/research/images";
-import {
-  cluePhrase, contentTokens, isHandsOnItem, isUnconfirmedObservation, shoppingMatchTokens, shoppingPhrase,
-  withoutBrandPhrases,
-} from "./text";
+import { cluePhrase, contentTokens, isUnconfirmedObservation, shoppingMatchTokens, shoppingPhrase } from "./text";
 
 export const SCORE_WEIGHTS = {
   personalRelevance: 0.7,
@@ -110,7 +107,7 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     .filter((c) => c.tokens.length > 0);
 
   const ranked = kept.map((listing): RankedRecommendation => {
-    const titleTokens = new Set(shoppingMatchTokens(withoutBrandPhrases(listing.title + " " + (listing.variant ?? ""))));
+    const titleTokens = new Set(shoppingMatchTokens(listing.title + " " + (listing.variant ?? "")));
     const supporting: PublishedClue[] = [];
     const matchedPreferences = new Map<string, number>();
     for (const { clue, tokens } of positive) {
@@ -138,11 +135,9 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
   });
 
   const images = new Map(kept.map(listing => [listing.id, hasProductImageUrl(listing)]));
-  const handsOn = new Map(kept.map(listing => [listing.id, isHandsOnItem(`${listing.title} ${listing.variant ?? ""}`)]));
   ranked.sort((a, b) => b.score - a.score
     || b.personalRelevance - a.personalRelevance
     || b.budgetFit - a.budgetFit
-    || Number(handsOn.get(b.listingId)) - Number(handsOn.get(a.listingId))
     || Number(images.get(b.listingId)) - Number(images.get(a.listingId))
     || a.listingId.localeCompare(b.listingId));
   return ranked.slice(0, Math.max(0, input.limit ?? DEFAULT_RANK_LIMIT));

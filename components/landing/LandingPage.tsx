@@ -5,9 +5,9 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { StorybookIntro } from "@/components/intro/StorybookIntro";
-import { useLandingActions } from "@/lib/live/landingActions";
 import { LandingHeader } from "./LandingHeader";
 import { LandingHero } from "./LandingHero";
+import { useLandingActions } from "./useLandingActions";
 
 const WorldCanvas = dynamic(() => import("@/components/world/WorldCanvas"), { ssr: false });
 

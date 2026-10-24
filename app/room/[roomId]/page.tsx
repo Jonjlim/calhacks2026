@@ -1,6 +1,6 @@
-import { LiveRoom } from "@/components/room/LiveRoom";
+import { RoomScreen } from "@/components/room/RoomScreen";
 
 export default async function RoomPage({ params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
-  return <LiveRoom roomId={roomId} />;
+  return <RoomScreen roomId={roomId} />;
 }

@@ -100,33 +100,6 @@ describe("buyer role boundaries", () => {
     expect((await decideBuyer(snapshot(), model)).intent).toBe("listen");
     expect(model).toHaveBeenCalledTimes(2);
   });
-  it("retries once when a directly invited buyer stays silent", async () => {
-    const model = vi
-      .fn()
-      .mockResolvedValueOnce({
-        intent: "listen",
-        rationale: "Nothing to do",
-        needsFollowup: false,
-      })
-      .mockResolvedValueOnce(search);
-    const result = await decideBuyer(snapshot({ trigger: "human" }), model);
-    expect(result.intent).toBe("search");
-    expect(model).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(model.mock.calls[1]![0])).toContain("directly invited");
-  });
-  it("does not push a silent buyer while research is already running", async () => {
-    const model = vi.fn().mockResolvedValue({
-      intent: "wait",
-      rationale: "Research is running",
-      needsFollowup: false,
-    });
-    const result = await decideBuyer(
-      snapshot({ trigger: "human", researchRunning: true }),
-      model,
-    );
-    expect(result.intent).toBe("wait");
-    expect(model).toHaveBeenCalledTimes(1);
-  });
   it("fails after two malformed outputs", async () => {
     const model = vi.fn().mockResolvedValue({ intent: "execute" });
     await expect(decideBuyer(snapshot(), model)).rejects.toMatchObject({

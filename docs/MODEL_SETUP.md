@@ -30,12 +30,12 @@ Each completed/failed attempt records dispatched HTTP calls and available provid
 
 ## Deliberate live verification
 
-The default test suite makes no live model calls. To test the adapter, put the model variables in the git-ignored `.env.local` (or export them into a trusted local process environment), then run:
+The default test suite makes no live model calls. To test the adapter, export the model variables into a trusted **local process environment**, using the local secret mechanism for the API key, and run:
 
 ```sh
 npm run agents:smoke
 ```
 
-The command loads `.env` and then `.env.local`; existing shell variables take precedence. It requires Node.js 20.19 or newer. This explicitly enables three tests using synthetic data: extraction, grounded buyer selection, and a permissioned recipient response. Each may retry malformed output once, so up to six API calls are possible. The command does not pull deployment secrets into the shell, does not publish data, does not call Apify, and does not modify a room. A passing smoke test verifies the model/adapter contract; it does not establish a deployed end-to-end application.
+This explicitly enables three tests using synthetic data: extraction, grounded buyer selection, and a permissioned recipient response. Each may retry malformed output once, so up to six API calls are possible. The command does not pull deployment secrets into the shell, does not publish data, does not call Apify, and does not modify a room. A passing smoke test verifies the model/adapter contract; it does not establish a deployed end-to-end application.
 
 Afterward, configure the same settings on Convex, regenerate/deploy the functions through the normal team workflow, and exercise the live room/research path with two users. Frontend authentication/subscriptions are still required before that app-level check can pass.

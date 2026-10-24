@@ -4,8 +4,10 @@ import { JoinRoomForm } from "@/components/room/JoinRoomForm";
 export default async function JoinPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   return (
-    <main className="mx-auto max-w-md px-6 py-16">
-      <JoinRoomForm initialToken={token} />
+    <main className="min-h-dvh bg-paper px-6 py-16">
+      <div className="mx-auto max-w-md">
+        <JoinRoomForm initialToken={decodeURIComponent(token)} />
+      </div>
     </main>
   );
 }
