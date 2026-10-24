@@ -7,6 +7,12 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { ActivityFeed } from "@/components/agents/ActivityFeed";
+import { ChatModeToggle } from "@/components/agents/ChatModeToggle";
+import { RecipientDemo } from "@/components/agents/RecipientDemo";
+import { StatsPanel } from "@/components/agents/StatsPanel";
+import { MediaIntake } from "@/components/clues/MediaIntake";
+import type { Id } from "@/convex/_generated/dataModel";
 import { RoomHeader } from "./RoomHeader";
 import type { RoomActions, RoomData } from "./types";
 
@@ -14,6 +20,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const { room, participants, me } = data.view;
   const isOrganizer = me.role === "organizer";
   const latestExtract = data.activity?.jobs.find((job) => job.kind === "extract");
+  // Agent panels query Convex directly, so they only render with a live backend.
+  const liveRoomId = actions ? (room.id as Id<"rooms">) : null;
 
   return (
     <main className="min-h-dvh bg-ivory">
@@ -27,6 +35,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
         <section className="flex flex-col gap-6">
           <ChatPanel messages={data.messages} participants={participants} me={me} activity={data.activity} actions={actions} />
+          {liveRoomId && <ChatModeToggle roomId={liveRoomId} />}
         </section>
 
         <section className="flex flex-col gap-6">
@@ -41,6 +50,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             actions={actions}
           />
           <GiftMap recommendations={data.recommendations} listings={data.listings} publishedClues={data.publishedClues} />
+          {liveRoomId && <ActivityFeed roomId={liveRoomId} />}
+          {liveRoomId && <StatsPanel roomId={liveRoomId} />}
         </section>
 
         <section className="flex flex-col gap-6">
@@ -50,8 +61,10 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             modelConfigured={data.activity?.capabilities.modelConfigured}
             actions={actions}
           />
+          {liveRoomId && <MediaIntake roomId={liveRoomId} />}
           <ProposedClueReview clues={data.myProposedClues} actions={actions} />
           <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
+          {liveRoomId && <RecipientDemo roomId={liveRoomId} isOrganizer={isOrganizer} />}
           <ProposalPanel
             proposal={data.proposal}
             participants={participants}
