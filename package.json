@@ -9,7 +9,12 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit && tsc --noEmit -p convex",
-    "test": "vitest run"
+    "test": "vitest run",
+    "convex:login": "convex login",
+    "convex:auth:setup": "npx @convex-dev/auth",
+    "convex:deploy:dev": "convex dev --once",
+    "convex:deploy:prod": "convex deploy --yes",
+    "convex:deploy:prod:dry": "convex deploy --yes --dry-run"
   },
   "dependencies": {
     "@auth/core": "0.41.3",
