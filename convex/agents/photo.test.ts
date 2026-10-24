@@ -381,3 +381,28 @@ describe("photo upload and private reading", () => {
     expect(await t.run((ctx) => ctx.db.query("evidenceMedia").collect())).toEqual([]);
   });
 });
+
+describe("stale upload sweep", () => {
+  afterEach(() => vi.useRealTimers());
+  it("deletes unclaimed uploads past the grace period and keeps claimed or fresh ones", async () => {
+    const { ids, store, alice, t } = await setup();
+    const abandoned = await store();
+    const claimed = await store();
+    value(
+      await alice.mutation(api.media.importMediaEvidence, {
+        roomId: ids.roomId, kind: "photo", label: "p", files: [{ storageId: claimed }],
+      }),
+    );
+    // Too fresh to touch, even though nothing references it.
+    expect(await t.mutation(internal.cleanup.sweepStaleUploads, {})).toEqual({ deleted: 0, more: false });
+    expect(await t.run(async (ctx) => (await ctx.storage.get(abandoned)) !== null)).toBe(true);
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 2 * 60 * 60 * 1000);
+    const fresh = await store();
+    expect(await t.mutation(internal.cleanup.sweepStaleUploads, {})).toEqual({ deleted: 1, more: false });
+    expect(await t.run(async (ctx) => (await ctx.storage.get(abandoned)) !== null)).toBe(false);
+    expect(await t.run(async (ctx) => (await ctx.storage.get(claimed)) !== null)).toBe(true);
+    expect(await t.run(async (ctx) => (await ctx.storage.get(fresh)) !== null)).toBe(true);
+  });
+});
