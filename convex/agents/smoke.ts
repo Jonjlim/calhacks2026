@@ -123,7 +123,7 @@ async function recipient() {
 }
 
 /** Direct request with published clues but no candidates yet: expect a search, not silence. */
-async function buyerSearch() {
+async function buyerSearch(asksRecipient = false) {
   const decision = await decideBuyer(
     {
       roomId: "synthetic-room",
@@ -134,14 +134,16 @@ async function buyerSearch() {
       knowledgeRevision: 2,
       mode: "quiet",
       trigger: "human",
-      recipientAgentEnabled: false,
+      recipientAgentEnabled: asksRecipient,
       researchRunning: false,
       askedSlots: [],
       recentMessages: [
         {
           id: "synthetic-message",
           author: "participant",
-          text: "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
+          text: asksRecipient
+            ? "@unwrap would Maya like a beginner pottery class, and does she already own a kit? Please check with her agent before searching."
+            : "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
         },
       ],
       publishedClues: [
@@ -156,7 +158,8 @@ async function buyerSearch() {
   return decision;
 }
 
-export const buyerSearchSynthetic = internalAction({ args: {}, handler: buyerSearch });
+export const buyerRecipientSynthetic = internalAction({ args: {}, handler: () => buyerSearch(true) });
+export const buyerSearchSynthetic = internalAction({ args: {}, handler: () => buyerSearch() });
 export const extractSynthetic = internalAction({ args: {}, handler: extraction });
 export const buyerSynthetic = internalAction({ args: {}, handler: buyer });
 export const recipientSynthetic = internalAction({ args: {}, handler: recipient });

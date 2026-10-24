@@ -46,6 +46,24 @@ const invite = await must<any>(alice.client.query(api.rooms.getInvite, { roomId 
 await must(bob.client.mutation(api.rooms.joinRoom, { inviteToken: invite.inviteToken, displayName: "Bob" }), "joinRoom");
 console.log("room ready", roomId);
 
+// A2A=1: synthetic recipient profile so the buyer can consult the recipient agent.
+const a2a = process.env.A2A === "1";
+if (a2a) {
+  const { recipientProfileId } = await must<any>(alice.client.mutation(api.agents.recipient.createProfile, { roomId }), "createProfile");
+  await must(alice.client.mutation(api.agents.recipient.updateRecipientPreferences, {
+    recipientProfileId,
+    preferences: [
+      { category: "interest", text: "Would love a beginner pottery class", disclosable: true, authorized: true },
+      { category: "ownership", text: "Already owns a starter pottery kit", disclosable: true, authorized: true },
+      { category: "dislike", text: "Private: dislikes surprises at work", disclosable: false, authorized: true },
+    ],
+    grants: [
+      { category: "interest", allowedQuestionTypes: ["suitability"] },
+      { category: "ownership", allowedQuestionTypes: ["ownership"] },
+    ],
+  }), "updateRecipientPreferences");
+}
+
 // Alice: private import -> extract -> publish
 const imp = await must<any>(alice.client.mutation(api.clues.importEvidence, {
   roomId, kind: "paste", label: "texts with Maya",
@@ -63,7 +81,9 @@ for (const c of proposed) await must(alice.client.mutation(api.clues.publishClue
 
 // Bob adds context and asks Unwrap
 await must(bob.client.mutation(api.messages.sendMessage, {
-  roomId, body: "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
+  roomId, body: a2a
+    ? "@unwrap would Maya like a beginner pottery class, and does she already own a kit? Please check with her agent before searching."
+    : "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
   clientIdempotencyKey: `e2e-${Date.now()}`,
 }), "sendMessage");
 
