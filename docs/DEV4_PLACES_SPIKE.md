@@ -50,3 +50,33 @@ The remaining five (Brick and Mortar Studios, Mel Rice - STUDIO CERAMICA, Stone 
 1. Treat results as room-visible experience ideas, not product listings; any price shown to users must come from a separate observed source with its own URL and timestamp.
 2. No automatic fan-out to more terms or cities; each run costs money and needs its own budget decision.
 3. Production integration would need a reviewed contract change (an activity/place observation type), job persistence, caching and membership checks in Convex, plus the team's OK. Nothing is wired into Convex today; this spike is undeployed and needs team approval before production.
+
+## Follow-up: real prices from studio websites (2026-10-24)
+
+Maps returns no class prices, so a second local spike (`scripts/apify-studio-prices-spike.mts`) reads each studio's **own public website** with `apify/website-content-crawler` (default build, run reported `0.3.101`) and keeps only literal dollar amounts that sit in the same sentence or line as an offer word (class, workshop, wheel, gift card, membership, private event). Fees, refunds, shipping, clay bags, scholarships and residency values are dropped. Every kept price carries its exact page URL, a short snippet and the retrieval time. Nothing is inferred; a studio with no visible price stays `unknown`.
+
+```bash
+node --env-file-if-exists=.env.local scripts/apify-studio-prices-spike.mts work/research-spike/places-<timestamp>
+node --env-file-if-exists=.env.local scripts/apify-studio-prices-spike.mts --resume work/research-spike/studio-prices-<timestamp>
+```
+
+Bounded by depth 1 from each site root, 120 pages total, 1 GB x 180 s, robots.txt respected, no files/screenshots/HTML. Pages that never carry prices (careers, instructors, FAQs, policies, blog) are excluded so large sites do not use the whole budget.
+
+Runs (run-reported usage, not a settled invoice; about $0.065 total):
+
+| Run | Crawler | Pages | Usage | Result |
+| --- | --- | --- | --- | --- |
+| `MeopS1zGdedayt84W` | raw HTTP, 60 pages | 60 (partial) | $0.0126 | Found two false positives (a refund processing fee, a residency's included-value); two big sites used most of the page budget. Filters fixed. |
+| `b0Z94dtyix2hbcahr` | browser (adaptive) | 8 in 300 s | $0.0390 | Far too slow for this; rejected. |
+| `Xpvyd152AaI1fA5Kr` | raw HTTP, fixed filters | 87 (time limit) | $0.0133 | **4 of 9 studios priced**, all snippets verified against the page text. |
+
+Verified prices from the final run:
+
+- **SMAart Gallery & Studio**: $89 single 2-hour class (instruction, clay, glaze included); 4-week series $230 / Raku $260; 6-week $350 ([classinfo](https://www.smaartstudio.com/classinfo)).
+- **Brick and Mortar Studios**: $95 one-time class, $375 six-week series, $275 membership, listed on their gift-certificates page ([source](https://www.brickandmortarstudios.com/gift-certificates)).
+- **Mel Rice Studio Ceramica**: "One day - pottery wheel fun" $85–$90; 4-week wheel $225–$240. Some listed months (e.g. August) are past, so a date check is needed before quoting.
+- **Wheelhouse Clay Studio**: group events $95/person (2-hour wheel) and $115/person (wheel + handbuilding) ([groupevents](https://www.wheelhouseclaysf.com/groupevents)). Individual class prices live in a booking widget and were not visible.
+
+Unknown (5 of 9): Richmond Clay House and Stone Gold render only with JavaScript; Clayroom, Dusted and Blue and Studio Sumi show prices only inside booking widgets or not at all. These stay `unknown`; the honest fallback is a contributor typing a price with its link.
+
+Verdict: **go as a local experience price source, with a manual fallback.** About half the studios publish a quotable price with a source link, which is enough for "pottery class at SMAart, $89, source" to become a real proposal amount. Not wired into Convex; production use needs the reviewed contract/job change and team OK. Prices are per person, USD, as listed; they say nothing about availability, tax or booking fees.
