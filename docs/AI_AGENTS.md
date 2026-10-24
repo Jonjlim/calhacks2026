@@ -1,5 +1,11 @@
 # AI Agents
 
+## Implementation and integration (2026-10-24)
+
+The member 3 backend is implemented under `convex/agents/`. See [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md) for wiring, configuration, and current limitations. Explicit imported-evidence extraction, quiet/auto buyer turns, structured questions/answers, research handoffs, and optional buyer-to-recipient requests are implemented. They use one model configuration with isolated role contexts. Recipient responses use fixed guidance from validated verdicts; raw profile records and arbitrary model prose do not cross into the room. The synthetic recipient operator is server-gated and is not a real recipient onboarding flow.
+
+The runtime deliberately uses no recursive follow-ups (`needsFollowup: false`). A new human event, an explicit request, or a research-completion hook starts another bounded turn. Chat-to-clue auto-import is not implemented: contributors explicitly select evidence, review proposed clues, and publish through Dev 2's clue endpoints. Live provider compatibility and deployment remain unverified until the model spike runs. The lower sections describe the intended behavior and role boundaries; the integration guide records what is executable now.
+
 Unwrap uses one tool-capable LLM and several **roles** implemented as Convex actions with different snapshots and tool allowlists. There are not two model vendors in P0.
 
 This document is the build spec for Dev 3. Product behavior is in [PRODUCT.md](PRODUCT.md). Access rules are in [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Payloads are in [CONTRACTS.md](CONTRACTS.md).

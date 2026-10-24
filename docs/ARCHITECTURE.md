@@ -6,6 +6,12 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D9 — Agent backbone implementation (2026-10-24)
+
+Dev 3 implements bounded role handoffs within Convex, using one configurable Chat Completions-compatible model adapter (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`). JSON mode plus strict local Zod validation is used; provider/model support remains **unverified** until a credentialed spike succeeds. No SDK, additional database, or agent service is added. Reference: [JSON mode and structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
+
+Scheduling and effect commits happen in mutations. An action must claim a pending job; all commits fence on status, attempt, membership, and current input. A watchdog marks abandoned work uncertain. Model retries are bounded; HTTP failures do not expose response bodies or secrets. UI activity is a separate projection of fixed event summaries. Recipient-agent support remains optional, with a server-gated synthetic operator profile, grants, revision-aware revocation, and fixed output guidance. Existing P0 does not depend on it.
+
 | ID | Decision | Rationale | Rejected alternative |
 | --- | --- | --- | --- |
 | D1 | Unwrap is a collaborative evidence-backed studio. AI improves decisions; it is not decoration. | Matches the pitch and GiftSync chat requirement. | Chat wrapper around a generic recommender. |

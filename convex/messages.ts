@@ -1,17 +1,16 @@
 /**
  * Room chat. Owner: Dev 2 (BE-003). Consumers: Dev 1, Dev 3.
  * sendMessage enqueues an `evaluate_thread` AgentJob for the buyer agent and
- * schedules Dev 3's evaluateThread action. The agent posts back through
- * postAgentMessage, at most once per job.
+ * schedules Dev 3's evaluateThread action through enqueueBuyerTurn. The agent
+ * commits its message, question/research effect, and completion atomically.
  */
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { cleanText, IDEMPOTENCY_KEY_MAX_CHARS, LIMITS } from "./lib/input";
 import { err, memberError, ok } from "./lib/result";
-import { agentInputHash, enqueueAgentJob } from "./jobs";
+import { enqueueBuyerTurn } from "./agents/runtime";
 
 const TRANSCRIPT_WINDOW = 200;
 
@@ -53,13 +52,7 @@ export const sendMessage = mutation({
     });
     await ctx.db.patch(args.roomId, { latestMessageId: messageId });
 
-    const { jobId, created } = await enqueueAgentJob(ctx, {
-      roomId: args.roomId,
-      kind: "evaluate_thread",
-      inputHash: agentInputHash(args.roomId, messageId, member.room.knowledgeRevision),
-      idempotencyKey: `evaluate:${messageId}`,
-    });
-    if (created) await ctx.scheduler.runAfter(0, internal.agents.buyer.evaluateThread, { jobId });
+    await enqueueBuyerTurn(ctx, args.roomId, member.me._id, "quiet");
 
     return ok((await ctx.db.get(messageId))!);
   },
