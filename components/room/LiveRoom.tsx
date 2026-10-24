@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { ActivityFeed } from "@/components/agents/ActivityFeed";
 import { RecipientDemo } from "@/components/agents/RecipientDemo";
+import { StatsPanel } from "@/components/agents/StatsPanel";
 import { LiveChat } from "@/components/chat/LiveChat";
 import { LiveClues } from "@/components/clues/LiveClues";
 import { LiveShortlist } from "@/components/products/LiveShortlist";
@@ -39,6 +40,7 @@ export function LiveRoom({ roomId }: { roomId: string }) {
       </section>
       <section className="flex flex-col gap-6">
         <ActivityFeed roomId={id} />
+        <StatsPanel roomId={id} />
         <LiveShortlist roomId={id} />
       </section>
       <section className="flex flex-col gap-6">
