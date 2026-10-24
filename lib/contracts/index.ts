@@ -208,6 +208,19 @@ export interface AgentDecision {
   extractSourceId?: string;
   needsFollowup: boolean;
   createdAt: number;
+  searchBrief?: SearchBrief;
+  recipientQuery?: Pick<AgentQuery, "type" | "subject">;
+  citations?: { listingIds: string[]; publishedClueIds: string[] };
+}
+
+export interface AgentEvent {
+  id: string;
+  roomId: string;
+  jobId: string;
+  actor: "buyer" | "extractor" | "research_planner" | "recipient";
+  kind: "started" | "question" | "handoff" | "completed" | "failed" | "stale";
+  summary: string;
+  createdAt: number;
 }
 
 // ---------- Products ----------
@@ -369,10 +382,19 @@ export interface AgentJob {
   kind: "evaluate_thread" | "extract" | "recipient_query";
   status: JobStatus;
   inputHash: string;
+  inputVersion?: string;
   idempotencyKey: string;
   attempt: number;
   lastError?: string;
   createdAt: number;
+  actingParticipantId?: string;
+  sourceId?: string;
+  sourceRevision?: number;
+  latestMessageId?: string;
+  knowledgeRevision?: number;
+  mode?: "quiet" | "auto";
+  startedAt?: number;
+  finishedAt?: number;
 }
 
 export interface ResearchJob {

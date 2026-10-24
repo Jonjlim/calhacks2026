@@ -5,6 +5,8 @@
 import { v } from "convex/values";
 
 export const currency = v.literal("USD");
+export const recipientCategory = v.union(v.literal("interest"), v.literal("dislike"), v.literal("ownership"), v.literal("size"), v.literal("constraint"));
+export const recipientQuestionType = v.union(v.literal("suitability"), v.literal("ownership"), v.literal("constraint"));
 
 export const participantRole = v.union(v.literal("organizer"), v.literal("contributor"));
 

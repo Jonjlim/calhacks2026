@@ -8,6 +8,26 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Member 3 implementation additions (2026-10-24)
+
+Owner: Dev 3; consumers: Dev 1 (agent controls/activity), Dev 2 (chat hook), Dev 4 (research jobs).
+Existing names remain compatible; additions below are optional unless creating a new agent operation.
+
+- `agents/buyer.requestTurn({ roomId, mode?: "quiet" | "auto" }) -> Result<{ jobId }>` checks membership, snapshots the latest human message and knowledge revision, deduplicates, then schedules evaluation. Quiet is the default; only `@unwrap` triggers a response. Dev 2 can call `enqueueBuyerTurn(ctx, roomId, participantId, mode)` after inserting a human message in the same mutation. No polling or recursive agent chat.
+- `agents/buyer.answerQuestion({ roomId, slot, body, clientIdempotencyKey }) -> Result<{ messageId, jobId }>` records a human answer and closes the open slot atomically. `abandonQuestion({ roomId, slot })` closes an obsolete question. Slots are restricted to budget, exclusions, occasion, already_owns, size, timing, direction.
+- `agents/buyer.listActivity({ roomId })` returns bounded, room-safe `AgentEvent[]` and open questions. Private extraction events are visible only to their contributor. Events contain fixed summaries, never model rationale, private source text, grants, or preference IDs.
+- `agents/buyer.retryJob({ jobId }) -> Result<{ jobId }>` allows the acting member to retry failed/uncertain work once. Status claims, attempt fencing, input revision checks, and a watchdog prevent duplicate/late effects.
+- `AgentJob` gains optional `actingParticipantId`, `sourceId`, `sourceRevision`, `latestMessageId`, `knowledgeRevision`, `mode`, `startedAt`, `finishedAt`, `inputVersion`. Buyer jobs index a short `inputHash` and compare the full immutable-ID version token as well; a lookup collision cannot accept stale effects. `AgentDecision` gains optional `searchBrief`, `recipientQuery`, and `citations: { listingIds, publishedClueIds }`. Model payloads omit server-owned IDs/timestamps.
+- `AgentEvent = { id, roomId, jobId, actor: "buyer" | "extractor" | "research_planner" | "recipient", kind: "started" | "question" | "handoff" | "completed" | "failed" | "stale", summary, createdAt }`. Storage adds optional `participantId` for private events. Job details remain server-only.
+- `AskedSlot` storage adds optional `answeredByMessageId`. Answering or abandoning a slot also invalidates an in-flight turn via its input fingerprint.
+- Extraction retains `extractClues({ sourceId }) -> Result<{ jobId }>`; only an owning member can enqueue. Proposed-clue writes and job completion are atomic and recheck ownership, source revision, message references, and active contradiction IDs.
+- `agents/recipient.createProfile({ roomId }) -> Result<{ recipientProfileId }>` creates a room-linked profile owned by the authenticated identity. For the hackathon only, gated by server `RECIPIENT_AGENT_DEMO_ENABLED=true`, an organizer can act as a synthetic recipient operator. This is not recipient consent for real data.
+- `updateRecipientPreferences({ recipientProfileId, preferences, grants })` replaces that owner's authorized records. Owner-only reads via `getMyProfile({ roomId })`; room membership never grants access to other profiles. Empty records/grants revoke access. `RecipientGrant` stores question-type allowlists. Only authorized **and disclosable** rows reach the model; non-disclosable rows produce no disclosure. No model-written free text crosses this boundary.
+- `queryRecipientAgent` is internal-only and bound to the current buyer job, room-linked profile, query ID, and permission grants. A validated verdict produces fixed guidance. The buyer records a room-safe result chip, never publishes a clue automatically. One recipient query per turn; no unbounded conversation. Profile revision is checked at commit, so revoked/replaced grants invalidate an in-flight reply.
+- Buyer search produces a `ResearchJob` with the existing `SearchBrief` and schedules `internal.research.research.runResearch({ jobId })`. Dev 4 owns execution/completion. Neither private imports nor contribution caps enter this brief.
+
+Migration: additive optional fields on existing tables, new `agentEvents`, `recipientProfiles`, `recipientPreferences`, and `recipientGrants` tables. Existing UI mocks remain valid. Dev 1 wires the public operations; Dev 2 wires the enqueue hook; Dev 4 consumes the existing research job runner.
+
 - IDs are opaque strings here; they become Convex `Id<"table">` later.
 - Money: `amountMinor: number` (integer cents) + `currency: "USD"`.
 - Timestamps: unix milliseconds.
