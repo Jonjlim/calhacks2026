@@ -70,3 +70,32 @@ Hardened local fashion discovery against conflicting duplicate posts: neither so
 - `6afeb59`: fixed /worlds build failure without Convex configuration by rendering an explicit offline fallback before any provider-dependent hooks.
 - The recorded fashion bridge adds only an optional internal snapshot field and pure source-context builder. It does not add a database, paid call, service or environment change. Integration test runs Alan’s buyer with mocked model output, checks source context reaches it, then verifies the chosen query reaches the existing shopping worker while server budget/exclusions override model values. No new preference is published.
 - Current validation: 359 passed, 3 live-only skipped; app and Convex TypeScript passed; webpack production build passed with the integrated /worlds and /council routes. Live browser/deployment acceptance is still pending.
+
+## Connected two-browser attempt (October 24, about 10:10 local)
+
+Alex supplied `https://striped-alpaca-645.convex.cloud` for the test. Used an isolated
+copy of this branch on port 3100 to avoid interrupting a teammate’s dev server in
+the main checkout. The process received only the public Convex URL; no env files
+or deployment settings were changed.
+
+Browser sessions used separate origins (127.0.0.1 and localhost) for independent
+anonymous identities. Created the clearly labeled `TEST ONLY Maya 2026-10-24`
+room (`mx7effrsrqq3ykp3qds5w9p3bd8gxsb5`) as Alex Browser Test. Jordan Browser Test
+joined through its invite; the invite UI updated from one person to two. These
+are synthetic test records on the supplied backend; no cleanup was attempted.
+
+Opening the room failed on `councilRoom:state`, request IDs
+`a4cc9b7371e14456` and `d7766a58788cc310`. The browser received a generic server
+error, so the underlying cause is not confirmed. The old UI incorrectly rendered
+“Room not found”. Local code now separates the council query behind an error
+boundary, shows council unavailability, disables its launch button in that state,
+and uses a backend-failure message for unexpected core room errors. This changes
+no server permissions, money, research routes or deployment code.
+
+The post-change browser retest could not complete because browser automation
+became unresponsive. TypeScript passed and the full offline suite remained
+359 passed / 3 live-only skipped. This does not establish a passing live room test.
+Private clue isolation, live voting, live cap privacy, and browser approval
+invalidation remain unverified in this deployment. Server-side logs were requested
+from Alex. No paid provider calls, purchases, shared-branch pushes or deployments
+were performed by this test.

@@ -63,7 +63,7 @@ function LiveRoomGate({ roomId }: { roomId: string }) {
   }
   if (session.status !== "ready") return <RoomMessage title="Opening the room…" />;
   return (
-    <ErrorBoundary fallback={<RoomAccessError error={NOT_A_ROOM} />}>
+    <ErrorBoundary fallback={<RoomMessage title="The room could not load"><p>A backend request failed. Reload to try again; this does not mean the room was deleted.</p></RoomMessage>}>
       <LiveRoom roomId={roomId as Id<"rooms">} />
     </ErrorBoundary>
   );
@@ -86,7 +86,6 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
   const votesRes = useQuery(api.votes.listVotes, args);
   const inviteRes = useQuery(api.rooms.getInvite, args);
   const activityRes = useQuery(api.agents.buyer.listActivity, args);
-  const councilRes = useQuery(api.councilRoom.state, args);
   const jobsRes = useQuery(api.jobs.listRoomJobs, args);
 
   const sendMessage = useMutation(api.messages.sendMessage);
@@ -167,10 +166,20 @@ function LiveRoom({ roomId }: { roomId: Id<"rooms"> }) {
     evidence: value(evidenceRes, []).map(withId),
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
-    council: councilRes?.ok ? councilRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
   };
-  return <RoomLayout data={data} actions={actions} />;
+  const unavailable = <RoomLayout data={{ ...data, councilUnavailable: true }} actions={actions} />;
+  return (
+    <ErrorBoundary fallback={unavailable}>
+      <RoomWithCouncil roomId={roomId} data={data} actions={actions} />
+    </ErrorBoundary>
+  );
+}
+
+/** An optional council query must not turn a valid gift room into “not found”. */
+function RoomWithCouncil({ roomId, data, actions }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions }) {
+  const result = useQuery(api.councilRoom.state, { roomId });
+  return <RoomLayout data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {
