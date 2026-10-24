@@ -274,8 +274,8 @@ RC-001, RC-002, RC-003.
 | RC-013 | Cancel / refund / partial-capture recovery | P1-B | RC-012 |
 | RC-014 | TrendObservation + sourced badge | P2 | RC-005 |
 | RC-015 | Second product source or custom Actor | P2 | RC-003 |
-| RC-016 | Keep source photos: validate `imageUrl`, prefer listings with photos in the visible set, test it | P0 | RC-003, RC-005 |
-| RC-017 | Photo-derived style terms into `SearchBrief.styleTerms` + ranking soft modifiers; fixture tests | P0 | RC-005, AI-018 |
+| RC-016 | Keep source photos: validate `imageUrl`, prefer listings with photos in the visible set, test it — done in p0 (see “Derived product presentation (RC-008 / RC-016)” in [CONTRACTS.md](CONTRACTS.md)) | P0 | RC-003, RC-005 |
+| RC-017 | Photo-derived style clues through the merged confirmed-clue path (no separate `SearchBrief` field; see “Confirmed visual preferences in research” in [CONTRACTS.md](CONTRACTS.md)); fixture tests | P0 | RC-005, AI-018 |
 
 ---
 
@@ -359,8 +359,8 @@ Effort: S ≈ 1–2 h, M ≈ 2–4 h, L ≈ 4–8 h. Use as issue sizes.
 | RC-013 | Recovery | Dev 4 | P1-B | RC-012 | Paths | Partial capture honest | L |
 | RC-014 | Trends | Dev 4 | P2 | RC-005 | Observation | Real source or omit | M |
 | RC-015 | Extra source | Dev 4 | P2 | RC-003 | Actor/API | Not a logo-only add | L |
-| RC-016 | Listing photos | Dev 4 | P0 | RC-003, RC-005 | `imageUrl` kept | Photo-first visible set | S |
-| RC-017 | Style terms in brief | Dev 4 | P0 | RC-005, AI-018 | `styleTerms` ranking | Soft modifier only; never an exclusion | S |
+| RC-016 | Listing photos (done in p0) | Dev 4 | P0 | RC-003, RC-005 | `imageUrl` kept | Photo-first visible set | S |
+| RC-017 | Style clues via confirmed path | Dev 4 | P0 | RC-005, AI-018 | Confirmed-clue matching | Never an exclusion; no new SearchBrief field | S |
 
 ---
 

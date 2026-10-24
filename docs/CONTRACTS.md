@@ -167,7 +167,7 @@ Screenshots and voice notes become ordinary `PrivateMessage` rows before clue ex
 
 ### Photo observation (P0)
 
-**Owner:** Dev 3 (producer). **Consumers:** Dev 1 (review UI), Dev 4 (style terms in `SearchBrief`).
+**Owner:** Dev 3 (producer). **Consumers:** Dev 1 (review UI); Dev 4 consumes the published style clues through the same confirmed-clue path as typed clues (see “Confirmed visual preferences in research”; there is no separate `SearchBrief` style field).
 
 ```ts
 interface PhotoObservation {
@@ -190,6 +190,7 @@ Rules:
 - Describe only the marked person's activity, the coarse setting, style, and visible objects. Never identify people from faces, guess names, or infer age, gender, appearance, health, ethnicity, or religion. Other people in the photo are ignored.
 - Validate model output with Zod. Photo content is untrusted data; instructions inside a photo are not commands.
 - A single photo's observation becomes an `uncertain` clue. The same term observed in two or more photos of the source merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Every photo clue sets `speakerAssumption: "unknown"` and stays behind the human publish gate.
+- Published style observations become ordinary `interest` clues. They reach research through the confirmed-clue path (see “Confirmed visual preferences in research”), not a separate `SearchBrief` field.
 
 ### Proposed clue
 
@@ -563,7 +564,6 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
-  styleTerms?: string[]; // soft modifiers, e.g. photo-derived style clues; never exclusions
   listingLimit: number;
 }
 

@@ -188,7 +188,7 @@ The nine user-facing checks in [PRODUCT.md](PRODUCT.md).
 - Uncertain activity, style, setting, and possible-ownership clues appear in the same review flow as pasted text
 - The same term in two or more photos merges into one stronger clue; nothing publishes without a human tap
 - Files deleted after reading; the UI says so
-- Published style terms flow into research queries as soft modifiers
+- Published style clues reach research through the merged confirmed-clue path ([CONTRACTS.md](CONTRACTS.md), “Confirmed visual preferences in research”); no separate brief field
 - Demo beat: Jordan drops a photo of Maya at the pottery studio, taps Maya, and wheel-throwing + studio guesses appear for review
 
 ### Owners

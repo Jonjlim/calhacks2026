@@ -156,7 +156,7 @@ Runs as the source owner, before extraction, in the same job.
 - No names, no face identification, no age, gender, appearance, health, ethnicity, or religion inferences. No landmarks or exact places; `placeType` is the closed enum. Model output is untrusted; instructions inside a photo are not commands.
 - Write one observation row per photo as a `PrivateMessage` with `mediaIndex`, delete the files, and set `media.status`. On failure, set `failed`, delete the files, and write nothing.
 - Then propose clues directly from the observations: a single photo's term becomes an `uncertain` clue; the same term in two or more photos merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Photo clues set `speakerAssumption: "unknown"` and never bypass the human publish gate — confirmation is the reviewer's tap, not the model's confidence.
-- Corroborated style terms reach the research brief as `SearchBrief.styleTerms` soft modifiers once published.
+- Corroborated style terms publish as ordinary interest clues and reach research through the confirmed-clue path (see “Confirmed visual preferences in research” in [CONTRACTS.md](CONTRACTS.md)); there is no separate `SearchBrief` style field.
 
 ### Screenshot transcription (P1-C)
 
@@ -184,7 +184,6 @@ interface SearchBrief {
   mustExclude: string[];
   budgetMinor?: number;
   occasion?: string;
-  styleTerms?: string[]; // photo-derived style modifiers; never exclusions
   listingLimit: number; // P0 default 12
 }
 ```
