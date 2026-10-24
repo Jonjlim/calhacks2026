@@ -8,6 +8,24 @@
 
 export type Currency = "USD";
 
+/** RC-014 local experiment; term-level evidence, not product popularity. */
+export interface TrendContext {
+  seedTerm: string;
+  geo: "US";
+  timeRange: "today 3-m";
+  retrievedAt: number;
+}
+
+export type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;
+  query: string;
+} & (
+  | { kind: "top_search"; popularityIndex: number }
+  | { kind: "rising_search"; growthPercent: number }
+  | { kind: "breakout_search" }
+);
+
 // ---------- Errors / results ----------
 
 export type AppErrorCode =

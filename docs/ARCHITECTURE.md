@@ -6,6 +6,12 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D12 — Local trend discovery experiment (2026-10-24)
+
+Dev 4 evaluated `apify/google-trends-scraper` build `0.0.141` as a public category-context source. This is a standalone script, not a second product catalog or a deployed service. It sends public search terms only, retains source/time-range/geo provenance, and cannot publish clues or change recommendation scores. Existing shopping retrieval remains unchanged. Production integration requires a separate reviewed contract/job change. See [DEV4_TRENDS_SPIKE.md](DEV4_TRENDS_SPIKE.md).
+
+The first candidate timed out with zero completed pages at 180 seconds: **no-go for this configuration**. The second candidate, `agenscrape/google-trends-scraper` build `1.0.21`, passed two live related-search runs (about 14s and 12s; no browser-based topics): **conditional go for local category discovery**, not verified production reliability. One discovered query successfully fed the existing shopping Actor. Both use Apify; neither replaces the product source. Shared additive `TrendContext` / `TrendObservation` types are consumed only by local scripts/tests; no database migration or production scoring change.
+
 ### D11 — Photo clues as P0 evidence input (2026-10-24)
 
 Product cards show real source photos (P0). Photo clues (P0), screenshot clues (P1-C), and voice notes (P2) are read once by the vision-capable model into private text or observation rows; the uploaded file is deleted. No face recognition — the uploader taps who the recipient is. Gift choice is visual, and non-text input is the strongest “you remembered” moment, but one clue pipeline with one human gate is easier to secure than three. Rejected: storing raw images or audio; a separate image-clue pipeline; face recognition or identity inference; AI-generated product images. Contracts: “Photo observation” in [CONTRACTS.md](CONTRACTS.md).

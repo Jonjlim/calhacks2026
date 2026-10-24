@@ -890,3 +890,29 @@ Dev 3 may write extraction results as JSON fixtures matching `ProposedClue`.
 Dev 4 may ship 3–6 `manual_fixture` listings labeled as fixtures, plus one live-normalized listing after the spike.
 
 Do not silently promote fixtures to `source: "apify"`.
+
+## Local trend discovery experiment (RC-014)
+
+Owner: Dev 4. Consumers: standalone spike/report only. Additive types; no database migration, query shape, score, or `SearchBrief` change. These observations describe **search terms**, never product sales. Production integration is deferred.
+
+```ts
+interface TrendContext {
+  seedTerm: string;       // public category, not raw private clue text
+  geo: "US";
+  timeRange: "today 3-m"; // requested relative window evaluated at retrieval
+  retrievedAt: number;   // positive integer Unix milliseconds
+}
+type TrendObservation = TrendContext & {
+  source: "google_trends";
+  sourceUrl: string;     // Google Trends seed exploration with the same geo/window
+  query: string;         // provider's related search phrase
+} & (
+  | { kind: "top_search"; popularityIndex: number } // 0..100, not share or sales
+  | { kind: "rising_search"; growthPercent: number } // >0, compared with previous period
+  | { kind: "breakout_search" } // provider says Breakout; no invented exact growth
+);
+```
+
+Reject mismatched seed terms, malformed metrics and missing context. Deduplicate within seed/geo/window/kind/query. Discovery candidates must retain all literal seed tokens, reject obvious local-service/informational intent, and retain the observation as provenance. This lexical gate can miss useful synonyms and admit non-gifts; it is not personal relevance or purchase approval. Current production `trendSignal` stays zero.
+
+The alternate Actor's exact label `Past 90 days` maps to requested `today 3-m`; other windows/geos are rejected. Ignore the known `Pottery Barn` brand phrase when checking a pottery category match, matching the production collision rule.
