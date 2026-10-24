@@ -79,6 +79,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   useEffect(() => {
     setCouncil({
       roomId: room.id,
+      viewerId: me.id,
       events: data.council?.events ?? [],
       decorations: data.council?.decorations ?? [],
       participants: participants.map((p) => ({ id: p.id, displayName: p.displayName, joinedAt: p.joinedAt })),
@@ -86,7 +87,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
     });
-  }, [room.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {

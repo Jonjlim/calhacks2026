@@ -1,23 +1,38 @@
 {
   "format": "glTF 2.0 binary",
+  "revision": "capsule-v2-rounded-floating",
   "shared_clips": [
     "idle",
     "walk",
     "wave",
     "think",
-    "talk",
+    "work",
+    "happy",
     "celebrate",
+    "talk",
     "sit"
   ],
+  "sharedRigBones": [
+    "Root",
+    "Body",
+    "Antenna",
+    "Backpack",
+    "LeftFlipper",
+    "RightFlipper",
+    "RoleAccessory",
+    "SecondaryAccessory"
+  ],
+  "feet": false,
+  "heightScale": 0.8,
+  "recommendedSceneScaleMultiplier": 0.67,
+  "hoverOffset": 0.42,
   "characters": [
     {
       "id": "archivist",
-      "role": "Memory and Context",
       "model": "models/archivist.glb",
       "source": "source/archivist.blend",
-      "bytes": 1763096,
-      "sha256": "daf7b3c07666c3eb0c07cbb1d4a2cef2a653328d5a261ee32bdf4f735dc826ae",
-      "source_sha256": "d4ff32096e93bee84e462c74c749beb3f0cec7cf9b417a0eeb0d947f683469a1",
+      "bytes": 1534052,
+      "sha256": "694844e66b3c65efa7439f1520a202f80408370694a0085e7fe453c710e370c5",
       "clips": [
         {
           "name": "idle",
@@ -25,23 +40,35 @@
         },
         {
           "name": "walk",
-          "seconds": 1.5
+          "seconds": 2
         },
         {
           "name": "wave",
-          "seconds": 2.5
+          "seconds": 3
         },
         {
           "name": "think",
           "seconds": 4
         },
         {
-          "name": "talk",
+          "name": "work",
+          "seconds": 4
+        },
+        {
+          "name": "happy",
           "seconds": 3
         },
         {
           "name": "celebrate",
           "seconds": 3
+        },
+        {
+          "name": "talk",
+          "seconds": 3
+        },
+        {
+          "name": "sit",
+          "seconds": 2
         },
         {
           "name": "read_scroll",
@@ -56,70 +83,45 @@
           "seconds": 4
         },
         {
-          "name": "sit",
-          "seconds": 2
+          "name": "face_neutral",
+          "seconds": 1
+        },
+        {
+          "name": "face_happy",
+          "seconds": 1
+        },
+        {
+          "name": "face_curious",
+          "seconds": 1
+        },
+        {
+          "name": "face_thinking",
+          "seconds": 1
+        },
+        {
+          "name": "face_excited",
+          "seconds": 1
+        },
+        {
+          "name": "face_surprised",
+          "seconds": 1
         }
-      ]
-    },
-    {
-      "id": "scout",
-      "role": "Gift Research",
-      "model": "models/scout.glb",
-      "source": "source/scout.blend",
-      "bytes": 1433280,
-      "sha256": "631b752aa9cab2e86baec83bb9db66bc66f009bc6b6dbe945dc6503290c9195e",
-      "source_sha256": "d8eadf469d257465335107b59f9a6e319a123773f05621bc12d98c0648745759",
-      "clips": [
-        {
-          "name": "idle",
-          "seconds": 4
-        },
-        {
-          "name": "walk",
-          "seconds": 1.5
-        },
-        {
-          "name": "wave",
-          "seconds": 2.5
-        },
-        {
-          "name": "think",
-          "seconds": 4
-        },
-        {
-          "name": "talk",
-          "seconds": 3
-        },
-        {
-          "name": "celebrate",
-          "seconds": 3
-        },
-        {
-          "name": "sit",
-          "seconds": 2
-        },
-        {
-          "name": "search",
-          "seconds": 4
-        },
-        {
-          "name": "inspect_object",
-          "seconds": 4
-        },
-        {
-          "name": "discovery",
-          "seconds": 4
-        }
+      ],
+      "expressions": [
+        "neutral (all zero)",
+        "happy",
+        "curious",
+        "thinking",
+        "excited",
+        "surprised"
       ]
     },
     {
       "id": "muse",
-      "role": "Creative Personalization",
       "model": "models/muse.glb",
       "source": "source/muse.blend",
-      "bytes": 1498564,
-      "sha256": "a967998881576dd3ef0a49ff8ec31535715375b1ba9b1a968ed09eeae50c3399",
-      "source_sha256": "bdbd9d4ed286d9181581de3d6912428d19d28c2359ad96b3cdab8bf9e2e356b6",
+      "bytes": 1663276,
+      "sha256": "692d0adb8c07800edf6f19010907031ed1ea6c7d0b38afb8029b7d0b1b5470f7",
       "clips": [
         {
           "name": "idle",
@@ -127,22 +129,30 @@
         },
         {
           "name": "walk",
-          "seconds": 1.5
+          "seconds": 2
         },
         {
           "name": "wave",
-          "seconds": 2.5
+          "seconds": 3
         },
         {
           "name": "think",
           "seconds": 4
         },
         {
-          "name": "talk",
+          "name": "work",
+          "seconds": 4
+        },
+        {
+          "name": "happy",
           "seconds": 3
         },
         {
           "name": "celebrate",
+          "seconds": 3
+        },
+        {
+          "name": "talk",
           "seconds": 3
         },
         {
@@ -160,17 +170,47 @@
         {
           "name": "brush_twirl",
           "seconds": 4
+        },
+        {
+          "name": "face_neutral",
+          "seconds": 1
+        },
+        {
+          "name": "face_happy",
+          "seconds": 1
+        },
+        {
+          "name": "face_curious",
+          "seconds": 1
+        },
+        {
+          "name": "face_thinking",
+          "seconds": 1
+        },
+        {
+          "name": "face_excited",
+          "seconds": 1
+        },
+        {
+          "name": "face_surprised",
+          "seconds": 1
         }
+      ],
+      "expressions": [
+        "neutral (all zero)",
+        "happy",
+        "curious",
+        "thinking",
+        "excited",
+        "surprised"
       ]
     },
     {
-      "id": "keeper",
-      "role": "Budget and Practicality",
-      "model": "models/keeper.glb",
-      "source": "source/keeper.blend",
-      "bytes": 1612360,
-      "sha256": "e1d9a72e3d767901bbb150399b56a1d8d06c934ea300c3af212db2bd688da44d",
-      "source_sha256": "72ac7f7af9772834fa9dae10316c3c6a64e5f296495de2044e1d2cd3b20beece",
+      "id": "scout",
+      "model": "models/scout.glb",
+      "source": "source/scout.blend",
+      "bytes": 1561560,
+      "sha256": "fcc36ec243282637e8f43159176c94e691b93a1e3224ebe322adec3af099fa24",
       "clips": [
         {
           "name": "idle",
@@ -178,22 +218,119 @@
         },
         {
           "name": "walk",
-          "seconds": 1.5
+          "seconds": 2
         },
         {
           "name": "wave",
-          "seconds": 2.5
+          "seconds": 3
         },
         {
           "name": "think",
           "seconds": 4
         },
         {
-          "name": "talk",
+          "name": "work",
+          "seconds": 4
+        },
+        {
+          "name": "happy",
           "seconds": 3
         },
         {
           "name": "celebrate",
+          "seconds": 3
+        },
+        {
+          "name": "talk",
+          "seconds": 3
+        },
+        {
+          "name": "sit",
+          "seconds": 2
+        },
+        {
+          "name": "search",
+          "seconds": 4
+        },
+        {
+          "name": "inspect_object",
+          "seconds": 4
+        },
+        {
+          "name": "discovery",
+          "seconds": 4
+        },
+        {
+          "name": "face_neutral",
+          "seconds": 1
+        },
+        {
+          "name": "face_happy",
+          "seconds": 1
+        },
+        {
+          "name": "face_curious",
+          "seconds": 1
+        },
+        {
+          "name": "face_thinking",
+          "seconds": 1
+        },
+        {
+          "name": "face_excited",
+          "seconds": 1
+        },
+        {
+          "name": "face_surprised",
+          "seconds": 1
+        }
+      ],
+      "expressions": [
+        "neutral (all zero)",
+        "happy",
+        "curious",
+        "thinking",
+        "excited",
+        "surprised"
+      ]
+    },
+    {
+      "id": "keeper",
+      "model": "models/keeper.glb",
+      "source": "source/keeper.blend",
+      "bytes": 1639812,
+      "sha256": "95f6344193dc1fa89c5e8408f716870e9f600adc4a7de0c9b0291f72daec9e07",
+      "clips": [
+        {
+          "name": "idle",
+          "seconds": 4
+        },
+        {
+          "name": "walk",
+          "seconds": 2
+        },
+        {
+          "name": "wave",
+          "seconds": 3
+        },
+        {
+          "name": "think",
+          "seconds": 4
+        },
+        {
+          "name": "work",
+          "seconds": 4
+        },
+        {
+          "name": "happy",
+          "seconds": 3
+        },
+        {
+          "name": "celebrate",
+          "seconds": 3
+        },
+        {
+          "name": "talk",
           "seconds": 3
         },
         {
@@ -211,17 +348,47 @@
         {
           "name": "approve",
           "seconds": 4
+        },
+        {
+          "name": "face_neutral",
+          "seconds": 1
+        },
+        {
+          "name": "face_happy",
+          "seconds": 1
+        },
+        {
+          "name": "face_curious",
+          "seconds": 1
+        },
+        {
+          "name": "face_thinking",
+          "seconds": 1
+        },
+        {
+          "name": "face_excited",
+          "seconds": 1
+        },
+        {
+          "name": "face_surprised",
+          "seconds": 1
         }
+      ],
+      "expressions": [
+        "neutral (all zero)",
+        "happy",
+        "curious",
+        "thinking",
+        "excited",
+        "surprised"
       ]
     },
     {
       "id": "courier",
-      "role": "Coordination and Communication",
       "model": "models/courier.glb",
       "source": "source/courier.blend",
-      "bytes": 1258048,
-      "sha256": "079263c399ac1248ceccbea7b5be7cf352ffd3fa9a06d0fe167773b3b1da6ed9",
-      "source_sha256": "b048376781d6423674c9ab0c57545cee732fe9f9acda580aac3d950f6e2d8d8b",
+      "bytes": 1534280,
+      "sha256": "b0c961530ecfdbf23a1946c211ec79ab0194ba0bd19438ad853d4ef615958fa2",
       "clips": [
         {
           "name": "idle",
@@ -229,22 +396,30 @@
         },
         {
           "name": "walk",
-          "seconds": 1.5
+          "seconds": 2
         },
         {
           "name": "wave",
-          "seconds": 2.5
+          "seconds": 3
         },
         {
           "name": "think",
           "seconds": 4
         },
         {
-          "name": "talk",
+          "name": "work",
+          "seconds": 4
+        },
+        {
+          "name": "happy",
           "seconds": 3
         },
         {
           "name": "celebrate",
+          "seconds": 3
+        },
+        {
+          "name": "talk",
           "seconds": 3
         },
         {
@@ -262,7 +437,39 @@
         {
           "name": "excited_hop",
           "seconds": 4
+        },
+        {
+          "name": "face_neutral",
+          "seconds": 1
+        },
+        {
+          "name": "face_happy",
+          "seconds": 1
+        },
+        {
+          "name": "face_curious",
+          "seconds": 1
+        },
+        {
+          "name": "face_thinking",
+          "seconds": 1
+        },
+        {
+          "name": "face_excited",
+          "seconds": 1
+        },
+        {
+          "name": "face_surprised",
+          "seconds": 1
         }
+      ],
+      "expressions": [
+        "neutral (all zero)",
+        "happy",
+        "curious",
+        "thinking",
+        "excited",
+        "surprised"
       ]
     }
   ]
