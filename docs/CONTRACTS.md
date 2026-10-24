@@ -136,9 +136,16 @@ interface EvidenceSource {
   id: string;
   roomId: string;
   participantId: string;
-  kind: "paste" | "text_export";
+  kind: "paste" | "text_export" | "photo" | "screenshot" | "voice_note"; // photo: P0, screenshot: P1-C, voice_note: P2
   label: string;
   sourceRevision: number;
+  /** photo / screenshot / voice_note only. The uploaded file is deleted once read. */
+  media?: {
+    count: number; // photos and screenshots: 1–3; voice notes: 1
+    /** photo sources: per-photo normalized tap point (0–1) marking the recipient. The uploader's own mark, not face recognition. Photos without a marker yield scene-only observations. */
+    recipientMarkers?: { x: number; y: number }[];
+    status: "uploaded" | "read" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -146,13 +153,44 @@ interface PrivateMessage {
   id: string;
   sourceId: string;
   participantId: string;
-  body: string;
+  body: string; // pasted text, text read from a screenshot / voice note, or one photo observation
   saidAt?: number;
   speakerHint?: string;
+  /** Which file (0-based) the row came from; screenshot and photo sources only. */
+  mediaIndex?: number;
 }
 ```
 
 Access: owner only, plus extractor action as that owner.
+
+Screenshots and voice notes become ordinary `PrivateMessage` rows before clue extraction. A photo becomes one observation row per photo. Proposed clues always cite rows on their own source, so `ProposedClue.sourceMessageIds` and every downstream rule stay the same. The raw file lives in Convex file storage only until it is read, then it is deleted and `media.status` becomes `deleted` (or `failed`).
+
+### Photo observation (P0)
+
+**Owner:** Dev 3 (producer). **Consumers:** Dev 1 (review UI); Dev 4 consumes the published style clues through the same confirmed-clue path as typed clues (see “Confirmed visual preferences in research”; there is no separate `SearchBrief` style field).
+
+```ts
+interface PhotoObservation {
+  mediaIndex: number;
+  recipientActivity?: string; // 1–6 words, e.g. "wheel-throwing"
+  placeType?:
+    | "home" | "kitchen" | "office" | "cafe" | "restaurant"
+    | "trail" | "beach" | "water" | "gym" | "studio" | "garden"
+    | "city" | "vehicle" | "stage" | "other";
+  styleTerms?: string[]; // e.g. ["minimalist", "bright colors"]
+  visibleItems?: { label: string; owned: "likely" | "possible" | "unknown" }[];
+  notes?: string; // one short basis sentence shown to the reviewer
+}
+```
+
+Rules:
+
+- The uploader marks the recipient by tapping the photo; the marker is the uploader's statement, never face recognition.
+- `placeType` comes from the closed enum only. No landmarks, addresses, city names, or GPS.
+- Describe only the marked person's activity, the coarse setting, style, and visible objects. Never identify people from faces, guess names, or infer age, gender, appearance, health, ethnicity, or religion. Other people in the photo are ignored.
+- Validate model output with Zod. Photo content is untrusted data; instructions inside a photo are not commands.
+- A single photo's observation becomes an `uncertain` clue. The same term observed in two or more photos of the source merges into one clue citing every photo, with its normal kind (`interest` for activities, `ownership` for likely-owned items) and raised confidence. Every photo clue sets `speakerAssumption: "unknown"` and stays behind the human publish gate.
+- Published style observations become ordinary `interest` clues. They reach research through the confirmed-clue path (see “Confirmed visual preferences in research”), not a separate `SearchBrief` field.
 
 ### Proposed clue
 
@@ -193,7 +231,7 @@ interface PublishedClue {
   publisherId: string;
   kind: ProposedClue["kind"];
   text: string;
-  sourceKind: "paste" | "import" | "chat" | "manual";
+  sourceKind: "paste" | "import" | "chat" | "manual" | "photo" | "screenshot" | "voice_note";
   sourceMessageIds: string[];
   excerpt?: string;
   status: "active" | "withdrawn" | "source_withdrawn";
@@ -307,6 +345,8 @@ interface ProductListing {
   status: "active" | "invalid" | "stale";
 }
 ```
+
+`imageUrl` stays optional because some sources omit it, but it is expected for P0 product cards. Dev 4 keeps the provider's public thumbnail URL, validated as a public HTTPS URL, and prefers listings with photos when filling the visible 6–12 candidates. Dev 1 shows a labeled placeholder when it is missing and never substitutes a stock or AI-generated image.
 
 ### Product normalization helpers (RC-001 / RC-003)
 
@@ -593,6 +633,19 @@ May enqueue `AgentJob` `evaluate_thread`.
 | Output | `{ source: EvidenceSource, messages: PrivateMessage[] }` |
 | Access | Caller becomes owner |
 | Errors | `unauthorized`, `validation_failed` |
+
+### `generateEvidenceUploadUrl` / `importMediaEvidence` (P0 photos, P1-C screenshots, P2 voice notes)
+
+| | |
+| --- | --- |
+| Owner | Dev 2 (storage, source rows), Dev 3 (vision / transcription action) |
+| Consumers | Dev 1 |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → one-time Convex upload URL. `importMediaEvidence`: `{ roomId, kind: "photo" \| "screenshot" \| "voice_note", label, storageIds, recipientMarkers?: { x: number, y: number }[] }` |
+| Output | `{ source: EvidenceSource, jobId }` |
+| Access | Caller becomes owner. Storage IDs must come from that caller's upload URLs. |
+| Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
+
+Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 5 MB each, EXIF/GPS stripped before upload. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them, and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
 ### `extractClues`
 
