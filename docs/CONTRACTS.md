@@ -52,6 +52,7 @@ interface Room {
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;
+  latestMessageId?: string; // latest human chat message; part of the evaluate_thread inputHash
   inviteToken: string; // do not leak in agent snapshots
   createdBy: string;
   createdAt: number;
@@ -487,6 +488,8 @@ interface AskedSlot {
 
 Each operation lists owner, consumers, input, output, access, and errors so another developer can mock it.
 
+Every Convex query and mutation returns `Result<T>` (`{ ok: true, value }` or `{ ok: false, error: AppError }`) from `lib/contracts`. Expected failures never throw.
+
 ### `createRoom`
 
 | | |
@@ -616,7 +619,7 @@ P0 manual room clue for preferences/exclusions without an import.
 | Access | Organizer confirms; any member may propose. P0 default: organizer `selectGift` |
 | Errors | `unauthorized`, `not_found`, `invalid_revision` |
 
-Selecting supersedes the prior revision.
+Selecting supersedes the prior revision. P0 implementation: organizer only; non-organizers get `unauthorized`. Selecting always recomputes the proposal and returns the resulting revision (possibly `infeasible`).
 
 ### `castVote` (optional P0)
 
@@ -642,6 +645,8 @@ Advisory only.
 | Access | Owning participant |
 | Errors | `unauthorized`, `validation_failed`, `infeasible` |
 
+Unset caps count as 0. When a gift is selected, saving a cap recomputes the proposal; `revision` is the current revision afterwards (new if shares changed, possibly `infeasible`). The write itself succeeds even when the proposal is infeasible.
+
 ### `createProposal` / `getProposal`
 
 | | |
@@ -652,6 +657,8 @@ Advisory only.
 | Output | `{ revision, shares, approvals, feasible: boolean }` |
 | Access | Members see frozen shares and own pending approval, not others’ caps |
 | Errors | `infeasible`, `not_found` |
+
+`createProposal` is idempotent: it returns the current revision when nothing material changed. When caps fall short it records an `infeasible` revision (no shares, public reason in `conditions[0]`) and returns `infeasible`. `not_found` means no gift is selected. Revisions are also recomputed automatically on `selectGift`, `setContributionLimit`, `joinRoom`, and listing invalidation. Every participant listed in `shares` must approve before the revision becomes `approved_pledged`.
 
 ### `approveRevision`
 
@@ -665,6 +672,39 @@ Advisory only.
 | Errors | `invalid_revision`, `unauthorized`, `infeasible` |
 
 If `room.currentRevisionId !== revisionId`, `invalid_revision`.
+
+### Additional Dev 2 operations (additive)
+
+All are membership-checked and return `Result<T>`.
+
+| Name | Kind | Input | Output | Access |
+| --- | --- | --- | --- | --- |
+| `rooms.listMyRooms` | query | `{}` | `{ roomId, title, role }[]` | Signed-in user |
+| `rooms.getInvite` | query | `{ roomId }` | `{ inviteToken, joinPath }` (QR payload) | Member |
+| `rooms.previewInvite` | query | `{ inviteToken }` | `{ roomId, title, recipientDisplayName, occasion, participantCount, alreadyMember }` | Token holder |
+| `clues.getMyEvidenceMessages` | query | `{ sourceId }` | `PrivateMessage[]` | Source owner |
+| `clues.listMyEvidence` | query | `{ roomId }` | `EvidenceSource[]` | Caller's own |
+| `clues.deleteEvidence` | mutation | `{ sourceId }` | `null` | Source owner; tombstones dependents |
+| `clues.editProposedClue` | mutation | `{ proposedClueId, text?, kind?, speakerAssumption? }` | `ProposedClue` (`edited`) | Clue owner |
+| `clues.rejectProposedClue` | mutation | `{ proposedClueId }` | `ProposedClue` (`rejected`) | Clue owner |
+| `proposals.getSelection` | query | `{ roomId }` | `GiftSelection \| null` | Member |
+| `proposals.clearSelection` | mutation | `{ roomId }` | `null` | Organizer |
+| `proposals.listRevisions` | query | `{ roomId }` | `ProposalRevision[]` (newest first) | Member |
+| `proposals.withdrawApproval` | mutation | `{ revisionId }` | `Approval` (`withdrawn`) | Own approval, current revision |
+| `votes.listVotes` | query | `{ roomId }` | `{ listingId, tally, myVote? }[]` | Member |
+| `votes.clearVote` | mutation | `{ roomId, listingId }` | `{ listingId, tally }` | Member |
+| `jobs.listRoomJobs` | query | `{ roomId }` | recent agent + research job statuses | Member; `extract` jobs only to their owner |
+
+Server-only hooks for other workstreams (internal functions or helpers, not client-callable):
+
+| Name | For | Purpose |
+| --- | --- | --- |
+| `internal.clues.getOwnEvidenceForJob({ jobId, sourceId })` | Dev 3 `getOwnEvidence` | Source, messages, and proposed clues, only for an open `extract` job acting as the source owner |
+| `internal.clues.insertProposedClues({ jobId, sourceId, clues })` | Dev 3 `proposeClues` | Returns `{ insertedIds, dropped }`; drops clues citing messages outside the source |
+| `internal.messages.postAgentMessage({ jobId, body })` | Dev 3 | One `buyer_agent` message per `evaluate_thread` job |
+| `internal.jobs.setAgentJobStatus` / `setResearchJobStatus` | Dev 3 / Dev 4 | Enforced transitions; terminal states return `stale_job` |
+| `enqueueAgentJob`, `insertResearchJob`, `agentInputHash`, `isResearchJobCurrent` (exported from `convex/jobs.ts`) | Dev 3 / Dev 4 | Create job rows inside your own mutation with `inputHash` / `idempotencyKey` dedupe |
+| `internal.proposals.clearSelectionsForListing({ listingId })` | Dev 4 RC-007 | Clears a selection of an invalidated listing and supersedes its revision |
 
 ### `queryRecipientAgent` (P1-A)
 
