@@ -126,3 +126,56 @@ merge `03d6262`, including `/room/[roomId]/phone`. Final fetch showed zero remot
 commits missing from this branch. Alex authorized the shared-dev push. This is
 source integration, not a production Convex deployment or a new live-browser
 acceptance claim for the merged phone surface.
+
+## P1-B adapter work started at Alex’s request
+
+P0 implementation/acceptance is no longer used to block independent Dev 4 P1 work.
+Implemented a test-only Stripe REST adapter for hosted organizer collection or
+manual authorization, Checkout/intent retrieval, open-session expiry, explicit
+capture and refunds; added raw-body webhook signature verification. Outbound writes
+require idempotency keys; provider objects require test mode, exact requested IDs,
+USD amounts and revision/participant/attempt metadata. Pending/uncertain states
+remain explicit; the helper neither authorizes operations nor writes payment state.
+
+Validation: 47 new payment tests; full suite 411 passed / 3 live-only skipped;
+app and Convex TypeScript passed. All payment tests use synthetic provider responses;
+no actual Stripe call, charge, capture, refund or webhook acceptance was performed.
+Alex is configuring a test key privately. Dev 2’s payment tables, durable claims,
+event deduplication and state transitions are still absent, so no client payment
+endpoint or UI has been enabled. Live sandbox spike, post-authorization cancellation,
+refund polling and multi-contributor recovery remain open. Payment work stays local
+for the money/state integration review; the earlier dev push did not contain it.
+
+## Independent backend work while Alex was away (October 24, about 11:20 local)
+
+- `075b576`: completed read-only Stripe recovery helpers and an auditable sandbox spike. Provider reads compare amount, intent IDs and room/revision/member/attempt bindings; refunds are fresh, bounded and deduplicated. Full vs partial capture/refund and unresolved states remain distinct. Raw failures stay sanitized.
+- Actual sandbox check on personal dev cool-bat-724 passed create → retrieve → expire of one $1 synthetic Checkout. No card entered, funds authorized/captured or refund executed. Run 29a37712-0039-47a8-9d69-1d72f2fa2720. The configured secret was read into memory only, never printed or saved. Initial missing-key checks made no Stripe requests.
+- `136db89`: removed the fifty-request limit that could hide a valid older successful shortlist, and fenced superseded lost workers as stale before the timeout path. This avoids blocking a fresh explicit search with an old unresolved request. Both bugs have regression tests.
+- Validation: 438 passed / 3 live-only skipped with `npm test -- --maxWorkers=2`; app and Convex TypeScript passed. A simultaneous default-parallel run hit five-second timeouts; no assertions were weakened. Limited-concurrency verification passed all tests.
+- Synced backend code to **personal dev cool-bat-724 only** with `npx convex dev --once`; functions ready at 11:20:08. No production deployment, shared-branch push or secret/environment modification was performed.
+- Payment adapter/recovery work remains in local commits for review. End-to-end payments are not enabled: Dev 2 still needs durable attempt/event storage, operation claims, approvals/current-revision checks, state transitions and the webhook route. See DEV4_PAYMENTS_HANDOFF.md. Verified signature parsing alone is not durable webhook handling.
+
+Remaining task status: RC-010 has verified hosted-session primitives, not a finished
+user-facing Checkout flow. RC-011 has capture primitives but not multi-contributor
+orchestration. RC-012 has signature verification plus fresh provider reconciliation,
+not durable database deduplication. RC-013 has expiry/refund primitives and recovery
+observations; real post-authorization cancellation and group recovery still need
+acceptance. RC-014 remains recorded discovery context, not live discovery fetching;
+RC-015 (optional additional product source) is not implemented. Do not call these
+full milestones complete from adapter/unit test results.
+
+## Continued Dev 4 backend work after Alex returned
+
+- `78179b5`: fixed refund discovery after a lost create response. Captured payments now read a complete bounded refund list by PaymentIntent instead of assuming saved refund IDs describe all recovery. Truncated pages and missing tracked refunds stay uncertain. The offline transport-to-reader test simulates a refund committed before a dropped response, then observes pending → refunded using only GETs; the original POST is never repeated.
+- Product-source hardening: bound streamed response bodies to 750,000 bytes before JSON/Convex processing, refuse redirects and invalid provider IDs, and compare poll replies to the requested run ID. A foreign run cannot supply the room's dataset; the regression leaves that job uncertain without inserting listings or repeating a paid start.
+- Validation: **453 passed / 3 live-only skipped**, app and Convex TypeScript passed, and `git diff --check` passed. The added tests use synthetic responses; no live Stripe/Apify requests, provider spending, environment changes or deployments were made during this continuation.
+- Changes remain local on `dev4/alex`; no shared branch was pushed. The BE-015 state/persistence and live payment acceptance dependencies above remain open. `listIntentRefunds` is covered offline and follows the documented Stripe API, but has not been exercised against a captured sandbox payment.
+
+## Independent additions requested by Alex after the reliability fixes
+
+- `09433e8`: organizer Checkout runner using Dev 2's future durable claim/settle port; settlement must commit before a link is returned. Existing references are re-read, never automatically replaced. Added checked manual-hold cancellation after reviewing current Stripe documentation. Both are offline-tested; no card entry, hold/capture/refund or public payment endpoint was enabled.
+- `7448cee`: persisted public-style discovery endpoints, bounded pinned provider, source-backed view, fresh/current-clue cache, known-run resumption, watchdog and optional handoff into ordinary shopping. The only shared schema change is an additive import/spread for the research-owned fashionJobs fragment. Alan's agent and Ally's UI files were untouched. See DEV4_DISCOVERY_HANDOFF.md.
+- Full suite before the live check: **485 passed / 3 live-only skipped**; both TypeScript checks passed. An isolated webpack production build from 7448cee passed. The initial sandbox build failed downloading Google Fonts; the isolated retry with network access passed without changing fonts or UI code.
+- Synced tested code to personal dev **cool-bat-724 only**, functions ready at 12:38:18 local. One live discovery run completed: 20 source rows, 8 valid recent posts, zero corroborated directions. Run 24af846a-937f-44b0-b0ce-29f6c589fb57; provider 1R5KZQSel0lZNY4uQ. No repeated paid scrape, shopping run, model call or Stripe call. A source-completed empty sample is not a verified live gift/trend recommendation.
+- Follow-up preserves ordinary published-clue shopping when a valid fashion sample has no directions, and adds optional actual evidence counts for honest empty states. Positive discovery-to-shopping remains offline-verified against recorded source data. Consumer UI/agent wiring and Jonathon's payment persistence remain open; no shared branch push or production deployment was performed.
+- Final verification after the fallback and stale-run fix: **486 passed / 3 live-only skipped**, both TypeScript checks passed and diff validation clean. A known superseded run no longer blocks a human's explicit new-revision request; an unknown paid-start outcome remains blocked for operator review. Synced the follow-up to personal dev cool-bat-724 only, functions ready at 12:42:59. No second paid run was performed.

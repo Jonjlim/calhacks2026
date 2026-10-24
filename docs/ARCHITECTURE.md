@@ -46,7 +46,7 @@ Scheduling and effect commits happen in mutations. An action must claim a pendin
 | D6 | Price and availability require a source URL and `retrievedAt`. | Judges and buyers must be able to check. | Model-invented products or stale remembered prices. |
 | D7 | Contracts first; every workstream mocks the others. | Four people, 36 hours. | Implementing against implicit types. |
 | D8 | A working demo beats feature count and sponsor count. | Hackathon scoring happens on what runs. | Building every track integration. |
-
+| D9 | P1-B payment state (BE-015) lives in Convex documents behind `PAYMENTS_SANDBOX_ENABLED=true`. Pre-capture revisions stay editable and unwind their authorizations when superseded; from `capturing` until `test_funded` or completed recovery, edits are refused rather than queued as drafts. | Keeps P0 unchanged when the flag is off, and avoids a second pending-edit model during the riskiest window. | Freezing at first authorization (blocks normal edits); queuing draft edits during capture (more state, no demo value). |
 ### Stack evaluation
 
 | Choice | Verdict |
@@ -290,7 +290,7 @@ Each has `status`, `attempt`, `idempotencyKey`, `inputHash`, and `lastError`. Ac
 - Client mutations that create revisions, jobs, or payment attempts require an idempotency key.
 - Optimistic concurrency: mutations that depend on `currentRevisionId` fail with `invalid_revision` if the pointer moved.
 - Two clients cannot approve different revisions into one purchase: approval writes check `room.currentRevisionId === approval.revisionId`.
-- Capture (P1) flips the room to `capturing` before any Stripe call. Further edits queue as drafts.
+- Capture (P1) flips the current revision to `capturing` before any Stripe call. Edits are refused with `invalid_revision` until the revision is `test_funded` or recovery ends in `canceled` (see D9).
 
 ## Error handling and recovery
 
@@ -375,3 +375,42 @@ recorded source-backed directions from the verified spike, with original dates a
 existing shopping worker still receives one chosen query and owns product facts. This
 validates the handoff without turning the standalone TikTok spike into an automatic paid
 pipeline. Live refresh and displayed social provenance remain pending.
+
+### D16 — Begin isolated Stripe sandbox adapter work (2026-10-24)
+
+Alex requested advancing P1 alongside final P0 acceptance. Dev 4 starts server-only
+Stripe REST transport and raw-body webhook verification against mocks. Stripe hosted Checkout create/retrieve/expire is **verified in sandbox** by
+the October 24 Dev 4 spike. Card authorization, capture, actual webhook delivery
+and application-state integration remain **unverified**. No extra SDK, database, public endpoint, capture scheduler or payment UI
+is enabled. P0 stays usable without Stripe; the current product still ends at
+pledges. Dev 2 retains payment state, current-revision approval checks, freeze rules
+and durable event idempotency. API requests pin `2025-06-30.basil` for reproducibility.
+Official API references: https://docs.stripe.com/api/checkout/sessions/create,
+https://docs.stripe.com/api/checkout/sessions/expire,
+https://docs.stripe.com/api/payment_intents/capture,
+https://docs.stripe.com/api/refunds/create and https://docs.stripe.com/webhooks.
+
+### D17 — Explicit persisted public-style discovery (2026-10-24)
+
+Dev 4 adds a research-owned `fashionJobs` table through `research/fashionSchema.ts`;
+`schema.ts` only includes that additive fragment. Existing rows and money/agent
+state are unchanged. Membership-checked mutations explicitly start one pinned
+GoFetch TikTok search (`xmolodtsov~tiktok-search-scraper`, build `0.1.39`, max20
+posts, cap $0.50). Pending is stored before any external call; uncertain starts
+are not retried. Known runs can resume GET polling. Current confirmed denim clues
+produce a fixed public seed; private imports and arbitrary queries are excluded.
+Only sanitized derived style directions, source links and original provenance are
+persisted. A 24-hour cache and current-knowledge fence apply at reads and shopping.
+`startResearch` accepts an optional discovery job reference; old callers are unchanged.
+UI cards and Alan's optional tool use remain consumer integration work.
+
+The Actor/input combination had one successful standalone spike. The persisted
+pipeline also completed one personal-dev run on cool-bat-724: 20 returned posts,
+8 valid recent posts, zero corroborated garment directions. Provider start/poll,
+completion and the member query were verified live; no live discovery-to-shopping
+direction was established by that empty sample. Empty samples preserve the
+ordinary published-clue search. Fixture tests do not establish production provider
+reliability or platform-wide trends. No new product
+source, AI provider or database is added. The fixed Stripe adapter additionally
+supports canceling a zero-capture manual hold, per current official API docs;
+actual hosted-Checkout hold cancellation remains **unverified live**.

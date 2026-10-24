@@ -197,6 +197,23 @@ describe("research pipeline", () => {
     expect(await t.run(ctx => ctx.db.query("productListings").collect())).toHaveLength(4);
   });
 
+  it("does not consume another run's dataset or restart an ambiguous poll", async () => {
+    const { t, alex, input } = await setup();
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    vi.stubEnv("APIFY_TOKEN", "fake-token");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      data: { id: "foreignRun", status: "SUCCEEDED", defaultDatasetId: "foreignDataset" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(research.pollResearch, { jobId, runId: "run123", startedAt: Date.now() });
+    expect((await t.run(ctx => ctx.db.get(jobId)))?.status).toBe("uncertain");
+    expect(await t.run(ctx => ctx.db.query("productListings").collect())).toEqual([]);
+    await t.action(research.runResearch, { jobId });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.apify.com/v2/actor-runs/run123");
+  });
+
   it("shows empty results as a failed search and expires a lost worker", async () => {
     const { t, alex, input } = await setup();
     const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
@@ -235,6 +252,25 @@ describe("research pipeline", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("retains the last successful catalog beyond fifty newer failed requests", async () => {
+    const { t, alex, input } = await setup();
+    const first = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, first);
+    await t.mutation(research.completeJob, { ...first, raw: fixture.pages, retrievedAt: fixture.retrievedAt });
+    const before = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    vi.setSystemTime(Date.now() + 1);
+    await t.run(async ctx => {
+      const original = (await ctx.db.get(first.jobId))!;
+      const { _id: _, _creationTime: __, ...fields } = original;
+      for (let i = 0; i < 51; i++) await ctx.db.insert("researchJobs", {
+        ...fields, status: "failed", idempotencyKey: `failed-${i}`, inputHash: `failed-${i}`,
+      });
+    });
+    const after = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    expect(after).toEqual(before);
+    expect(after.listings.length).toBeGreaterThan(0);
+  });
+
   it("fences an obsolete scheduled poll before it can contact the provider", async () => {
     const { t, alex, input } = await setup();
     const old = unwrap(await alex.mutation(api.research.research.startResearch, input));
@@ -249,6 +285,24 @@ describe("research pipeline", () => {
     expect((await t.run(ctx => ctx.db.get(old.jobId)))?.status).toBe("stale");
     expect(await t.run(ctx => ctx.db.query("productListings").collect())).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("expires superseded lost workers as stale so they cannot block a later request with the old budget", async () => {
+    const { t, alex, input } = await setup();
+    const old = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, old);
+    vi.setSystemTime(Date.now() + 1);
+    const replacement = unwrap(await alex.mutation(api.research.research.startResearch, {
+      ...input, budgetMinor: 10000, idempotencyKey: "replacement-budget",
+    }));
+    await t.mutation(research.claimJob, replacement);
+    await t.mutation(research.completeJob, { ...replacement, raw: [], retrievedAt: fixture.retrievedAt });
+    await t.mutation(research.expireJob, old);
+    expect((await t.run(ctx => ctx.db.get(old.jobId)))?.status).toBe("stale");
+    vi.setSystemTime(Date.now() + 1);
+    const retry = unwrap(await alex.mutation(api.research.research.startResearch, { ...input, idempotencyKey: "back-to-original-budget" }));
+    expect(retry.jobId).not.toBe(old.jobId);
+    expect((await t.run(ctx => ctx.db.get(retry.jobId)))?.status).toBe("pending");
   });
 
   it("runs the scheduled start and poll path without a second paid POST", async () => {

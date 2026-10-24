@@ -56,11 +56,14 @@ export const clearVote = mutation({
     type Out = { listingId: Id<"productListings">; tally: Tally };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Out>(member.code);
+    // Without this check a member could read another room's tally by passing its listing id.
+    const listing = await ctx.db.get(listingId);
+    if (!listing || listing.roomId !== roomId) return err<Out>("not_found", "Listing not found.");
     const existing = await ctx.db
       .query("votes")
       .withIndex("by_listing_participant", (q) => q.eq("listingId", listingId).eq("participantId", member.me._id))
       .unique();
-    if (existing && existing.roomId === roomId) await ctx.db.delete(existing._id);
+    if (existing) await ctx.db.delete(existing._id);
     return ok<Out>({ listingId, tally: await tallyFor(ctx, listingId) });
   },
 });
