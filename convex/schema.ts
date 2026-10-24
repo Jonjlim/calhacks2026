@@ -73,9 +73,31 @@ export default defineSchema({
     kind: V.evidenceKind,
     label: v.string(),
     sourceRevision: v.number(),
+    /** photo / screenshot sources only. */
+    media: v.optional(
+      v.object({
+        count: v.number(),
+        recipientMarkers: v.optional(
+          v.array(v.object({ x: v.number(), y: v.number() })),
+        ),
+        status: V.mediaStatus,
+      }),
+    ),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_room_participant", ["roomId", "participantId"]),
+
+  /** Uploaded files awaiting one read. Rows and files are deleted after the read (or on failure/withdrawal). Owner-only, never subscribed to by clients. */
+  evidenceMedia: defineTable({
+    sourceId: v.id("evidenceSources"),
+    participantId: v.id("participants"),
+    mediaIndex: v.number(),
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    marker: v.optional(v.object({ x: v.number(), y: v.number() })),
+  })
+    .index("by_source", ["sourceId"])
+    .index("by_storage", ["storageId"]),
 
   privateMessages: defineTable({
     sourceId: v.id("evidenceSources"),
@@ -83,6 +105,8 @@ export default defineSchema({
     body: v.string(),
     saidAt: v.optional(v.number()),
     speakerHint: v.optional(v.string()),
+    /** Which uploaded file (0-based) the row came from; photo and screenshot sources only. */
+    mediaIndex: v.optional(v.number()),
   }).index("by_source", ["sourceId"]),
 
   proposedClues: defineTable({

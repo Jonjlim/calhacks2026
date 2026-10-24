@@ -13,7 +13,23 @@ import type { Result } from "../../lib/contracts";
 import { getMembership } from "../lib/auth";
 import { err, ok } from "../lib/result";
 import { extractEvidence, fingerprint } from "./engine";
-import { configuredModel, AgentFailure, createUsageAccumulator } from "./model";
+import {
+  configuredModel,
+  AgentFailure,
+  createUsageAccumulator,
+  type ImageMediaType,
+} from "./model";
+import { observationBody, proposePhotoClues, readPhoto } from "./photo";
+import { transcribeScreenshot } from "./screenshot";
+import type { PhotoObservation } from "../../lib/validation";
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
 
 /** Contract: extractClues → { jobId }; results land on listMyProposedClues. */
 export const extractClues = mutation({
@@ -72,13 +88,112 @@ export const runExtraction = internalAction({
       jobId,
       kind: "extract",
     });
-    if (!work?.extraction) return null;
+    if (!work?.extraction && !work?.media) return null;
     const usage = createUsageAccumulator();
     try {
-      const result = await extractEvidence(
-        work.extraction,
-        configuredModel(usage.add),
-      );
+      const model = configuredModel(usage.add);
+      let extraction = work.extraction;
+      if (work.media) {
+        const media = work.media;
+        const decoded = await Promise.all(
+          media.items.map(async (item) => {
+            const blob = await ctx.storage.get(item.storageId);
+            if (!blob) throw new AgentFailure("not_found", "Uploaded file is missing.");
+            return {
+              item,
+              image: {
+                mediaType: item.contentType as ImageMediaType,
+                base64: await blobToBase64(blob),
+              },
+            };
+          }),
+        );
+        let rows: Array<{ mediaIndex: number; body: string; speakerHint?: string }>;
+        let observations: PhotoObservation[] = [];
+        if (media.kind === "photo") {
+          observations = await Promise.all(
+            decoded.map(({ item, image }) =>
+              readPhoto({ mediaIndex: item.mediaIndex, image, marker: item.marker }, model),
+            ),
+          );
+          rows = observations.map((obs) => ({
+            mediaIndex: obs.mediaIndex,
+            body: observationBody(obs),
+          }));
+        } else {
+          const transcripts = await Promise.all(
+            decoded.map(({ image }) => transcribeScreenshot(image, model)),
+          );
+          rows = transcripts.flatMap((lines, i) =>
+            lines.map((line) => ({
+              mediaIndex: decoded[i]!.item.mediaIndex,
+              body: line.body,
+              ...(line.speakerHint ? { speakerHint: line.speakerHint } : {}),
+            })),
+          );
+        }
+        // Writes the text rows and deletes the files in one transaction.
+        const stored = await ctx.runMutation(
+          internal.agents.mediaRuntime.storeMediaRows,
+          { jobId, attempt: work.attempt, rows },
+        );
+        if (!stored) return null;
+        if (media.kind === "photo") {
+          const rowIds = new Map(
+            stored.flatMap((s) => (s.id ? [[s.mediaIndex, s.id] as const] : [])),
+          );
+          const drafts = proposePhotoClues(observations);
+          const result = {
+            sourceId: media.sourceId,
+            clues: drafts.flatMap((draft) => {
+              const ids = [
+                ...new Set(
+                  draft.observationIndexes.flatMap((i) => {
+                    const id = rowIds.get(observations[i]!.mediaIndex);
+                    return id ? [String(id)] : [];
+                  }),
+                ),
+              ];
+              return ids.length
+                ? [
+                    {
+                      kind: draft.kind,
+                      text: draft.text,
+                      confidence: draft.confidence,
+                      sourceMessageIds: ids,
+                      speakerAssumption: draft.speakerAssumption,
+                      contradictsClueIds: [],
+                    },
+                  ]
+                : [];
+            }),
+          };
+          await ctx.runMutation(internal.agents.runtime.completeExtraction, {
+            jobId,
+            attempt: work.attempt,
+            result,
+            modelUsage: usage.summary,
+          });
+          return null;
+        }
+        extraction = {
+          sourceId: media.sourceId,
+          messages: rows.flatMap((row, i) => {
+            const id = stored[i]?.id;
+            return id
+              ? [
+                  {
+                    id: String(id),
+                    body: row.body,
+                    ...(row.speakerHint ? { speakerHint: row.speakerHint } : {}),
+                  },
+                ]
+              : [];
+          }),
+          publishedClues: media.publishedClues,
+        };
+      }
+      const result = await extractEvidence(extraction!, model);
       await ctx.runMutation(internal.agents.runtime.completeExtraction, {
         jobId,
         attempt: work.attempt,
@@ -86,6 +201,11 @@ export const runExtraction = internalAction({
         modelUsage: usage.summary,
       });
     } catch (error) {
+      // Read-once: a failed read still deletes the uploaded files.
+      await ctx.runMutation(internal.agents.mediaRuntime.discardMedia, {
+        jobId,
+        attempt: work.attempt,
+      });
       await ctx.runMutation(internal.agents.runtime.failJob, {
         jobId,
         attempt: work.attempt,

@@ -640,12 +640,12 @@ May enqueue `AgentJob` `evaluate_thread`.
 | --- | --- |
 | Owner | Dev 2 (storage, source rows), Dev 3 (vision / transcription action) |
 | Consumers | Dev 1 |
-| Input | `generateEvidenceUploadUrl`: `{ roomId }` → one-time Convex upload URL. `importMediaEvidence`: `{ roomId, kind: "photo" \| "screenshot" \| "voice_note", label, storageIds, recipientMarkers?: { x: number, y: number }[] }` |
-| Output | `{ source: EvidenceSource, jobId }` |
-| Access | Caller becomes owner. Storage IDs must come from that caller's upload URLs. |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → `{ uploadUrl }`. `importMediaEvidence` (implemented: `photo` and `screenshot`; `voice_note` is P2, not built): `{ roomId, kind: "photo" \| "screenshot", label, files: { storageId, marker?: { x: number, y: number } }[] }`. The marker is per file (photos only) and normalized 0–1. |
+| Output | `{ source: EvidenceSource }`. The caller then runs `extractClues({ sourceId })` as for pasted text. |
+| Access | Caller becomes owner. A storage id already attached to any source is rejected, so another member's upload cannot be claimed. Files live in a private `evidenceMedia` table that clients never read. |
 | Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
 
-Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 5 MB each, EXIF/GPS stripped before upload. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them, and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
+Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
 ### `extractClues`
 

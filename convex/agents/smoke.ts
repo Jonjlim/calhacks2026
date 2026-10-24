@@ -2,7 +2,10 @@
  * Manual live checks, run on the deployment so the model key stays server-side:
  * `npx convex run agents/smoke:all`. Synthetic data only; a few small paid calls.
  */
+import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
+import { PHOTO_PLACE_TYPES } from "../../lib/validation";
+import { PHOTO_INSTRUCTIONS } from "./photo";
 import { decideBuyer, extractEvidence, type BuyerSnapshot } from "./engine";
 import { configuredModel } from "./model";
 import { answerRecipientQuery } from "./recipientPolicy";
@@ -164,4 +167,20 @@ export const all = internalAction({
     buyer: await buyer(),
     recipient: await recipient(),
   }),
+});
+
+/** Returns the raw (unvalidated) vision output for a base64 JPEG. Diagnostic only; paid call. */
+export const rawPhotoReading = internalAction({
+  args: { base64: v.string(), marked: v.boolean() },
+  handler: async (_ctx, { base64, marked }) =>
+    configuredModel()({
+      role: "extractor",
+      instructions: PHOTO_INSTRUCTIONS,
+      input: {
+        photoNumber: 1,
+        marker: marked ? { x: 0.5, y: 0.5 } : null,
+        placeTypes: PHOTO_PLACE_TYPES,
+      },
+      images: [{ mediaType: "image/jpeg", base64 }],
+    }),
 });

@@ -20,6 +20,8 @@ import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
 import { readCatalog } from "../research/catalog";
 import { renderRecommendation, researchStatusMessage } from "./presentation";
 import { agentModelUsage } from "../validators";
+import type { MediaWork } from "./mediaRuntime";
+import { discardSourceMedia } from "../media";
 
 type AgentJob = Doc<"agentJobs">;
 export async function recordEvent(
@@ -368,6 +370,7 @@ export type ClaimedWork = {
   job: AgentJob;
   snapshot?: BuyerSnapshot;
   extraction?: ExtractionInput;
+  media?: MediaWork;
 };
 export const claimJob = internalMutation({
   args: {
@@ -410,6 +413,35 @@ export const claimJob = internalMutation({
     });
     if (kind === "evaluate_thread")
       return { attempt, job, snapshot: (await readBuyerSnapshot(ctx, job))! };
+    const mediaRows = await ctx.db
+      .query("evidenceMedia")
+      .withIndex("by_source", (q) => q.eq("sourceId", job.sourceId!))
+      .collect();
+    if (mediaRows.length > 0) {
+      const source = (await ctx.db.get(job.sourceId!))!;
+      const published = await ctx.db
+        .query("publishedClues")
+        .withIndex("by_room", (q) => q.eq("roomId", job.roomId))
+        .filter((q) => q.eq(q.field("status"), "active"))
+        .take(100);
+      return {
+        attempt,
+        job,
+        media: {
+          sourceId: source._id,
+          kind: source.kind === "screenshot" ? "screenshot" : "photo",
+          items: mediaRows
+            .sort((a, b) => a.mediaIndex - b.mediaIndex)
+            .map((m) => ({
+              mediaIndex: m.mediaIndex,
+              storageId: m.storageId,
+              contentType: m.contentType,
+              ...(m.marker ? { marker: m.marker } : {}),
+            })),
+          publishedClues: published.map((c) => ({ id: c._id, text: c.text, kind: c.kind })),
+        },
+      };
+    }
     const rows = await ctx.db
       .query("privateMessages")
       .withIndex("by_source", (q) => q.eq("sourceId", job.sourceId!))
@@ -469,6 +501,9 @@ export const expireJob = internalMutation({
         lastError: "Agent task did not finish in time. Retry is available.",
         finishedAt: Date.now(),
       });
+      // A read that never finished must not leave the upload behind.
+      if (job.kind === "extract" && job.sourceId)
+        await discardSourceMedia(ctx, job.sourceId, "failed");
       await recordEvent(
         ctx,
         job,
