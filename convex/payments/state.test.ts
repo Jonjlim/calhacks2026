@@ -143,7 +143,8 @@ describe("authorization and capture", () => {
 
     expect(code(await c.bob.mutation(api.payments.state.beginCapture, { revisionId: c.revisionId }))).toBe("unauthorized");
     const capture = unwrap(await c.alice.mutation(api.payments.state.beginCapture, { revisionId: c.revisionId }));
-    expect(capture.attempts.map((a) => a.providerObjectId).sort()).toEqual(["pi_a", "pi_bob_bob-1"]);
+    expect(capture.attempts).toHaveLength(2);
+    expect(JSON.stringify(capture)).not.toContain("pi_");
     expect(await revisionStatus(c)).toBe("capturing");
     const retry = unwrap(await c.alice.mutation(api.payments.state.beginCapture, { revisionId: c.revisionId }));
     expect(retry.attempts).toHaveLength(2);

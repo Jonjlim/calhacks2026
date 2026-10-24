@@ -31,6 +31,14 @@ export function joinPath(inviteToken: string): string {
   return `/join/${inviteToken}`;
 }
 
+/** Room document as returned to clients: the recipient profile link stays server-side. */
+type ClientRoomDoc = Omit<Doc<"rooms">, "recipientProfileId">;
+
+function clientRoomDoc(room: Doc<"rooms">): ClientRoomDoc {
+  const { recipientProfileId: _recipientProfileId, ...rest } = room;
+  return rest;
+}
+
 type RoomFields = Pick<Doc<"rooms">, "title" | "recipientDisplayName" | "occasion" | "deadlineAt" | "budgetMinor">;
 
 /** Shared by createRoom and updateRoom. Budget is a hint only; it never enters allocation. */
@@ -66,7 +74,7 @@ export const createRoom = mutation({
     displayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    type Out = { room: Doc<"rooms">; participant: Doc<"participants">; inviteToken: string };
+    type Out = { room: ClientRoomDoc; participant: Doc<"participants">; inviteToken: string };
     const userId = await getUserId(ctx);
     if (!userId) return err<Out>("unauthorized", "Sign in to create a room.");
 
@@ -108,7 +116,7 @@ export const createRoom = mutation({
     });
     const room = (await ctx.db.get(roomId))!;
     const participant = (await ctx.db.get(participantId))!;
-    return ok<Out>({ room, participant, inviteToken });
+    return ok<Out>({ room: clientRoomDoc(room), participant, inviteToken });
   },
 });
 
@@ -119,7 +127,7 @@ export const createRoom = mutation({
 export const joinRoom = mutation({
   args: { inviteToken: v.string(), displayName: v.string() },
   handler: async (ctx, args) => {
-    type Out = { room: Doc<"rooms">; participant: Doc<"participants"> };
+    type Out = { room: ClientRoomDoc; participant: Doc<"participants"> };
     const userId = await getUserId(ctx);
     if (!userId) return err<Out>("unauthorized", "Sign in to join a room.");
 
@@ -134,7 +142,7 @@ export const joinRoom = mutation({
     if (!isLiveRoom(room)) return err<Out>("not_found", "That invite link is not valid.");
 
     const existing = await getMembership(ctx, room._id);
-    if (existing) return ok<Out>({ room, participant: existing });
+    if (existing) return ok<Out>({ room: clientRoomDoc(room), participant: existing });
 
     const displayName = cleanText(args.displayName, LIMITS.displayNameMaxChars);
     if (!displayName) return err<Out>("validation_failed", "Enter a display name.");
@@ -150,7 +158,7 @@ export const joinRoom = mutation({
     await recomputeProposal(ctx, room._id);
 
     const participant = (await ctx.db.get(participantId))!;
-    return ok<Out>({ room: (await ctx.db.get(room._id))!, participant });
+    return ok<Out>({ room: clientRoomDoc((await ctx.db.get(room._id))!), participant });
   },
 });
 

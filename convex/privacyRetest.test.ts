@@ -412,10 +412,8 @@ describe("privacy retest: read paths", () => {
     expect(await anon.query(api.worlds.listWorlds, {})).toMatchObject({ ok: false, error: { code: "unauthorized" } });
   });
 
-  // Open finding F-1 (convex/rooms.ts, owner Dev 2 rooms worker): joinRoom and
-  // createRoom return the raw room document, which includes recipientProfileId.
-  // Unskip once rooms.ts maps the room through toRoom().
-  it.skip("joinRoom does not return the recipient profile id", async () => {
+  // Finding F-1: createRoom and joinRoom used to return recipientProfileId.
+  it("joinRoom does not return the recipient profile id", async () => {
     const s = await seed();
     const carol = s.t.withIdentity({ subject: "user_carol|s4" });
     const joined = await carol.mutation(api.rooms.joinRoom, { inviteToken: s.inviteToken, displayName: "Carol" });

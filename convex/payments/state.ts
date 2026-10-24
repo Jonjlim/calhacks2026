@@ -214,11 +214,15 @@ export const beginAuthorization = mutation({
   },
 });
 
+/**
+ * Provider object IDs belong to each payer, so the organizer's work list
+ * carries attempt IDs only; the server-side adapter resolves them via
+ * internal.payments.state.getAttempt or listPendingProviderWork.
+ */
 export interface CaptureIntent {
   revisionId: Id<"proposalRevisions">;
   attempts: Array<{
     attemptId: Id<"paymentAttempts">;
-    providerObjectId: string;
     amountMinor: number;
     idempotencyKey: string;
   }>;
@@ -246,7 +250,6 @@ export const beginCapture = mutation({
         .filter((a) => payers.has(a.participantId) && a.status === "capture_pending" && a.providerObjectId)
         .map((a) => ({
           attemptId: a._id,
-          providerObjectId: a.providerObjectId!,
           amountMinor: a.amountMinor,
           idempotencyKey: `${a.idempotencyKey}_capture`,
         })),
