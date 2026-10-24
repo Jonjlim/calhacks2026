@@ -49,7 +49,8 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
   }
   return {
     start(brief: SearchBrief): Promise<ProviderResult<ProviderRun>> {
-      const q = brief.queryTerms.map(term => term.trim()).filter(Boolean).join(" ").slice(0, 200);
+      // One complete direction per run; do not combine unrelated hobbies/styles.
+      const q = (brief.queryTerms.map(term => term.trim()).find(Boolean) ?? "").slice(0, 200);
       if (!q) return Promise.resolve({ kind: "failed", message: "Publish an interest or wish before searching." });
       return runRequest("acts/" + VERIFIED_ACTOR
         + "/runs?build=" + VERIFIED_BUILD + "&timeout=120&maxTotalChargeUsd=0.20",

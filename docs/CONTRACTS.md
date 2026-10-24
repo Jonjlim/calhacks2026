@@ -319,6 +319,26 @@ interface ProductListing {
 - Preserve bundle/size text. Source links remain the observed Google Shopping URLs; they are not merchant checkout links.
 - Provider-only fields, opaque page tokens, and helper URLs never enter normalized listings.
 
+### Derived product presentation (RC-008 / RC-016)
+
+**Owner:** Dev 4. **Consumer:** Dev 1. These are pure helpers; no database migration or endpoint changes.
+
+```ts
+interface PriceFreshness {
+  kind: "recent" | "aging" | "stale" | "unknown" | "unavailable";
+  label: string;
+  needsRefresh: boolean;
+  observedAt?: number;
+  ageMs?: number;
+  nextChangeAt?: number;
+}
+```
+
+- `getPriceFreshness(listing, now, { sourceFailed? })` lives in `lib/research/freshness.ts`. The caller supplies a Unix millisecond clock: under 30 minutes is recent, 30 minutes through just under 6 hours is aging, and 6 hours onward is stale. A source failure or explicitly stale listing also needs refresh. Unknown prices remain unknown; invalid listings are unavailable. Invalid/future timestamps never count as recent.
+- `nextChangeAt` tells the UI when the age category changes. Recompute with the client's clock on a timer or visibility change; a Convex query does not rerun merely because wall-clock time passes. No automatic refresh request or price/proposal mutation is performed.
+- `hasProductImageUrl(listing)` validates an HTTPS thumbnail URL; it does not fetch the image or guarantee that the remote image loads. Dev 1 should show a placeholder on missing/failed images.
+- Ranking ties compare total score, personal relevance, then budget fit, then presence of a valid HTTPS image URL, and finally listing ID. Images do not alter numeric scores, evidence citations, exclusions, or affordability. Listings without images remain eligible. This is an explicit tie-order change for the next integration checkpoint.
+
 ### Recommendation
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 3.
@@ -655,6 +675,29 @@ P0 manual room clue for preferences/exclusions without an import.
 | Output | `{ recommendations: Recommendation[], listings: ProductListing[] }` |
 | Access | Room member |
 | Errors | `unauthorized` |
+
+### Confirmed visual preferences in research
+
+**Owner:** Dev 4. Existing PublishedClue, SearchBrief, ranking and provider signatures are unchanged. Dev 3 remains responsible for extracting/reviewing visual evidence.
+
+- Photo analysis must supply reviewed, active interest/explicit_wish clues for positive recommendations; uncertain clues do not drive search/ranking. Plain observation/tentative wording (e.g. holding a camera, wearing a jacket, might own a camera) is additionally ignored even if misclassified as an interest or ownership clue. This lexical guard is not an image classifier or a complete uncertainty detector.
+- Confirmed short preferences require all normalized shopping terms to match. Bounded positive-only vocabulary covers minimal/minimalist, retro/vintage, jeans/denim, rock climbing, jewelry items, and a small earth-tone palette when a visible goods category is present. These are catalog-text heuristics, not image similarity or semantic embeddings.
+- Ownership and exclusions retain their literal matching rules; positive shopping vocabulary does not broaden them. Exact duplicate normalized preferences can cite multiple clues but do not multiply the relevance score.
+- SearchBrief queryTerms are ordered complete query phrases. The one-page provider uses the first nonempty phrase, rather than concatenating unrelated interests. Planners should place a useful complete phrase first (e.g. vintage denim jacket, not separate vintage/denim/jacket elements). Remaining phrases are alternate directions, not additional paid searches in this task.
+- Photo-derived and typed clues use the same research path. A clue's source type never creates an interest or ownership fact by itself. No media upload, model transport or shared database schema changes are included.
+
+### `research.invalidateListing` (RC-007)
+
+**Owner:** Dev 4. **Consumers:** Dev 1 (organizer control); verified server-side source checks use the internal equivalent.
+
+- Public mutation input: `{ roomId, listingId }`; output: `Result<{ listingId, cleared: number }>`.
+- Only that room's organizer may invalidate its listing. Outsiders and ordinary members get unauthorized; foreign-room/missing listing IDs get not_found.
+- Uses `internal.proposals.clearSelectionsForListing` and marks the listing invalid in one transaction. A matching active selection is cleared, its proposal superseded, and live approvals invalidated. Existing deal snapshots remain for history.
+- Returns invalid_revision without changing anything if the selected proposal is locked for payment. It does not cancel authorizations, capture, refund, or perform recovery.
+- Repeating the operation returns cleared: 0 and cannot clear a different replacement gift. An unselected listing does not disturb the current proposal.
+- `internal.research.research.invalidateListingInternal({ listingId })` provides the same behavior for trusted server code. It is not exposed as a model tool.
+- Invalid listings disappear from recommendations and cannot be selected again. A clue mismatch or old price does not itself establish that a listing is invalid.
+- This task adds the transition, not automatic stock verification, merchant URL probing, price refresh, or a frontend button. No schema migration or existing endpoint changes.
 
 ### `selectGift`
 

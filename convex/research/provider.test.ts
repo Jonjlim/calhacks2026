@@ -48,4 +48,16 @@ describe("Apify provider adapter", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ data: {} })));
     expect((await createProvider("token", fetcher).start(brief)).kind).toBe("uncertain");
   });
+  it("uses one complete search direction instead of mixing unrelated photo clues", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      data: { id: "run123", status: "RUNNING" },
+    })));
+    await createProvider("token", fetcher).start({
+      ...brief, queryTerms: [" ", "vintage denim jacket", "rock climbing", "pottery"],
+    });
+    const body = JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body));
+    expect(body.q).toBe("vintage denim jacket");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
 });

@@ -259,6 +259,16 @@ export interface ProductListing {
   status: "active" | "invalid" | "stale";
 }
 
+/** Derived client presentation; not persisted in Convex. */
+export interface PriceFreshness {
+  kind: "recent" | "aging" | "stale" | "unknown" | "unavailable";
+  label: string;
+  needsRefresh: boolean;
+  observedAt?: number;
+  ageMs?: number;
+  nextChangeAt?: number;
+}
+
 export interface Recommendation {
   id: string;
   roomId: string;

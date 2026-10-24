@@ -40,8 +40,10 @@ Every card shows observed price + retrieval time + outbound link.
 | Age | UI |
 | --- | --- |
 | < 30 min | Show price normally |
-| 30 min–6 h | “Price observed at …” |
-| Older, or source failed | Do not call it current; offer refresh |
+| 30 min–<6 h | “Price observed at …” |
+| ≥6 h, explicitly stale, or source failed | Do not call it current; offer refresh |
+
+Dev 4's pure `getPriceFreshness` helper supplies the category, label, age, and next category-change timestamp. Dev 1 supplies the client clock and updates the label on a timer/visibility change. Missing prices, invalid timestamps, and invalid listings have separate states. This helper never fetches a new price or changes proposals.
 
 Do not blend two observations into a fake “average price.”
 

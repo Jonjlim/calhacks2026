@@ -9,7 +9,8 @@
  */
 import type { ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
-import { cluePhrase, contentTokens } from "./text";
+import { hasProductImageUrl } from "../../lib/research/images";
+import { cluePhrase, contentTokens, isUnconfirmedObservation, shoppingMatchTokens, shoppingPhrase } from "./text";
 
 export const SCORE_WEIGHTS = {
   personalRelevance: 0.7,
@@ -25,7 +26,7 @@ const CLUE_WEIGHT: Partial<Record<ClueKind, number>> = {
   interest: 0.7,
 };
 
-/** A clue supports a listing when at least this share of its words appear. */
+/** Longer preferences permit partial matches; short preferences require every term. */
 const SUPPORT_THRESHOLD = 0.5;
 const UNKNOWN_PRICE_BUDGET_FIT = 0.5;
 
@@ -70,7 +71,8 @@ export function filterListings(input: Pick<RankListingsInput, "listings" | "clue
   excluded: ExcludedListing[];
 } {
   const blocking = input.clues
-    .filter((c) => c.status === "active" && (c.kind === "ownership" || c.kind === "exclusion"))
+    .filter((c) => c.status === "active" && !isUnconfirmedObservation(c.text)
+      && (c.kind === "ownership" || c.kind === "exclusion"))
     .map((c) => ({ id: c.id, tokens: contentTokens(cluePhrase(c.text)) }))
     .filter((c) => c.tokens.length > 0);
 
@@ -100,22 +102,26 @@ export function filterListings(input: Pick<RankListingsInput, "listings" | "clue
 export function rankListings(input: RankListingsInput): RankedRecommendation[] {
   const { kept } = filterListings(input);
   const positive = input.clues
-    .filter((c) => c.status === "active" && CLUE_WEIGHT[c.kind] !== undefined)
-    .map((c) => ({ clue: c, tokens: contentTokens(cluePhrase(c.text)) }))
+    .filter((c) => c.status === "active" && !isUnconfirmedObservation(c.text) && CLUE_WEIGHT[c.kind] !== undefined)
+    .map((c) => ({ clue: c, tokens: shoppingMatchTokens(shoppingPhrase(c.text)) }))
     .filter((c) => c.tokens.length > 0);
 
   const ranked = kept.map((listing): RankedRecommendation => {
-    const titleTokens = new Set(listingTokens(listing));
+    const titleTokens = new Set(shoppingMatchTokens(listing.title + " " + (listing.variant ?? "")));
     const supporting: PublishedClue[] = [];
-    let missProduct = 1;
+    const matchedPreferences = new Map<string, number>();
     for (const { clue, tokens } of positive) {
       const share = tokens.filter((t) => titleTokens.has(t)).length / tokens.length;
-      if (share >= SUPPORT_THRESHOLD) {
+      const threshold = tokens.length <= 3 ? 1 : SUPPORT_THRESHOLD;
+      if (share >= threshold) {
         supporting.push(clue);
-        // Noisy-or: each additional supporting clue raises relevance without exceeding 1.
-        missProduct *= 1 - (CLUE_WEIGHT[clue.kind] ?? 0) * share;
+        // Repeated photos/phrases are not independent preference evidence.
+        const key = [...tokens].sort().join("|");
+        const strength = (CLUE_WEIGHT[clue.kind] ?? 0) * share;
+        matchedPreferences.set(key, Math.max(matchedPreferences.get(key) ?? 0, strength));
       }
     }
+    const missProduct = [...matchedPreferences.values()].reduce((miss, strength) => miss * (1 - strength), 1);
     const personalRelevance = round(1 - missProduct);
     const budget = budgetFitFor(listing, input.budgetMinor);
     const parts = { personalRelevance, budgetFit: budget.fit, trendSignal: 0 as const };
@@ -128,7 +134,12 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     };
   });
 
-  ranked.sort((a, b) => b.score - a.score || a.listingId.localeCompare(b.listingId));
+  const images = new Map(kept.map(listing => [listing.id, hasProductImageUrl(listing)]));
+  ranked.sort((a, b) => b.score - a.score
+    || b.personalRelevance - a.personalRelevance
+    || b.budgetFit - a.budgetFit
+    || Number(images.get(b.listingId)) - Number(images.get(a.listingId))
+    || a.listingId.localeCompare(b.listingId));
   return ranked.slice(0, Math.max(0, input.limit ?? DEFAULT_RANK_LIMIT));
 }
 
