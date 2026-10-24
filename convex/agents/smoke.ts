@@ -2,7 +2,11 @@
  * Manual live checks, run on the deployment so the model key stays server-side:
  * `npx convex run agents/smoke:all`. Synthetic data only; a few small paid calls.
  */
+import { v } from "convex/values";
 import { internalAction } from "../_generated/server";
+import { PHOTO_PLACE_TYPES } from "../../lib/validation";
+import { PHOTO_INSTRUCTIONS } from "./photo";
+import { renderReply } from "./presentation";
 import { decideBuyer, extractEvidence, type BuyerSnapshot } from "./engine";
 import { configuredModel } from "./model";
 import { answerRecipientQuery } from "./recipientPolicy";
@@ -120,7 +124,7 @@ async function recipient() {
 }
 
 /** Direct request with published clues but no candidates yet: expect a search, not silence. */
-async function buyerSearch() {
+async function buyerSearch(asksRecipient = false) {
   const decision = await decideBuyer(
     {
       roomId: "synthetic-room",
@@ -131,14 +135,16 @@ async function buyerSearch() {
       knowledgeRevision: 2,
       mode: "quiet",
       trigger: "human",
-      recipientAgentEnabled: false,
+      recipientAgentEnabled: asksRecipient,
       researchRunning: false,
       askedSlots: [],
       recentMessages: [
         {
           id: "synthetic-message",
           author: "participant",
-          text: "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
+          text: asksRecipient
+            ? "@unwrap would Maya like a beginner pottery class, and does she already own a kit? Please check with her agent before searching."
+            : "@unwrap she already owns a starter pottery kit, what do you suggest under $60?",
         },
       ],
       publishedClues: [
@@ -153,7 +159,8 @@ async function buyerSearch() {
   return decision;
 }
 
-export const buyerSearchSynthetic = internalAction({ args: {}, handler: buyerSearch });
+export const buyerRecipientSynthetic = internalAction({ args: {}, handler: () => buyerSearch(true) });
+export const buyerSearchSynthetic = internalAction({ args: {}, handler: () => buyerSearch() });
 export const extractSynthetic = internalAction({ args: {}, handler: extraction });
 export const buyerSynthetic = internalAction({ args: {}, handler: buyer });
 export const recipientSynthetic = internalAction({ args: {}, handler: recipient });
@@ -164,4 +171,75 @@ export const all = internalAction({
     buyer: await buyer(),
     recipient: await recipient(),
   }),
+});
+
+/** Returns the raw (unvalidated) vision output for a base64 JPEG. Diagnostic only; paid call. */
+export const rawPhotoReading = internalAction({
+  args: { base64: v.string(), marked: v.boolean() },
+  handler: async (_ctx, { base64, marked }) =>
+    configuredModel()({
+      role: "extractor",
+      instructions: PHOTO_INSTRUCTIONS,
+      input: {
+        photoNumber: 1,
+        marker: marked ? { x: 0.5, y: 0.5 } : null,
+        placeTypes: PHOTO_PLACE_TYPES,
+      },
+      images: [{ mediaType: "image/jpeg", base64 }],
+    }),
+});
+
+/** Live follow-up check: the model should reply (not search), cite real ids, and the rendered body must carry record facts. */
+async function replyCheck(message: string, chatty: boolean) {
+  const snapshot = {
+    roomId: "synthetic-room",
+    jobId: "synthetic-job",
+    recipientDisplayName: "Maya",
+    occasion: "Birthday",
+    budgetMinor: 6000,
+    knowledgeRevision: 3,
+    mode: "quiet",
+    trigger: "human",
+    chatty,
+    secondsSinceAgentMessage: 300,
+    recipientAgentEnabled: false,
+    researchRunning: false,
+    askedSlots: [],
+    recentMessages: [
+      { id: "m0", author: "buyer_agent", text: "Here is a pottery class that fits." },
+      { id: "m1", author: "participant", text: message },
+    ],
+    publishedClues: [
+      { id: "c1", kind: "interest", text: "Wants to try a beginner pottery class." },
+      { id: "c2", kind: "ownership", text: "Already owns a starter pottery kit." },
+    ],
+    listings: [
+      {
+        id: "l2", title: "Beginner pottery class (2 hours)", currency: "USD", priceMinor: 5500,
+        priceStatus: "observed", availability: "in_stock", shippingStatus: "unknown",
+        sourceUrl: "https://example.com/class", retrievedAt: Date.now(),
+      },
+      {
+        id: "l3", title: "Clay sculpting workshop", currency: "USD", priceMinor: 4200,
+        priceStatus: "observed", availability: "in_stock", shippingStatus: "unknown",
+        sourceUrl: "https://example.com/workshop", retrievedAt: Date.now(),
+      },
+    ],
+    recommendations: [
+      { listingId: "l2", publishedClueIds: ["c1"], explanation: "Matches pottery interest" },
+      { listingId: "l3", publishedClueIds: ["c1"], explanation: "Hands-on clay" },
+    ],
+    excluded: [{ listingId: "l1", reason: "excluded_by_clue", clueId: "c2" }],
+    previousRecommendationListingIds: ["l1", "l2"],
+  } as unknown as BuyerSnapshot;
+  const decision = await decideBuyer(snapshot, configuredModel());
+  return {
+    intent: decision.intent,
+    decision,
+    body: decision.intent === "reply" ? renderReply(decision, snapshot).body : null,
+  };
+}
+export const replySynthetic = internalAction({
+  args: { message: v.string(), chatty: v.boolean() },
+  handler: (_ctx, { message, chatty }) => replyCheck(message, chatty),
 });

@@ -129,7 +129,7 @@ export interface AgentCitations {
 
 // ---------- Evidence and clues ----------
 
-export type EvidenceKind = "paste" | "text_export";
+export type EvidenceKind = "paste" | "text_export" | "photo" | "screenshot";
 
 export interface EvidenceSource {
   id: string;
@@ -138,6 +138,12 @@ export interface EvidenceSource {
   kind: EvidenceKind;
   label: string;
   sourceRevision: number;
+  /** photo / screenshot only. The uploaded file is deleted once read. */
+  media?: {
+    count: number;
+    recipientMarkers?: { x: number; y: number }[];
+    status: "uploaded" | "read" | "failed" | "deleted";
+  };
   createdAt: number;
 }
 
@@ -148,6 +154,8 @@ export interface PrivateMessage {
   body: string;
   saidAt?: number;
   speakerHint?: string;
+  /** Which uploaded file (0-based) the row came from; photo and screenshot sources only. */
+  mediaIndex?: number;
 }
 
 export type ClueKind =
@@ -182,7 +190,7 @@ export interface ProposedClue {
   createdAt: number;
 }
 
-export type ClueSourceKind = "paste" | "import" | "chat" | "manual";
+export type ClueSourceKind = "paste" | "import" | "chat" | "manual" | "photo" | "screenshot";
 
 export interface PublishedClue {
   id: string;
@@ -256,7 +264,8 @@ export type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply";
 
 export interface AgentDecision {
   jobId: string;

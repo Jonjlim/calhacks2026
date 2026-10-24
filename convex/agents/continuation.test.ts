@@ -518,6 +518,15 @@ describe("cached replanning and user replies", () => {
     );
     expect(messages.at(-1)?.body).toContain("updated clues");
     expect(messages.at(-1)?.body).not.toContain("Complete Pottery Starter Kit");
+    const activity = value(
+      await alice.query(api.agents.buyer.listActivity, { roomId }),
+    );
+    const dropped = activity.events.find((e) => e.summary.startsWith("Dropped"));
+    expect(dropped?.summary).toBe(
+      "Dropped “Complete Pottery Starter Kit” because the room confirmed: “Already owns a starter kit”.",
+    );
+    expect(dropped?.citations?.listingIds).toHaveLength(1);
+    expect(dropped?.citations?.publishedClueIds).toHaveLength(1);
     expect(
       messages
         .at(-1)

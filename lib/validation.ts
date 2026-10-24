@@ -90,6 +90,48 @@ export const questionSlotSchema = z.enum([
 ]);
 const ref = z.string().min(1).max(200);
 const shortText = z.string().trim().min(1).max(LIMITS.clueTextMaxChars);
+export const PHOTO_PLACE_TYPES = [
+  "home",
+  "kitchen",
+  "office",
+  "cafe",
+  "restaurant",
+  "trail",
+  "beach",
+  "water",
+  "gym",
+  "studio",
+  "garden",
+  "city",
+  "vehicle",
+  "stage",
+  "other",
+] as const;
+/** What the vision model may return for one photo. mediaIndex is attached by the server, never the model. */
+export const photoReadingSchema = z.strictObject({
+  recipientActivity: z.string().trim().min(1).max(60).optional(),
+  placeType: z.enum(PHOTO_PLACE_TYPES).optional(),
+  styleTerms: z.array(z.string().trim().min(1).max(40)).max(5).optional(),
+  visibleItems: z
+    .array(
+      // A bare string is a label with no ownership claim.
+      z.preprocess(
+        (item) => (typeof item === "string" ? { label: item, owned: "unknown" } : item),
+        z.strictObject({
+          label: z.string().trim().min(1).max(60),
+          owned: z.enum(["likely", "possible", "unknown"]),
+        }),
+      ),
+    )
+    .max(8)
+    .optional(),
+  notes: z.string().trim().min(1).max(200).optional(),
+});
+export const photoObservationSchema = photoReadingSchema.extend({
+  mediaIndex: z.number().int().min(0).max(2),
+});
+export type PhotoReading = z.infer<typeof photoReadingSchema>;
+export type PhotoObservation = z.infer<typeof photoObservationSchema>;
 export const searchBriefSchema = z.strictObject({
   roomId: ref,
   knowledgeRevision: z.number().int().nonnegative(),
@@ -180,6 +222,15 @@ export const agentDecisionSchema = z.discriminatedUnion("intent", [
     citations: z.strictObject({
       listingIds: z.array(ref).min(1).max(12),
       publishedClueIds: z.array(ref).min(1).max(100),
+    }),
+  }),
+  z.strictObject({
+    ...decisionBase,
+    intent: z.literal("reply"),
+    chatMessage: z.string().trim().min(1).max(700),
+    citations: z.strictObject({
+      listingIds: z.array(ref).max(3),
+      publishedClueIds: z.array(ref).max(10),
     }),
   }),
   z.strictObject({

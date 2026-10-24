@@ -276,7 +276,8 @@ type AgentIntent =
   | "search"
   | "recommend"
   | "query_recipient"
-  | "wait";
+  | "wait"
+  | "reply"; // answers a follow-up in chat; cannot change state
 
 interface AgentDecision {
   jobId: string;
@@ -659,12 +660,12 @@ May enqueue `AgentJob` `evaluate_thread`.
 | --- | --- |
 | Owner | Dev 2 (storage, source rows), Dev 3 (vision / transcription action) |
 | Consumers | Dev 1 |
-| Input | `generateEvidenceUploadUrl`: `{ roomId }` → one-time Convex upload URL. `importMediaEvidence`: `{ roomId, kind: "photo" \| "screenshot" \| "voice_note", label, storageIds, recipientMarkers?: { x: number, y: number }[] }` |
-| Output | `{ source: EvidenceSource, jobId }` |
-| Access | Caller becomes owner. Storage IDs must come from that caller's upload URLs. |
+| Input | `generateEvidenceUploadUrl`: `{ roomId }` → `{ uploadUrl }`. `importMediaEvidence` (implemented: `photo` and `screenshot`; `voice_note` is P2, not built): `{ roomId, kind: "photo" \| "screenshot", label, files: { storageId, marker?: { x: number, y: number } }[] }`. The marker is per file (photos only) and normalized 0–1. |
+| Output | `{ source: EvidenceSource }`. The caller then runs `extractClues({ sourceId })` as for pasted text. |
+| Access | Caller becomes owner. A storage id already attached to any source is rejected, so another member's upload cannot be claimed. Files live in a private `evidenceMedia` table that clients never read. |
 | Errors | `unauthorized`, `validation_failed` (wrong type, too large, too many files), `provider_timeout` |
 
-Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 5 MB each, EXIF/GPS stripped before upload. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them, and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
+Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
 ### `extractClues`
 
@@ -1010,3 +1011,13 @@ Reject invalid/non-public source URLs, private-account flags, missing dates and 
 Explicit adapters support Clockworks' `webVideoUrl`/`text`/`createTimeISO` and the alternate Actor's `postPage`/`title`/`uploadedAtFormatted`. The alternate provider documents defaulting missing counters to zero; omit its ambiguous zero counts rather than asserting observed zero engagement.
 
 The bounded caption vocabulary includes baggy, loose-fit, wide-leg, barrel-leg, straight-leg, flared and bootcut jeans, plus denim jackets, skirts, vests, shorts, dresses and overalls. `loose jeans`, `loose fit denim` and `loose leg denim` map to the proposed query `loose fit jeans`; this is a lexical discovery heuristic, not visual verification or authentication of vintage age.
+### `giftWorlds` (opt-in zoom-out summaries)
+
+| | |
+| --- | --- |
+| Owner | Dev 3 (backend), Dev 1 (UI / world scene) |
+| Mutations | `shareWorld({ roomId, recipientAlias?, highlightClueIds? })`, `unshareWorld({ roomId })` (organizer only) |
+| Queries | `getMyWorldShare({ roomId })` (members), `listWorlds({ limit? })` (any signed-in user) |
+| Output | `PublicWorld { id, isSample, mine, occasion, recipientAlias, budgetBand, friends, inputs: { kind, count }[], highlights: string[] (≤3, ≤80 chars), state: "exploring" \| "chosen", outcome?: { title, priceMinor?, priceStatus, source }, sharedAt }` plus `WorldAggregate` |
+| Privacy | Never exposes room id, user ids, invite token, real names, chats, contribution limits, or private imports. Highlights are organizer-picked active clue lines with names replaced; sensitive text is rejected. |
+| Errors | `unauthorized`, `validation_failed`, `refused` (sample seeding disabled) |

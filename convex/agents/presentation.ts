@@ -2,6 +2,7 @@ import type { AgentCitations } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
 import type { ModelDecision } from "../../lib/validation";
 import type { BuyerSnapshot } from "./engine";
+import { listingFacts, verifyListing } from "./verify";
 
 const clip = (text: string, max: number) =>
   text.length > max ? text.slice(0, max - 1) + "…" : text;
@@ -36,7 +37,10 @@ export function renderRecommendation(
       listing.shippingMinor !== undefined
         ? `Observed shipping: ${formatMinor(listing.shippingMinor)}.`
         : "Shipping is unconfirmed.";
-    return `“${clip(listing.title, 120)}” — ${price} (observed ${observed}).\nFits: ${clues.map((clue) => `“${clip(clue.text, 120)}”`).join("; ")}. ${shipping} Availability: ${listing.availability ?? "unknown"}.`;
+    const verdict = verifyListing(listing, { budgetMinor: snapshot.budgetMinor });
+    const checks =
+      verdict.status === "flag" ? `\nCheck: ${verdict.notes.join(" ")}` : "";
+    return `“${clip(listing.title, 120)}” — ${price} (observed ${observed}).\nFits: ${clues.map((clue) => `“${clip(clue.text, 120)}”`).join("; ")}. ${shipping} Availability: ${listing.availability ?? "unknown"}.${checks}`;
   });
   const changed =
     snapshot.trigger === "knowledge_changed"
@@ -64,4 +68,30 @@ export function researchStatusMessage(snapshot: BuyerSnapshot): string | null {
   if (snapshot.research?.status === "failed")
     return "Product research did not return usable results. I have not started another search. You can change the brief or explicitly try again; previously retrieved options may remain visible.";
   return null;
+}
+
+/** A chat reply: the model's short wording plus observed facts for every cited listing, copied from the records. */
+export function renderReply(
+  decision: Extract<ModelDecision, { intent: "reply" }>,
+  snapshot: BuyerSnapshot,
+): { body: string; citations: AgentCitations } {
+  const facts = decision.citations.listingIds
+    .map((id) => snapshot.listings.find((row) => row.id === id))
+    .filter((row): row is BuyerSnapshot["listings"][number] => !!row)
+    .map((listing) => {
+      const verdict = verifyListing(listing, { budgetMinor: snapshot.budgetMinor });
+      return `${listingFacts(listing)}${verdict.status === "flag" ? ` Check: ${verdict.notes.join(" ")}` : ""}`;
+    });
+  return {
+    body: facts.length
+      ? `${decision.chatMessage}\n\n${facts.join("\n")}`
+      : decision.chatMessage,
+    citations: {
+      listingIds: decision.citations.listingIds,
+      publishedClueIds: decision.citations.publishedClueIds,
+      ...(snapshot.research?.poolJobId
+        ? { researchJobId: snapshot.research.poolJobId }
+        : {}),
+    },
+  };
 }

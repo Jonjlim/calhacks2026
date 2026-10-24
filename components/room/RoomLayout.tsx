@@ -14,6 +14,12 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { ActivityFeed } from "@/components/agents/ActivityFeed";
+import { ChatModeToggle } from "@/components/agents/ChatModeToggle";
+import { RecipientDemo } from "@/components/agents/RecipientDemo";
+import { StatsPanel } from "@/components/agents/StatsPanel";
+import { ShareWorldPanel } from "@/components/worlds/ShareWorldPanel";
+import { MediaIntake } from "@/components/clues/MediaIntake";
 import { RoomHeader } from "./RoomHeader";
 import { ShareMemory } from "./ShareMemory";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -97,9 +103,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
             <details className="paper-card rounded-[22px] p-5"><summary className="cursor-pointer font-display text-2xl">Bring in a conversation</summary><div className="mt-4 flex flex-col gap-4">
               <EvidenceImport evidence={data.evidence} latestJob={latestExtract} modelConfigured={data.activity?.capabilities.modelConfigured} actions={actions} />
+              {actions && <MediaIntake roomId={room.id as Id<"rooms">} />}
               <ProposedClueReview clues={data.myProposedClues} actions={actions} />
             </div></details>
             <ChatPanel messages={data.messages} participants={participants} me={me} activity={data.activity} actions={actions} />
+            {actions && <ChatModeToggle roomId={room.id as Id<"rooms">} />}
+            {actions && <ActivityFeed roomId={room.id as Id<"rooms">} />}
+            {actions && <StatsPanel roomId={room.id as Id<"rooms">} />}
           </>}
           {tab === "gifts" && <>
             <button className="self-start text-sm font-medium text-dusk/60 underline-offset-4 hover:text-dusk hover:underline" onClick={() => setTab("memories")}>← Back inside the tower</button>
@@ -107,6 +117,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             {data.selection && <button className="btn-primary" onClick={() => setTab("proposal")}>Review our chosen gift →</button>}
             <details className="paper-card rounded-[22px] p-5"><summary className="cursor-pointer font-display text-2xl">How the clues connect</summary><GiftMap recommendations={data.recommendations} listings={data.listings} publishedClues={data.publishedClues} /></details>
           </>}
+          {tab === "proposal" && actions && <RecipientDemo roomId={room.id as Id<"rooms">} isOrganizer={isOrganizer} />}
+          {tab === "proposal" && actions && isOrganizer && <ShareWorldPanel roomId={room.id as Id<"rooms">} />}
           {tab === "proposal" && <ProposalPanel proposal={data.proposal} participants={participants} me={me} selection={data.selection} isOrganizer={isOrganizer} actions={actions} />}
         </section>
       </motion.div>
@@ -201,16 +213,22 @@ function PhoneRoom({ data, actions, preview, tab, setTab, councilDone, isOrganiz
               <summary className="cursor-pointer font-display text-[22px]">Bring in a conversation</summary>
               <div className="mt-3 flex flex-col gap-4">
                 <EvidenceImport evidence={data.evidence} latestJob={data.activity?.jobs.find((j) => j.kind === "extract")} modelConfigured={data.activity?.capabilities.modelConfigured} actions={actions} />
-                <ProposedClueReview clues={data.myProposedClues} actions={actions} />
+                {actions && <MediaIntake roomId={room.id as Id<"rooms">} />}
+              <ProposedClueReview clues={data.myProposedClues} actions={actions} />
               </div>
             </details>
             <ChatPanel messages={data.messages} participants={participants} me={me} activity={data.activity} actions={actions} />
+            {actions && <ChatModeToggle roomId={room.id as Id<"rooms">} />}
+            {actions && <ActivityFeed roomId={room.id as Id<"rooms">} />}
+            {actions && <StatsPanel roomId={room.id as Id<"rooms">} />}
           </>
         )}
         {tab === "gifts" && (
           <ProductShortlist recommendations={data.recommendations} listings={data.listings} publishedClues={data.publishedClues} votes={data.votes} selection={data.selection} isOrganizer={isOrganizer} latestResearch={data.latestResearch} actions={actions} />
         )}
-        {tab === "proposal" && <ProposalPanel proposal={data.proposal} participants={participants} me={me} selection={data.selection} isOrganizer={isOrganizer} actions={actions} />}
+        {tab === "proposal" && actions && <RecipientDemo roomId={room.id as Id<"rooms">} isOrganizer={isOrganizer} />}
+          {tab === "proposal" && actions && isOrganizer && <ShareWorldPanel roomId={room.id as Id<"rooms">} />}
+          {tab === "proposal" && <ProposalPanel proposal={data.proposal} participants={participants} me={me} selection={data.selection} isOrganizer={isOrganizer} actions={actions} />}
       </motion.div>
 
       <nav aria-label="Room activities" className="pointer-events-auto fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-30 grid grid-cols-3 rounded-[22px] border border-dusk/10 bg-paper/95 p-1.5 shadow-[0_18px_40px_-18px_rgba(65,52,76,0.55)] backdrop-blur-md">
