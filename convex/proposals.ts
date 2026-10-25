@@ -11,15 +11,16 @@
  *   - P0 rule: only the organizer confirms the selected gift.
  */
 import { v } from "convex/values";
-import type { ProposalView } from "../lib/contracts";
+import type { ProposalView, Result } from "../lib/contracts";
 import { internalMutation, mutation, query } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { isMoney } from "./lib/input";
 import { INFEASIBLE_CAPS_MESSAGE, isEditable, recomputeProposal } from "./lib/proposalEngine";
 import { err, memberError, ok } from "./lib/result";
 import { toApproval, toLimit, toRevision } from "./lib/views";
+import { boxItem, boxListingIds, MAX_GIFT_BOX_ITEMS } from "./lib/giftBox";
 
 async function myLimit(ctx: QueryCtx, roomId: Id<"rooms">, participantId: Id<"participants">) {
   return await ctx.db
@@ -57,70 +58,75 @@ async function roomIsFrozen(ctx: QueryCtx, room: Doc<"rooms">): Promise<boolean>
   return current !== null && !isEditable(current.status);
 }
 
+/** Replaces the box atomically. Legacy selectGift below remains replace-with-one. */
+async function replaceGiftBox(ctx: MutationCtx, roomId: Id<"rooms">, listingIds: Id<"productListings">[]) {
+  type Out = { selection: Doc<"giftSelections">; revision?: Doc<"proposalRevisions"> };
+  const member = await requireMember(ctx, roomId);
+  if (!member.ok) return memberError<Out>(member.code);
+  if (member.me.role !== "organizer") return err<Out>("unauthorized", "Only the organizer can confirm the gift box.");
+  if (await roomIsFrozen(ctx, member.room)) return err<Out>("invalid_revision", "The current proposal is locked for payment.");
+  if (!listingIds.length || listingIds.length > MAX_GIFT_BOX_ITEMS || new Set(listingIds).size !== listingIds.length)
+    return err<Out>("validation_failed", "Choose 1–12 distinct gifts, one of each.");
+  const listings: Doc<"productListings">[] = [];
+  for (const id of listingIds) {
+    const listing = await ctx.db.get(id);
+    if (!listing || listing.roomId !== roomId) return err<Out>("not_found", "Listing not found.");
+    if (listing.status === "invalid" || listing.availability === "unavailable") return err<Out>("not_found", "A selected listing is no longer available.");
+    if (listing.currency !== "USD") return err<Out>("validation_failed", "Only USD listings are supported.");
+    listings.push(listing);
+  }
+  const current = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+  let selectionId: Id<"giftSelections">;
+  if (current?.status === "active" && JSON.stringify(boxListingIds(current)) === JSON.stringify(listingIds)) {
+    selectionId = current._id;
+  } else {
+    if (current?.status === "active") await ctx.db.patch(current._id, { status: "cleared" });
+    const first = listings[0]!;
+    const items = listings.map(boxItem);
+    selectionId = await ctx.db.insert("giftSelections", {
+      roomId, listingId: first._id, quantity: 1,
+      listingSnapshot: { title: first.title, sourceUrl: first.sourceUrl,
+        priceMinor: first.priceMinor, priceStatus: first.priceStatus, retrievedAt: first.retrievedAt },
+      items, status: "active", selectedBy: member.me._id, selectedAt: Date.now(),
+    });
+    await ctx.db.patch(roomId, { currentSelectionId: selectionId });
+  }
+  const recomputed = await recomputeProposal(ctx, roomId);
+  const selection = (await ctx.db.get(selectionId))!;
+  return ok<Out>(recomputed.revision ? { selection, revision: recomputed.revision } : { selection });
+}
+
 export const selectGift = mutation({
   args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
-  handler: async (ctx, { roomId, listingId }) => {
-    type Out = { selection: Doc<"giftSelections">; revision?: Doc<"proposalRevisions"> };
-    const member = await requireMember(ctx, roomId);
-    if (!member.ok) return memberError<Out>(member.code);
-    if (member.me.role !== "organizer") {
-      return err<Out>("unauthorized", "Only the organizer can confirm the gift.");
-    }
-    if (await roomIsFrozen(ctx, member.room)) {
-      return err<Out>("invalid_revision", "The current proposal is locked for payment.");
-    }
-    const listing = await ctx.db.get(listingId);
-    if (!listing || listing.roomId !== roomId) return err<Out>("not_found", "Listing not found.");
-    if (listing.status === "invalid") return err<Out>("not_found", "That listing is no longer available.");
-    if (listing.currency !== "USD") return err<Out>("validation_failed", "Only USD listings are supported.");
+  handler: (ctx, { roomId, listingId }) => replaceGiftBox(ctx, roomId, [listingId]),
+});
 
-    const now = Date.now();
-    const current = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
-    let selectionId: Id<"giftSelections">;
-    if (current && current.status === "active" && current.listingId === listingId) {
-      selectionId = current._id;
-    } else {
-      if (current && current.status === "active") await ctx.db.patch(current._id, { status: "cleared" });
-      selectionId = await ctx.db.insert("giftSelections", {
-        roomId,
-        listingId,
-        quantity: 1,
-        listingSnapshot: {
-          title: listing.title,
-          sourceUrl: listing.sourceUrl,
-          priceMinor: listing.priceMinor,
-          priceStatus: listing.priceStatus,
-          retrievedAt: listing.retrievedAt,
-        },
-        status: "active",
-        selectedBy: member.me._id,
-        selectedAt: now,
-      });
-      await ctx.db.patch(roomId, { currentSelectionId: selectionId });
-    }
-
-    const recomputed = await recomputeProposal(ctx, roomId);
-    const selection = (await ctx.db.get(selectionId))!;
-    return ok<Out>(recomputed.revision ? { selection, revision: recomputed.revision } : { selection });
+/** Full replacement, including removal; [] clears the entire box. */
+export const setGiftBox = mutation({
+  args: { roomId: v.id("rooms"), listingIds: v.array(v.id("productListings")) },
+  handler: async (ctx, { roomId, listingIds }): Promise<Result<{ selection: Doc<"giftSelections"> | null; revision?: Doc<"proposalRevisions"> }>> => {
+    if (listingIds.length) return replaceGiftBox(ctx, roomId, listingIds);
+    const cleared = await clearGiftBox(ctx, roomId);
+    return cleared.ok ? ok({ selection: null }) : cleared;
   },
 });
 
 /** Organizer takes the gift out of the box. Supersedes the current revision. */
+async function clearGiftBox(ctx: MutationCtx, roomId: Id<"rooms">) {
+  const member = await requireMember(ctx, roomId);
+  if (!member.ok) return memberError<null>(member.code);
+  if (member.me.role !== "organizer") return err<null>("unauthorized", "Only the organizer can change the gift.");
+  if (await roomIsFrozen(ctx, member.room)) return err<null>("invalid_revision", "The current proposal is locked for payment.");
+  const current = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+  if (current?.status === "active") await ctx.db.patch(current._id, { status: "cleared" });
+  await ctx.db.patch(roomId, { currentSelectionId: undefined });
+  await recomputeProposal(ctx, roomId);
+  return ok(null);
+}
+
 export const clearSelection = mutation({
   args: { roomId: v.id("rooms") },
-  handler: async (ctx, { roomId }) => {
-    const member = await requireMember(ctx, roomId);
-    if (!member.ok) return memberError<null>(member.code);
-    if (member.me.role !== "organizer") return err<null>("unauthorized", "Only the organizer can change the gift.");
-    if (await roomIsFrozen(ctx, member.room)) {
-      return err<null>("invalid_revision", "The current proposal is locked for payment.");
-    }
-    const current = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
-    if (current && current.status === "active") await ctx.db.patch(current._id, { status: "cleared" });
-    await ctx.db.patch(roomId, { currentSelectionId: undefined });
-    await recomputeProposal(ctx, roomId);
-    return ok(null);
-  },
+  handler: (ctx, { roomId }) => clearGiftBox(ctx, roomId),
 });
 
 /**
@@ -135,7 +141,7 @@ export const clearSelectionsForListing = internalMutation({
     const room = await ctx.db.get(listing.roomId);
     if (!room?.currentSelectionId) return ok({ cleared: 0 });
     const selection = await ctx.db.get(room.currentSelectionId);
-    if (!selection || selection.status !== "active" || selection.listingId !== listingId) return ok({ cleared: 0 });
+    if (!selection || selection.status !== "active" || !boxListingIds(selection).includes(listingId)) return ok({ cleared: 0 });
     if (await roomIsFrozen(ctx, room)) return err<{ cleared: number }>("invalid_revision", "Proposal is locked.");
     await ctx.db.patch(selection._id, { status: "cleared" });
     await ctx.db.patch(room._id, { currentSelectionId: undefined });
@@ -267,6 +273,9 @@ export const approveRevision = mutation({
   handler: async (ctx, { revisionId }) => {
     const target = await loadApprovalTarget(ctx, revisionId);
     if (!target.ok) return target.error;
+    const refreshed = await recomputeProposal(ctx, target.revision.roomId);
+    if (!refreshed.revision || refreshed.revision._id !== revisionId)
+      return err<Doc<"approvals">>("invalid_revision", "This proposal changed. Review the latest revision.");
     const { revision, approval } = target;
     if (revision.status === "infeasible") {
       return err<Doc<"approvals">>("infeasible", revision.conditions[0] ?? INFEASIBLE_CAPS_MESSAGE);

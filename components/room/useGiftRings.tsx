@@ -1,6 +1,7 @@
 "use client";
 
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { reencodeImage } from "@/lib/live/image";
 import type { AvatarId } from "@/components/characters/StorybookAvatar";
 import type { RingAction, RingDetail, RingResearch, RingsWorld } from "@/components/world/room/GiftRings";
@@ -9,6 +10,7 @@ import { MapIcon } from "@/components/world/room/MapIcon";
 import type { PledgeWorld } from "@/components/world/room/PledgeRing";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
+import { isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { BoxPanel } from "./BoxPanel";
@@ -61,6 +63,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const [allGifts, setAllGifts] = useState(false);
   // Where this viewer started a search, so its progress shows on that theme.
   const [researchFrom, setResearchFrom] = useState<string | null>(null);
+  /** Index of the photo open in the large tap-the-person view, if any. */
+  const [marking, setMarking] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -139,6 +143,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
     ),
     [clues, recs, data.votes, councilThemes, signals, finalists, favored],
   );
+  // Each memory with a sourced trend sample sprouts its own ideas beside it.
+  const trendIdeas = useMemo(() => (data.trends?.samples ?? (data.trends?.sample ? [data.trends.sample] : [])).flatMap((sample) => {
+    const source = clues.find((c) => c.id === sample.publishedClueId);
+    if (!source) return [];
+    const at = layout.clues.find((c) => c.id === source.id) ?? null;
+    return layoutTrendIdeas(sample.jobId, sample.suggestions, at).map((node) => ({ ...node, source }));
+  }), [data.trends?.samples, data.trends?.sample, clues, layout.clues]);
+  const passByKey = useMemo(() => new Map((data.trends?.passes ?? []).map((p) => [trendKey(p.trendJobId, p.query), p])), [data.trends?.passes]);
+  const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   const openBox = () => setSelectedKey("box");
   if (!active) return { rings: null, notice, error, openBox };
@@ -179,7 +192,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const whyRec = whyListing ? recs.find((r) => r.listingId === whyListing) : undefined;
   if (whyRec) {
     const cited = whyRec.publishedClueIds.filter((id) => themeOfClue.has(id));
-    highlight = new Set([`gift:${whyRec.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeOfClue.get(id)}`)]);
+    // A gift found through a trend search lights that trend idea too.
+    const trend = trendByListing.get(whyRec.listingId);
+    highlight = new Set([`gift:${whyRec.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeOfClue.get(id)}`), ...(trend ? [trendKey(trend.trendJobId, trend.query)] : [])]);
     if (selection?.listingId === whyRec.listingId) highlight.add("box");
   }
 
@@ -245,8 +260,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       const mine = data.votes[listingId]?.myVote;
       const inBox = selection?.listingId === listingId;
       return {
-        caption: <><b>{listing.title}</b><small>{priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}{rec?.publishedClueIds.length ? ` · fits ${rec.publishedClueIds.length} ${rec.publishedClueIds.length === 1 ? "memory" : "memories"}` : ""}</small></>,
-        note: whyListing === listingId ? rec?.explanation || "No memories are cited for this one yet." : undefined,
+        caption: <><b>{listing.title}</b><small>{priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}{trendByListing.has(listingId) ? " · via a trend" : ""}{rec?.publishedClueIds.length ? ` · fits ${rec.publishedClueIds.length} ${rec.publishedClueIds.length === 1 ? "memory" : "memories"}` : ""}</small></>,
+        note: whyListing === listingId ? (
+          <>{rec?.explanation || "No memories are cited for this one yet."}{trendByListing.has(listingId) && <> Found while researching “{trendByListing.get(listingId)!.query}”, a related Google Trends search. The product itself isn’t claimed to be trending.</>}</>
+        ) : undefined,
         actions: actions ? [
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
           { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
@@ -255,7 +272,23 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "coins", label: "Too pricey for me", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
           { icon: "open", label: "Open the listing", more: true, run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
+          ...(trendByListing.has(listingId) ? [{ icon: "trend" as const, label: "See the trend", more: true, run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
+      };
+    }
+    if (isTrendKey(key)) {
+      const node = trendIdeas.find((t) => t.key === key);
+      if (!node) return null;
+      const jobId = node.trendJobId;
+      const pass = passByKey.get(key);
+      return {
+        caption: <><b>{node.query}</b><small>{node.signal} · a Google Trends search related to “{node.source.text}”. An idea to explore, not a fact about her.</small>{pass && pass.count > 0 && <small>{pass.passerNames.join(", ") || `${pass.count} people`} passed on it.</small>}</>,
+        actions: [
+          ...(actions?.researchTrend ? [{ icon: "sprout" as const, label: "Research this", tone: "gold" as const, disabled: !!pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
+          { icon: "open" as const, label: "See the source", more: true, run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
+          ...(actions?.passTrend ? [{ icon: "drift" as const, label: pass?.mine ? "Take back my pass" : "Doesn’t fit", tone: "pass" as const, on: !!pass?.mine, disabled: !!pending,
+            run: () => void run(() => actions.passTrend!(jobId, node.query, !pass?.mine), pass?.mine ? "Pass taken back." : "Passed for the room. It stays faded on the map; her memories didn’t change.") }] : []),
+        ],
       };
     }
     if (key.startsWith("photo:")) {
@@ -311,6 +344,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       actions: [
         ...voteActs("clue", clue.id),
         ...findGiftsFrom(theme),
+        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "trend" as const, label: "Look for trends", more: true, disabled: !!pending, run: () => void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here.") }] : []),
         ...(actions && clue.publisherId === me.id ? [{ icon: "undo" as const, label: "Take it back", more: true, disabled: !!pending, run: () => void run(() => actions.withdrawClue(clue.id), "Your memory was withdrawn from the room.").then((ok) => ok && setSelectedKey(null)) }] : []),
       ],
     };
@@ -375,7 +409,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       }
     }
     setPhotoPick(next);
+    setMarking(next.length ? 0 : null);
   };
+  // Measured on the uncropped image, so the mark lands on the same spot the model sees.
   const markPhoto = (index: number, e: ReactMouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const marker = { x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)) };
@@ -390,6 +426,35 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
         setPhotoPick([]);
       }
     });
+  };
+  const nextPhoto = (index: number) => setMarking(index + 1 < photoPick.length ? index + 1 : null);
+  const markViewer = (index: number) => {
+    const it = photoPick[index]!;
+    const last = index + 1 >= photoPick.length;
+    return (
+      <div className={s.markBackdrop} role="dialog" aria-modal="true" aria-label={`Photo ${index + 1} of ${photoPick.length}`}
+        onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Escape") setMarking(null); }}>
+        <div className={s.markCard}>
+          <header>
+            {photoPick.length > 1 && <small>Photo {index + 1} of {photoPick.length}</small>}
+            <h2>Tap the person this gift is for</h2>
+          </header>
+          <div className={s.markPolaroid}>
+            <button type="button" className={s.markFrame} onClick={(e) => markPhoto(index, e)} aria-label="Tap the person this gift is for">
+              <img src={it.preview} alt="" />
+              {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+            </button>
+            <span>{it.marker ? <>marked <MapIcon name="check" size={16} /></> : "tap the person"}</span>
+          </div>
+          <p>Your mark only tells Unwrap who to look at. It isn’t face recognition, and only you see it.</p>
+          <div className={s.markBtns}>
+            {it.marker && <button type="button" onClick={() => setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p)))}>Clear mark</button>}
+            <button type="button" onClick={() => { setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p))); nextPhoto(index); }}>Skip · scene only</button>
+            <button type="button" className={s.readBtn} disabled={!it.marker} onClick={() => nextPhoto(index)}>{last ? "Done" : "Next photo"}</button>
+          </div>
+        </div>
+      </div>
+    );
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
@@ -407,17 +472,18 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       ) : (
         <div className={s.photoRow}>
           {photoPick.map((it, i) => (
-            <button key={it.preview} type="button" className={s.polaroidPick} onClick={(e) => markPhoto(i, e)} aria-label={`Photo ${i + 1}: tap the person it’s for`}>
+            <button key={it.preview} type="button" className={s.polaroidPick} onClick={() => setMarking(i)} aria-label={`Photo ${i + 1}: open it to tap the person it’s for`}>
               <img src={it.preview} alt="" />
-              {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+              <span className={s.pickState}>{it.marker ? <><MapIcon name="check" size={11} /> marked</> : "tap to mark"}</span>
             </button>
           ))}
         </div>
       )}
-      <p>{photoPick.length ? "Tap her in each photo. It’s your mark, not face recognition, and only you see it." : "Everyone in the room will see these photos. Location data is removed."}</p>
+      <p>{photoPick.length ? "Open each photo and tap her. It’s your mark, not face recognition, and only you see it." : "Everyone in the room will see these photos. Location data is removed."}</p>
       {photoPick.length > 0 && (
         <button type="button" className={s.readBtn} disabled={pending === "photos"} onClick={readPhotos}>{pending === "photos" ? "Sharing…" : `Share ${photoPick.length === 1 ? "it" : "them"} with the room`}</button>
       )}
+      {marking !== null && photoPick[marking] && createPortal(markViewer(marking), document.body)}
     </div>
   ) : null;
 
@@ -528,7 +594,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
       return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarOf(idea.publisherId), x, z };
-    }),
+    }).concat(trendIdeas.map((t) => {
+      const passes = passByKey.get(t.key)?.count ?? 0;
+      return { key: t.key, text: t.query, author: name(t.source.publisherId), avatar: avatarOf(t.source.publisherId), x: t.x, z: t.z,
+        tag: passes ? `trend · ${passes} passed` : `trend · ${t.signal}`, faded: passes > 0, trend: true };
+    })),
     themes: layout.themes.map((t) => {
       // Up to four faces of the friends who shared into this theme.
       const authors = [...new Set(layout.clues.filter((c) => c.theme === t.id).map((c) => clues.find((x) => x.id === c.id)!.publisherId))].slice(0, 4);

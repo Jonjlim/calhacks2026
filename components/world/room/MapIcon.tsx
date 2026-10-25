@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 
 export type MapIconName =
   | "heart" | "drift" | "thread" | "present" | "home" | "coins" | "open" | "sprout" | "gather" | "scales"
-  | "cloud" | "camera" | "spark" | "trash" | "undo" | "memory" | "wish" | "check" | "wait" | "redo";
+  | "cloud" | "camera" | "spark" | "trash" | "undo" | "memory" | "wish" | "check" | "wait" | "redo" | "trend";
 
 const PATHS: Record<MapIconName, ReactNode> = {
   // Feels like her: a heart with a small spark beside it.
@@ -45,6 +45,8 @@ const PATHS: Record<MapIconName, ReactNode> = {
   wish: <><path d="M15 4l1.3 3.6 3.7 1.2-3.7 1.3L15 13.7l-1.3-3.6-3.7-1.3 3.7-1.2z" /><path d="M10 13l-6 6M12.5 16.5l-3.5 3.5M7 11l-3 3" /></>,
   check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
   wait: <><path d="M7 3.5h10M7 20.5h10M8 3.5c0 5 8 5 8 8.5s-8 3.5-8 8.5M16 3.5c0 5-8 5-8 8.5" /></>,
+  // A trend: searches climbing over a little hill, ending in a spark.
+  trend: <><path d="M3 19h18" /><path d="M4 16l4.5-4.5 3.5 3 6-6.5" /><path d="M14.5 8h3.5v3.5" /><circle cx="20" cy="5" r=".8" fill="currentColor" /></>,
   redo: <><path d="M15 7l4.5 4L15 15" /><path d="M19.5 11H10a5 5 0 0 0 0 10h3" /></>,
 };
 

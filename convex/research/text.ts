@@ -66,12 +66,37 @@ export function isUnconfirmedObservation(text: string): boolean {
     || /^(?:in|from) (?:this |the |a )?(?:photo|picture|image)\b/.test(subject);
 }
 
+// Habit and enthusiasm framing: "plays tennis", "collects vinyl", "obsessed with matcha".
+const HABIT_PREFIX = /^(?:(?:she|he|they)\s+)?(?:(?:really|always|also|totally|so)\s+)?(?:is\s+|are\s+)?(?:(?:a\s+)?(?:big\s+|huge\s+)?fan of|obsessed with|crazy about|passionate about|addicted to|hooked on|always talking about|plays?|playing|collects?|collecting|practices?|practicing|goes|going|does|doing|makes?|making|started|getting into|got into)\s+/;
+const HABIT_SUFFIX = /\s+(?:every\s+(?:day|week|weekend|morning|night|evening|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(?:night|morning|evening))?|on\s+(?:the\s+)?weekends?|all the time|a lot|in (?:her|his|their) (?:free|spare) time|whenever (?:she|he|they) can)$/;
+// Fixed phrases where "and" is part of the thing, not two interests.
+const JOINED = /\b(?:salt and pepper|rock and roll|black and white|mac and cheese|arts and crafts|dungeons and dragons|bed and breakfast)\b/;
+
 /** Remove generic preference framing; leave actual product/style words intact. */
 export function shoppingPhrase(text: string): string {
-  return cluePhrase(text)
+  let phrase = cluePhrase(text)
     .replace(/^(?:prefers?|drawn to)\s+/, "")
-    .replace(/\s+(?:style|styles|aesthetic|look)$/, "")
-    .trim();
+    .replace(/\s+(?:style|styles|aesthetic|look)$/, "");
+  for (let i = 0; i < 2; i++) phrase = phrase.replace(HABIT_PREFIX, "").replace(HABIT_SUFFIX, "").replace(LEADING_ARTICLE, "");
+  phrase = phrase.trim();
+  // "Loves to bowl" is about bowling, not bowls: a lone verb after "to" becomes its activity.
+  const verb = /^to ([a-z]+)$/.exec(phrase);
+  return verb ? activity(verb[1]!) : phrase.replace(/^to\s+/, "");
+}
+
+function activity(verb: string): string {
+  if (verb.endsWith("ing")) return verb;
+  if (/[^aeiou]e$/.test(verb) && !verb.endsWith("ee")) return verb.slice(0, -1) + "ing";
+  if (/^[^aeiou]*[aeiou][bdgklmnprt]$/.test(verb)) return verb + verb.at(-1) + "ing";
+  return verb + "ing";
+}
+
+/** One clue can name up to three interests ("hiking and camping"); each becomes its own search phrase. */
+export function shoppingPhrases(text: string): string[] {
+  const phrase = shoppingPhrase(text);
+  if (!phrase || JOINED.test(phrase)) return phrase ? [phrase] : [];
+  const parts = phrase.split(/\s*(?:,|&|\band\b)\s*/).map(p => p.replace(LEADING_ARTICLE, "").trim()).filter(Boolean);
+  return parts.length > 1 && parts.length <= 3 ? parts : [phrase];
 }
 
 /**

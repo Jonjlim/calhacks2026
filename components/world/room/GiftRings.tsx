@@ -58,7 +58,8 @@ export interface RingsWorld {
   /** The theme whose memories are fanned out as readable bubbles. Others rest as small face dots. */
   openTheme?: string | null;
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
-  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number }[];
+  /** Friends' gift ideas and sourced trend suggestions. `tag` replaces the "gift idea" caption; `faded` after someone passed. */
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean }[];
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -675,13 +676,15 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
 
       {rings.ideas.map((idea, i) => {
         const shown = rings.selectedKey === idea.key || close;
+        const caption = idea.tag ?? `gift idea · ${idea.author}`;
+        const quiet = dim(idea.key) || !!idea.faded;
         return (
-          <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)} size={shown ? 1 : 0.6}>
-            <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={dim(idea.key)} recede={recede(idea.key)} offset={[0, -0.4, 2.2]} label={`${idea.author}'s gift idea: ${idea.text}`}
-              peek={shown ? undefined : <><b>{idea.text}</b><small>gift idea · {idea.author}</small></>}
+          <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={quiet} size={shown ? 1 : 0.6}>
+            <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={quiet} recede={recede(idea.key)} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea: ${idea.text}`}
+              peek={shown ? undefined : <><b>{idea.text}</b><small>{caption}</small></>}
               face={shown
-                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud}`}><img src={portraitUrl(idea.avatar)} alt="" /><span><b>{idea.text}</b><small>gift idea · {idea.author}</small></span></span>
-                : <span className={s.ideaDot}><img src={portraitUrl(idea.avatar)} alt="" /><i aria-hidden><MapIcon name="spark" size={12} /></i></span>} />
+                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.trend ? s.trendCloud : ""}`}>{idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
+                : <span className={`${s.ideaDot} ${idea.trend ? s.trendDot : ""}`}>{idea.trend ? <MapIcon name="trend" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
           </RingIsland>
         );
       })}

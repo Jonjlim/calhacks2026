@@ -48,11 +48,15 @@ export const startResearch = mutation({
     idempotencyKey: v.string(),
     fashionJobId: v.optional(v.id("fashionJobs")),
     trendJobId: v.optional(v.id("trendJobs")),
+    discoveryQuery: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Result<{ jobId: Id<"researchJobs"> }>> => {
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room before searching.");
     const room = member.room;
+    const discoveryQuery = args.discoveryQuery?.trim();
+    if (args.discoveryQuery !== undefined && (!discoveryQuery || discoveryQuery.length > 200 || (!args.fashionJobId && !args.trendJobId)))
+      return err("validation_failed", "Choose a sourced discovery query of 1–200 characters with its discovery job.");
     const key = args.idempotencyKey.trim();
     if (!key || key.length > 200 || args.publishedClueIds.length > 100) {
       return err("validation_failed", "Provide a request key and at most 100 published clues.");
@@ -75,24 +79,28 @@ export const startResearch = mutation({
       ...(budgetMinor === undefined ? {} : { budgetMinor }), occasion: room.occasion,
     });
     if (!brief.queryTerms.length) return err("validation_failed", "Publish an interest or wish before searching.");
+    let discoveryQueries: string[] = [];
     if (args.fashionJobId) {
       const discovery = await usableFashionJob(ctx, room._id, args.fashionJobId);
-      const direction = discovery?.sample?.directions[0];
       if (!discovery || !discovery.supportingPublishedClueIds.every(id => clueIds.includes(id)))
         return err("stale_job", "Use a fresh discovery supported by the current search's published clues.");
-      if (direction) brief.queryTerms = [direction.searchQuery];
+      discoveryQueries = discovery.sample?.directions.map(direction => direction.searchQuery) ?? [];
     }
     if (args.trendJobId) {
       if (args.fashionJobId) return err("validation_failed", "Use one discovery source per search.");
       const trend = await usableTrendJob(ctx, room._id, args.trendJobId);
       if (!trend || !clueIds.includes(trend.publishedClueId))
         return err("stale_job", "Use a fresh trend search supported by the current search's published clues.");
-      const suggestion = trend.sample?.suggestions[0];
-      if (suggestion) brief.queryTerms = [suggestion.query];
+      discoveryQueries = trend.sample?.suggestions.map(suggestion => suggestion.query) ?? [];
     }
+    if (discoveryQuery && !discoveryQueries.includes(discoveryQuery))
+      return err("validation_failed", "Choose one of this discovery's sourced suggestions; arbitrary search text is not accepted.");
+    const selectedQuery = discoveryQuery ?? discoveryQueries[0];
+    if (selectedQuery) brief.queryTerms = [selectedQuery];
     // Canonical collision-free input fingerprint. It contains no raw imports or private caps.
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null,
-      ...(args.fashionJobId ? [args.fashionJobId] : []), ...(args.trendJobId ? ["trend", args.trendJobId] : [])]);
+      ...(args.fashionJobId ? [args.fashionJobId] : []), ...(args.trendJobId ? ["trend", args.trendJobId] : []),
+      ...(selectedQuery && selectedQuery !== discoveryQueries[0] ? ["discovery_query", selectedQuery] : [])]);
     const previous = await ctx.db.query("researchJobs")
       .withIndex("by_room_idempotency", q => q.eq("roomId", room._id).eq("idempotencyKey", key)).unique();
     if (previous) return previous.inputHash === inputHash

@@ -12,6 +12,7 @@ import type {
   Recommendation,
   Result,
   RoomView,
+  TrendDiscoveryView,
   VoteValue,
 } from "@/lib/contracts";
 
@@ -43,6 +44,8 @@ export interface RoomData {
   latestResearch?: ResearchJobRow | null;
   councilUnavailable?: boolean;
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
+  /** Latest sourced Google Trends suggestions for one memory, and listings found from them. */
+  trends?: TrendDiscoveryView;
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
@@ -78,6 +81,12 @@ export interface RoomActions {
   setLimit: Run<[amountMinor: number]>;
   approve: Run<[revisionId: string]>;
   withdrawApproval: Run<[revisionId: string]>;
+  /** Look up related Google Trends searches for one published interest or wish. */
+  findTrends?: Run<[publishedClueId: string]>;
+  /** Research one sourced trend suggestion; the server refuses any query the trend job did not return. */
+  researchTrend?: Run<[trendJobId: string, query: string, publishedClueIds: string[]]>;
+  /** Shared, attributed "doesn't fit" on a trend idea; `false` takes it back. */
+  passTrend?: Run<[trendJobId: string, query: string, passed: boolean]>;
   /** Pull a memory or theme toward the present (1), push it away (−1), or take the signal back (0). */
   setDirection: Run<[targetKind: "clue" | "theme", targetId: string, value: 1 | -1 | 0]>;
   suggestThemes: Run;

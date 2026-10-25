@@ -178,6 +178,27 @@
 .polaroidPick { position: relative; padding: 5px 5px 14px; background: #fffdf8; border: 0; border-radius: 3px; box-shadow: 0 10px 20px -8px rgb(40 24 44 / .6); cursor: crosshair; transform: rotate(-2deg); }
 .polaroidPick:nth-child(2) { transform: rotate(2deg); }
 .polaroidPick img { display: block; width: 92px; height: 72px; object-fit: cover; }
+.pickState { display: block; margin-top: 3px; font: 700 10px var(--font-sans); color: var(--color-dusk); }
+/* Tap-the-person viewer: the world's ivory card and a large polaroid, over a soft dusk veil. */
+.markBackdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgb(65 52 76 / .45), rgb(40 24 44 / .72)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: markVeil .25s ease-out both; }
+.markCard { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: min(94vw, 940px); max-height: 94vh; padding: 16px 20px 14px; border-radius: 22px; background: linear-gradient(180deg, var(--color-ivory), #f7ecd7); color: var(--color-dusk); font: 500 13px var(--font-sans); text-align: center; box-shadow: 0 30px 60px -24px rgb(40 24 44 / .7), 0 0 0 1px rgb(217 182 111 / .5); animation: boxIn .35s cubic-bezier(.2,.9,.3,1.2) both; user-select: none; }
+.markCard header { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.markCard header small { font: 700 10px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: #a07a2c; }
+.markCard h2 { margin: 0; font: italic 600 24px/1.1 var(--font-display); color: var(--color-dusk); }
+.markCard > p { margin: 0; max-width: 46ch; font-size: 11.5px; line-height: 1.4; color: var(--color-plum-soft); }
+/* Not rotated: the mark is measured from the frame's box, so the frame must stay square to the screen. */
+.markPolaroid { display: flex; flex-direction: column; align-items: center; padding: 10px 10px 6px; background: #fffdf8; border-radius: 4px; box-shadow: 0 18px 34px -14px rgb(40 24 44 / .6), 0 0 0 1px rgb(65 52 76 / .06); }
+.markPolaroid > span { padding-top: 4px; font: 600 20px/1 var(--font-hand); color: var(--color-dusk); }
+.markFrame { position: relative; display: block; padding: 0; border: 0; background: none; cursor: crosshair; line-height: 0; }
+.markFrame img { display: block; max-width: min(84vw, 860px); max-height: 58vh; width: auto; height: auto; border-radius: 2px; }
+.markFrame i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral), 0 4px 10px rgb(40 24 44 / .45); pointer-events: none; animation: markPop .3s cubic-bezier(.2,.9,.3,1.4) both; }
+.markBtns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.markBtns > button:not(.readBtn) { border: 1px solid rgb(65 52 76 / .25); border-radius: 14px; padding: 8px 14px; background: rgb(255 255 255 / .6); color: var(--color-dusk); font: 700 13px var(--font-sans); cursor: pointer; }
+.markBtns > button:not(.readBtn):hover { background: #fff; border-color: rgb(65 52 76 / .4); }
+@keyframes markVeil { from { opacity: 0; } to { opacity: 1; } }
+@keyframes markPop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .markBackdrop, .markCard, .markFrame i { animation: none; } }
+.readBtn:disabled { opacity: .5; cursor: default; }
 .polaroidPick i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral); }
 .readBtn { border: 0; border-radius: 14px; padding: 9px 16px; font: 700 13px var(--font-sans); color: #3b2a16; background: linear-gradient(180deg, #ffe3a0, #e9c46a); cursor: pointer; box-shadow: 0 8px 18px -8px rgb(160 122 44 / .9); }
 .readBtn:disabled { opacity: .6; }
@@ -374,3 +395,10 @@
 .themeCount { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-plum-soft); margin-top: 1px; }
 /* Previews float; the cloud look must not put them back in the flow. */
 .peek.cloud { position: absolute; }
+
+/* Trend ideas (Dev 4): a search direction, drawn as a climbing line instead of a face */
+.trendDot { display: grid; place-items: center; color: #6f8f4a; border-color: #9fbf7a; background: #f3f8e8; }
+.trendCloud { --cloud: #f3f8e8; --edge: #9fbf7a; }
+.trendMark { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #6f8f4a; font-style: normal; }
+.pickState { display: inline-flex; align-items: center; gap: 3px; }
+.markPolaroid > span { display: inline-flex; align-items: center; gap: 4px; }

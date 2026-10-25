@@ -437,3 +437,46 @@ reliability or platform-wide trends. No new product
 source, AI provider or database is added. The fixed Stripe adapter additionally
 supports canceling a zero-capture manual hold, per current official API docs;
 actual hosted-Checkout hold cancellation remains **unverified live**.
+
+
+### D20 — Explicit contribution simulation for the demo (2026-10-24)
+
+Alex chose a small simulated payment ending rather than further live refunds,
+partial captures or recovery work. Convex stores revision-bound simulation marks
+in a separate `paymentSimulations` table. Current membership, exact own shares
+and full proposal approvals are checked deterministically. Only the organizer
+can mark the demo wrapped after every simulated contribution. A revision or
+approval change invalidates displayed progress. Neither simulation nor animation
+changes Stripe attempts, real funding, proposal approvals or merchant orders.
+The UI displays “Payment simulation” and “No money charged or gift purchased.”
+No external service or secret is added. Existing sandbox primitives remain dormant.
+The reusable box component is integrated by Dev 1 into the new map, with a
+separate labelled local fixture preview for browser review. Actual shared runtime
+acceptance remains pending deployment of the additive schema/functions.
+
+### D21 — Evaluate Bitdeer as a replacement model provider (unverified)
+
+Alex requested testing Model Studio with GLM-5.3-Flash. Dev 4 adds only the
+standalone `scripts/bitdeer-check.mts` candidate-provider spike (documented in
+DEV4_BITDEER_SPIKE.md). It targets the official HTTPS inference endpoint, uses
+synthetic text and generated test images, and requires an explicit `--run` plus
+privately configured key for at most three paid calls with no retries. The
+existing app provider/adapter, deployment and environment files are unchanged.
+Bitdeer is an **unverified alternative**, not an added active LLM service. Dev 3
+must verify API parameters, application schemas, photo behavior and timing before
+switching the existing configurable provider. No new SDK, database or service is
+introduced. Offline fixture checks do not establish live model capability or
+prize eligibility.
+
+
+## Bounded multi-gift box — Alex-authorized integration
+
+Alex requested both single and multiple gifts in the buying flow. Keep one
+Convex selection and one versioned proposal per room; add optional item snapshots
+rather than a second cart/payment engine. One to twelve distinct products, one
+unit each; no optimization, merchant checkout, currency conversion or inferred
+shipping bundling. Allocation and approval operate on the combined estimate.
+Legacy single-gift fields remain first-item compatibility projections. Simulation
+continues to use the approved revision, never a client-calculated amount.
+Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
+rows remain valid without a data migration. No deployment accompanies this change.
