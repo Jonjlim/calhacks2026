@@ -13,7 +13,7 @@ import { requireMember } from "../lib/auth";
 import { insertResearchJob, isResearchJobCurrent } from "../jobs";
 import { err, ok } from "../lib/result";
 import { buildSearchBrief } from "./brief";
-import { normalizeDataset } from "./normalize";
+import { normalizeDataset, providerNotice } from "./normalize";
 import { readCatalog } from "./catalog";
 import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
@@ -209,8 +209,14 @@ export const completeJob = internalMutation({
     const listings = normalizeDataset(args.raw, args.retrievedAt);
     const query = job.brief?.queryTerms[0] ?? "gifts";
     if (!listings.length) {
-      await ctx.db.patch(job._id, { status: "failed", lastError: "No usable product listings were returned." });
-      await logSearch(ctx, job, "rejected", `Searched Google Shopping for “${query}”, but no listing had a source, a US price and a retrieval time, so none were kept.`);
+      // A source that answers with a notice (a usage limit, a block) says so, instead of "nothing found".
+      const notice = providerNotice(args.raw);
+      await ctx.db.patch(job._id, { status: "failed", lastError: notice
+        ? `The shopping source sent a notice instead of products: “${notice}”`
+        : "No usable product listings were returned." });
+      await logSearch(ctx, job, "rejected", notice
+        ? `Searched Google Shopping for “${query}”, but the source answered with a notice instead of products: “${notice}”`
+        : `Searched Google Shopping for “${query}”, but no listing had a source, a US price and a retrieval time, so none were kept.`);
       await enqueueResearchContinuation(ctx, job._id);
       return null;
     }
@@ -220,7 +226,8 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
-    const raw = Array.isArray(args.raw) ? args.raw.reduce((n: number, page: { shopping_results?: unknown[] }) => n + (page?.shopping_results?.length ?? 0), 0) : 0;
+    // Earlier pages hold many products; the current source sends one product per row (D24).
+    const raw = Array.isArray(args.raw) ? args.raw.reduce((n: number, item: { shopping_results?: unknown[] }) => n + (Array.isArray(item?.shopping_results) ? item.shopping_results.length : 1), 0) : 0;
     await logSearch(ctx, job, "kept", `Searched Google Shopping for “${query}”: ${raw || listings.length} results came back and ${Math.min(listings.length, 60)} had a source link, a US price and a retrieval time.${raw > listings.length ? ` ${raw - listings.length} were dropped as incomplete or repeated.` : ""}`);
     await enqueueResearchContinuation(ctx, job._id);
     return null;

@@ -242,7 +242,7 @@ describe("persisted live fashion discovery", () => {
     await s.t.action(internal.research.research.runResearch, shopping);
     const writes = fetcher.mock.calls.filter(([, options]) => options?.method === "POST");
     expect(writes).toHaveLength(2); // One social source run, one existing shopping source run.
-    expect(JSON.parse(String(writes[1]?.[1]?.body))).toMatchObject({ q: "vintage loose fit jeans", max_price: 80 });
+    expect(JSON.parse(String(writes[1]?.[1]?.body))).toMatchObject({ queries: ["vintage loose fit jeans"], maxPrice: 80 });
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 });
