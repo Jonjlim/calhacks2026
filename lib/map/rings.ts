@@ -13,7 +13,7 @@ export type RingTheme = "interest" | "wish" | "moment";
 export const RING_THEMES: Record<RingTheme, { label: string; angle: number }> = {
   // Loves at the top, Wishes lower right, Moments lower left: clear of the room's corner controls.
   interest: { label: "Loves", angle: 255 },
-  wish: { label: "Wishes", angle: 22 },
+  wish: { label: "Wishes", angle: 38 },
   moment: { label: "Moments", angle: 140 },
 };
 

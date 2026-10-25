@@ -63,6 +63,8 @@ Rules:
 - Sharpen directions behave like sprouts: labelled agent ideas until research returns sourced listings for them.
 - Errors: `unauthorized`, `not_found`, `validation_failed`, `stale_job`, `refused`.
 
+Interim (built in the live map, 2026-10-24): a friend's typed **gift idea** is stored as a manual published clue of kind `interest` whose text starts with `Gift idea: ` (`GIFT_IDEA_PREFIX` in `lib/map/rings.ts`). The map shows these on the inner ring and research can use them immediately. MAP-021 replaces the prefix with a proper `gift_idea` clue kind; until then, do not rely on the prefix outside the map.
+
 Migration: additive tables for themes and signals. Existing `map.*`, `castVote`, `setFeedback`, cursor, and proposal functions keep their endpoints. `moveNode` and the arrange view leave the main path and can be removed after MAP-018.
 
 ### Shared memory tree integration (Dev 3 / Dev 1, October 24)
