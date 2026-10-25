@@ -699,7 +699,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openT?.theme, openT?.x, openT?.z, rings.clues.map((c) => c.key + c.theme).join()],
   );
-  const open = (c: RingsWorld["clues"][number]) => close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
+  // A memory no theme holds yet floats on its own and is always shown; grouped ones rest on their theme until opened.
+  const open = (c: RingsWorld["clues"][number]) => !c.theme || close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
   /** Where a node is drawn right now, for threads that join nodes (the weave). */
   const anchorOf = (key: string): [number, number] | null => {
     const c = rings.clues.find((x) => x.key === key);

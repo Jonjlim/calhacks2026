@@ -10,7 +10,7 @@
 import { v } from "convex/values";
 import { z } from "zod";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { action, internalMutation, internalQuery, mutation, query } from "../_generated/server";
+import { action, internalAction, internalMutation, internalQuery, mutation, query } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internal } from "../_generated/api";
 import type { Result } from "../../lib/contracts";
@@ -18,6 +18,7 @@ import { requireMember } from "../lib/auth";
 import { cleanText, LIMITS } from "../lib/input";
 import { bumpKnowledgeRevision } from "../lib/knowledge";
 import { logTrail } from "../lib/trail";
+import { matchThemes } from "./themeMatching";
 import { err, memberError, ok } from "../lib/result";
 import { BASE_INSTRUCTIONS, containsSensitiveData } from "./engine";
 import { IDEA_CALLS_PER_WINDOW } from "./ideas";
@@ -90,13 +91,22 @@ export const storeThemes = internalMutation({
       if (ids.length) valid.push({ label, clueIds: ids });
     }
     if (!valid.length) return { stored: 0, stale: false };
+    // Regroup without reshuffling: a theme that keeps most of its memories keeps its id, island and votes (D23 trial).
     const old = await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).collect();
-    for (const row of old) await ctx.db.delete(row._id);
+    const plan = matchThemes(old.map((r) => ({ id: r._id, label: r.label, clueIds: r.clueIds })), valid);
     const now = Date.now();
-    for (const theme of valid) await ctx.db.insert("mapThemes", { roomId: args.roomId, ...theme, source: args.source, knowledgeRevision: args.knowledgeRevision, createdAt: now });
-    return { stored: valid.length, stale: false };
+    for (const k of plan.keep) await ctx.db.patch(k.id, { label: k.label, clueIds: k.clueIds as Id<"publishedClues">[], source: args.source, knowledgeRevision: args.knowledgeRevision });
+    for (const id of plan.drop) await ctx.db.delete(id);
+    for (const theme of plan.add) await ctx.db.insert("mapThemes", { roomId: args.roomId, label: theme.label, clueIds: theme.clueIds as Id<"publishedClues">[], source: args.source, knowledgeRevision: args.knowledgeRevision, createdAt: now });
+    if (plan.changed) await logTrail(ctx, args.roomId, { stage: "memories", actor: "council", outcome: "info",
+      text: `Regrouped ${valid.reduce((n, th) => n + th.clueIds.length, 0)} memories into ${valid.length} ${valid.length === 1 ? "theme" : "themes"}: ${valid.map((th) => `“${th.label}”`).join(", ")}.` });
+    return { stored: valid.length, stale: false, changed: plan.changed };
   },
 });
+
+const THEME_INSTRUCTIONS = `\nFriends shared memories about {name} to choose a gift together. Group the numbered memories into 2-${MAX_THEMES} themes that a gift could speak to. A theme label is 2-5 plain words naming what its memories share (for example "Makes things with her hands", "Slow, cozy mornings"). Each memory belongs to at most one theme; skip memories that fit nowhere. Use only the memory numbers given. Never infer health, religion, politics, sexuality, age, body or other sensitive traits. No brands, prices or links. Return JSON {"themes":[{"label":"...","clues":[0,2]}]}.`;
+/** Themes regroup on their own as memories arrive, so a regroup builds on what friends already see. */
+const KEEP_INSTRUCTIONS = `\nThe friends already see the themes in "currentThemes". Keep each one, with the same label, while its memories still fit it; put new memories in the theme they fit best. Only rename, split, merge or add a theme when the memories clearly call for it.`;
 
 const themesSchema = z.strictObject({
   themes: z.array(z.strictObject({ label: z.string().trim().min(2).max(40), clues: z.array(z.number().int().min(0)).min(1).max(30) })).min(2).max(MAX_THEMES),
@@ -130,9 +140,7 @@ export const suggestThemes = action({
           configuredModel(),
           {
             role: "extractor",
-            instructions:
-              BASE_INSTRUCTIONS +
-              `\nFriends shared memories about {name} to choose a gift together. Group the numbered memories into 2-${MAX_THEMES} themes that a gift could speak to. A theme label is 2-5 plain words naming what its memories share (for example "Makes things with her hands", "Slow, cozy mornings"). Each memory belongs to at most one theme; skip memories that fit nowhere. Use only the memory numbers given. Never infer health, religion, politics, sexuality, age, body or other sensitive traits. No brands, prices or links. Return JSON {"themes":[{"label":"...","clues":[0,2]}]}.`,
+            instructions: BASE_INSTRUCTIONS + THEME_INSTRUCTIONS,
             input: { recipient: "{name}", memories: room.clues.map((c, n) => ({ n, kind: c.kind, text: c.text })) },
           },
           themesSchema,
@@ -149,6 +157,76 @@ export const suggestThemes = action({
     const stored = await ctx.runMutation(internal.agents.themes.storeThemes, { roomId, knowledgeRevision: room.knowledgeRevision, source, themes });
     if (stored.stale) return err("stale_job", "Memories changed while the council was thinking. Try again.");
     return ok({ themes: stored.stored, source });
+  },
+});
+
+// ---------- Themes that form on their own (D23 trial) ----------
+
+export const autoThemeContext = internalQuery({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const room = await ctx.db.get(roomId);
+    if (!room || room.deletedAt) return null;
+    const clues = (await ctx.db.query("publishedClues").withIndex("by_room", (q) => q.eq("roomId", roomId)).collect())
+      .filter((c) => c.status === "active" && !c.text.startsWith(GIFT_IDEA_PREFIX)).slice(-60);
+    const index = new Map(clues.map((c, n) => [c._id as string, n]));
+    const themes = await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(MAX_THEMES * 2);
+    const recent = await ctx.db.query("ideaCalls").withIndex("by_room", (q) => q.eq("roomId", roomId).gte("createdAt", Date.now() - WINDOW_MS)).take(IDEA_CALLS_PER_WINDOW + 1);
+    return {
+      recipient: room.recipientDisplayName,
+      knowledgeRevision: room.knowledgeRevision,
+      clues: clues.map((c) => ({ id: c._id, kind: c.kind, text: c.text })),
+      currentThemes: themes.map((th) => ({ label: th.label, memories: th.clueIds.flatMap((id) => (index.has(id) ? [index.get(id)!] : [])) })).filter((th) => th.memories.length),
+      overBudget: recent.length >= IDEA_CALLS_PER_WINDOW,
+    };
+  },
+});
+
+/** Too few memories to group: they float on their own again. */
+export const clearThemes = internalMutation({
+  args: { roomId: v.id("rooms"), knowledgeRevision: v.number() },
+  handler: async (ctx, { roomId, knowledgeRevision }) => {
+    const room = await ctx.db.get(roomId);
+    if (!room || room.knowledgeRevision !== knowledgeRevision) return;
+    for (const row of await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", roomId)).collect()) await ctx.db.delete(row._id);
+  },
+});
+
+/**
+ * Regroups the room's memories into themes on its own, a few seconds after they
+ * change (scheduled by bumpKnowledgeRevision). A newer change schedules its own
+ * run, so this one gives way. Without a model or budget the current themes stay
+ * as they are; memories are never sorted into kind buckets.
+ */
+export const autoRegroup = internalAction({
+  args: { roomId: v.id("rooms"), revision: v.number() },
+  handler: async (ctx, { roomId, revision }): Promise<null> => {
+    const room = await ctx.runQuery(internal.agents.themes.autoThemeContext, { roomId });
+    if (!room || room.knowledgeRevision !== revision) return null;
+    if (room.clues.length < MIN_CLUES_FOR_THEMES) {
+      await ctx.runMutation(internal.agents.themes.clearThemes, { roomId, knowledgeRevision: revision });
+      return null;
+    }
+    if (room.overBudget || !process.env.LLM_API_KEY) return null;
+    await ctx.runMutation(internal.agents.ideas.recordIdeaCall, { roomId });
+    try {
+      const result = await validatedModelCall(configuredModel(), {
+        role: "extractor",
+        instructions: BASE_INSTRUCTIONS + THEME_INSTRUCTIONS + (room.currentThemes.length ? KEEP_INSTRUCTIONS : ""),
+        input: {
+          recipient: "{name}",
+          memories: room.clues.map((c, n) => ({ n, kind: c.kind, text: c.text })),
+          ...(room.currentThemes.length ? { currentThemes: room.currentThemes } : {}),
+        },
+      }, themesSchema);
+      const themes = result.themes.map((th) => ({ label: th.label.replaceAll("{name}", room.recipient), clueIds: th.clues.map((n) => room.clues[n]?.id).filter((id): id is Id<"publishedClues"> => !!id) }));
+      if (themes.filter((th) => th.clueIds.length).length >= 2) {
+        await ctx.runMutation(internal.agents.themes.storeThemes, { roomId, knowledgeRevision: revision, source: "agent", themes });
+      }
+    } catch {
+      // The current themes stay; the next memory change tries again.
+    }
+    return null;
   },
 });
 

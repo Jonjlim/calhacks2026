@@ -1991,3 +1991,11 @@ existing proposal recomputation/approval invalidation. `setGiftBox` remains full
 replacement; `selectGift` remains legacy replace-with-one. The live map now uses
 add/remove, presents Add to box as a primary action and renders every item and
 the combined proposal estimate. Votes never select gifts or approve a proposal.
+
+#### Themes that form on their own (D23 trial)
+
+- **No kind buckets.** Until the council groups them, memories float individually on the outer ring (`lib/map/rings.ts`: theme `UNGROUPED = ""`, steady golden-angle seats). The Loves / Wishes / Moments jar buckets and the "Also shared" catch-all are gone from the map; a memory no theme holds yet floats until the next regroup.
+- **Automatic regroup.** `bumpKnowledgeRevision` schedules `internal.agents.themes.autoRegroup({ roomId, revision })` `AUTO_THEME_DELAY_MS` (5 s) later. A run whose revision is no longer current gives way, so a burst of changes regroups once. Fewer than 3 memories clears the themes; without a model or within-budget call (`IDEA_CALLS_PER_WINDOW`) the current themes stay unchanged. The model is shown the current themes and asked to keep them unless the memories clearly call for a change.
+- **Stable identity.** `storeThemes` reconciles instead of replacing: `matchThemes` pairs each new grouping with the existing theme it shares at least a third of its memories with (strongest first), keeping that `mapThemes._id` (and so its island, position and votes); unmatched themes are added or removed. A "Regrouped N memories into K themes" line is logged only when something changed.
+- The manual `suggestThemes` action remains for compatibility, but the map no longer shows a grouping button.
+

@@ -541,7 +541,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const trendSample = (data.trends?.samples ?? []).find((sample) => sample.publishedClueId === clue.id);
     const trendNote = trendSample ? emptyTrendNote(trendSample) : null;
     return {
-      caption: <><b>“{clue.text}”</b><small>{twinAuthor ? `${twinAuthor} · AI insight` : `${name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory`} · in {themeLabel(theme)}</small>{trendNote && <small>{trendNote}</small>}</>,
+      caption: <><b>“{clue.text}”</b><small>{twinAuthor ? `${twinAuthor} · AI insight` : `${name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory`} · {theme ? <>in {themeLabel(theme)}</> : "the council will group it soon"}</small>{trendNote && <small>{trendNote}</small>}</>,
       // Trend discovery runs when directions are requested, not once per memory.
       actions: [
         ...voteActs("clue", clue.id),
@@ -570,7 +570,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       void run(() => actions.importEvidence("Pasted on the map", text), "Reading your paste privately. Review the clues it finds before anything is shared.").then((ok) => { done(ok); if (ok) onPaste(); });
       return;
     }
-    void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
+    void run(() => actions.addManualClue(composer.kind, text), "Shared with the room. The council will fold it into a theme in a moment.").then(done);
     if (composer.kind === "explicit_wish") playSfx("wish");
   };
   const composerNode = composer && actions && (
@@ -791,7 +791,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
 
   const councilActs: RingAction[] = actions ? [
     ...(actions.proposeDirections ? [{ icon: "spark" as const, label: thinking ? "Combining…" : directions.length ? "New directions" : "Combine into directions", disabled: !!pending || clues.length < 2, run: proposeDirections }] : []),
-    { icon: "gather", label: pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes", disabled: !!pending || clues.length < 3, run: () => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes") },
+    // Themes form on their own as memories change (D23 trial); there is no grouping button.
     ...(isOrganizer && !actions.proposeDirections ? [{ icon: "sprout" as const, label: searching ? "Searching…" : recs.length ? "Find more gifts" : "Find gifts", disabled: !!pending || searching || !allClueIds.length, run: () => startSearch("box") }] : []),
     { icon: "scales", label: pending === "sharpen" ? "Thinking…" : "Help us choose", disabled: !!pending || recs.length < 2 || sharpenOpen, run: () => void run(() => actions.sharpen(), "The council has one question for you.", "sharpen") },
     ...(data.trail ? [{ icon: "thread" as const, label: "How we got here", disabled: !data.trail.length, run: () => setStory({}) }] : []),
@@ -804,7 +804,6 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     else if (clues.length < 2 && actions.proposeDirections) nextStep = { icon: "cloud", label: "Share one more memory, then the council can combine them" };
     else if (!directions.length && actions.proposeDirections) nextStep = { icon: "spark", label: thinking ? "Combining…" : `Combine ${clues.length} memories into gift directions`, disabled: !!pending, run: proposeDirections };
     else if (directions.length && !recs.length && !searching) nextStep = { icon: "sprout", label: isOrganizer ? "Open a direction and find gifts for it" : "The organizer finds gifts for a direction next" };
-    else if (clues.length >= 3 && !councilThemes.length) nextStep = { ...act("Group into themes")!, label: pending === "themes" ? "Grouping…" : `Group ${clues.length} memories into themes` };
     else if (!recs.length && isOrganizer && !searching) nextStep = { ...act("Find gifts")!, label: "Find gifts from these memories" };
     else if (!recs.length && !isOrganizer && !searching) nextStep = { icon: "sprout", label: "The organizer finds gifts next" };
     else if (recs.length >= 2 && !sharpenOpen) nextStep = { ...act("Help us choose")!, label: pending === "sharpen" ? "Thinking…" : "Can’t decide? Ask one question" };

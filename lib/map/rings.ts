@@ -85,7 +85,7 @@ export interface RingThemeInput {
 }
 
 export interface RingLayoutOptions {
-  /** Council themes (MAP-008). Without them, clues group by kind like the tower's jars. */
+  /** Council themes (MAP-008). Memories no theme holds yet float on their own (D23 trial: no kind buckets). */
   themes?: readonly RingThemeInput[];
   /** Net pull per clue or theme id: positive is toward the present (MAP-012). */
   signals?: { clue?: Readonly<Record<string, number>>; theme?: Readonly<Record<string, number>> };
@@ -99,6 +99,10 @@ export interface RingLayout {
 
 /** Id of the theme that collects clues no council theme picked up. */
 export const OTHER_THEME = "other";
+/** A memory no theme holds yet: it floats on its own until the council's next regroup (D23 trial). */
+export const UNGROUPED = "";
+/** Spacing for floating memories: each new one takes the next seat, so earlier ones never move. */
+const GOLDEN_ANGLE = 137.508;
 
 export function layoutRings(clues: readonly RingClueInput[], gifts: readonly RingGiftInput[], options: RingLayoutOptions = {}): RingLayout {
   const pullClue = (id: string) => clamp(options.signals?.clue?.[id] ?? 0, -2, 2);
@@ -108,20 +112,14 @@ export function layoutRings(clues: readonly RingClueInput[], gifts: readonly Rin
   const themeOf = new Map<string, string>();
   const themeInfo: { id: string; label: string; angle: number; bucket: RingTheme | null }[] = [];
   const council = (options.themes ?? []).filter((t) => t.clueIds.length);
+  // Memories show as they are until the council groups them; themes form on their own (D23 trial).
   if (council.length) {
     const visible = new Set(clues.map((c) => c.id));
     for (const t of council) for (const id of t.clueIds) if (visible.has(id) && !themeOf.has(id)) themeOf.set(id, t.id);
     const used = council.filter((t) => t.clueIds.some((id) => themeOf.get(id) === t.id));
-    const leftovers = clues.some((c) => !themeOf.has(c.id));
-    const all = [...used.map((t) => ({ id: t.id, label: t.label })), ...(leftovers ? [{ id: OTHER_THEME, label: "Also shared" }] : [])];
-    all.forEach((t, i) => themeInfo.push({ ...t, angle: (255 + (i * 360) / all.length) % 360, bucket: null }));
-    for (const c of clues) if (!themeOf.has(c.id)) themeOf.set(c.id, OTHER_THEME);
-  } else {
-    for (const c of clues) themeOf.set(c.id, themeForKind(c.kind));
-    for (const bucket of ["interest", "wish", "moment"] as const) {
-      if (clues.some((c) => themeOf.get(c.id) === bucket)) themeInfo.push({ id: bucket, label: RING_THEMES[bucket].label, angle: RING_THEMES[bucket].angle, bucket });
-    }
+    used.forEach((t, i) => themeInfo.push({ id: t.id, label: t.label, angle: (255 + (i * 360) / used.length) % 360, bucket: null }));
   }
+  for (const c of clues) if (!themeOf.has(c.id)) themeOf.set(c.id, UNGROUPED);
   const angleOf = new Map(themeInfo.map((t) => [t.id, t.angle]));
 
   const outClues: RingLayout["clues"] = [];
@@ -140,6 +138,12 @@ export function layoutRings(clues: readonly RingClueInput[], gifts: readonly Rin
     const [x, z] = ringPoint(t.angle, RING_RADII.theme - pullTheme(t.id) * 0.7);
     outThemes.push({ id: t.id, label: t.label, count: list.length, angle: t.angle, x, z, bucket: t.bucket });
   }
+
+  // Floating memories: steady seats spread round the outer ring, a little in and out so they read as separate.
+  clues.filter((c) => themeOf.get(c.id) === UNGROUPED).forEach((clue, i) => {
+    const [x, z] = ringPoint(255 + i * GOLDEN_ANGLE, RING_RADII.input + (i % 2 ? 1 : -0.4) - pullClue(clue.id) * 0.8);
+    outClues.push({ id: clue.id, theme: UNGROUPED, x, z });
+  });
 
   const usedAngles = new Map<number, number>();
   const outGifts = gifts.map((gift, index) => {

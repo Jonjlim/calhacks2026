@@ -25,6 +25,7 @@ import type * as agents_runtime from "../agents/runtime.js";
 import type * as agents_screenshot from "../agents/screenshot.js";
 import type * as agents_smoke from "../agents/smoke.js";
 import type * as agents_stats from "../agents/stats.js";
+import type * as agents_themeMatching from "../agents/themeMatching.js";
 import type * as agents_themes from "../agents/themes.js";
 import type * as agents_verify from "../agents/verify.js";
 import type * as allocations from "../allocations.js";
@@ -130,6 +131,7 @@ declare const fullApi: ApiFromModules<{
   "agents/screenshot": typeof agents_screenshot;
   "agents/smoke": typeof agents_smoke;
   "agents/stats": typeof agents_stats;
+  "agents/themeMatching": typeof agents_themeMatching;
   "agents/themes": typeof agents_themes;
   "agents/verify": typeof agents_verify;
   allocations: typeof allocations;
