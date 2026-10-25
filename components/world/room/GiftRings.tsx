@@ -16,6 +16,8 @@ import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
+import { PledgeRing, type PledgeWorld } from "./PledgeRing";
+import { platformTop } from "../props/Stonework";
 import s from "./gift-rings.module.css";
 
 /**
@@ -35,13 +37,30 @@ export interface RingAction {
 }
 
 export interface RingsWorld {
-  clues: { key: string; text: string; author: string; avatar: AvatarId; theme: RingTheme; x: number; z: number }[];
-  themes: { key: string; theme: RingTheme; label: string; count: number; x: number; z: number }[];
+  clues: { key: string; text: string; author: string; avatar: AvatarId; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
+  /** Photos members added, shared with the whole room (D20). The uploader also sees what the private read found. */
+  photos?: { key: string; images: string[]; author: string; mine: boolean; found: number; reading: boolean; x: number; z: number }[];
+  /** Council themes, or the three clue groups until the council has grouped them. */
+  themes: { key: string; theme: string; label: string; count: number; x: number; z: number; tint: string; jar: RingTheme }[];
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
   ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; /** Replaces the "gift idea" caption, e.g. for sourced trend suggestions. */ tag?: string; /** Shown smaller and quieter, e.g. after someone passed. */ faded?: boolean }[];
-  gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: RingTheme[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean }[];
+  gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean }[];
+  /** Votes on memories and themes, by node key. */
+  votes?: Readonly<Record<string, { up: number; down: number }>>;
+  /** Another member just voted on this node: a short bubble with their name. */
+  pulses?: Readonly<Record<string, { name: string; value: number; color: string }>>;
+  /** Other members' pointers on the map plane. */
+  cursors?: { key: string; name: string; color: string; x: number; z: number }[];
+  /** A card floating over the rings, such as the sharpen question. */
+  overlay?: ReactNode | null;
+  /** The viewer's pointer on the map plane, for their own live cursor. */
+  onPointer?(x: number, z: number): void;
   selectedListingId?: string;
   boxLabel: string;
+  /** Everyone's share of the current revision, drawn above the present. */
+  pledge?: PledgeWorld | null;
+  /** Shares, limits and approvals, opened beside the present when the box is selected. */
+  boxPanel?: ReactNode | null;
   selectedKey: string | null;
   /** “Why this?”: keys on the path to the chosen gift. Everything else dims. */
   highlight?: ReadonlySet<string> | null;
@@ -53,8 +72,6 @@ export interface RingsWorld {
   actionsFor(key: string): { caption: ReactNode; actions: RingAction[] } | null;
 }
 
-const JAR_OF: Record<RingTheme, "interest" | "wish" | "moment"> = { interest: "interest", wish: "wish", moment: "moment" };
-const THEME_TINT: Record<RingTheme, string> = { interest: "#a9cde6", wish: "#f2d27a", moment: "#f3b9c4" };
 const SHAPES: Record<"clue" | "theme" | "gift", IslandShape> = {
   clue: { seed: 303, radius: 1.35, stretch: 1.12, depth: 2.2, hilliness: 0.3 },
   theme: { seed: 317, radius: 2.1, stretch: 1.1, depth: 3.1, hilliness: 0.25 },
@@ -161,6 +178,8 @@ function RingIsland({ at, kind, delay, animate, muted, children }: { at: THREE.V
 function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; label: string; offset: [number, number, number]; dim: boolean }) {
   const selected = rings.selectedKey === k;
   const info = selected ? rings.actionsFor(k) : null;
+  const votes = rings.votes?.[k];
+  const pulse = rings.pulses?.[k];
   return (
     <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
       <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
@@ -170,6 +189,13 @@ function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; 
           onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
           {face}
         </button>
+        {votes && (votes.up > 0 || votes.down > 0) && (
+          <span className={s.voteChips} aria-label={`${votes.up} feel it, ${votes.down} not really`}>
+            {votes.up > 0 && <i className={s.yes}>♥ {votes.up}</i>}
+            {votes.down > 0 && <i className={s.pass}>✕ {votes.down}</i>}
+          </span>
+        )}
+        {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
         {info && <p className={s.caption}>{info.caption}</p>}
         {info && info.actions.length > 0 && (
           <div className={s.actions}>
@@ -294,6 +320,25 @@ function useMapNavigation(center: THREE.Vector3) {
   };
 }
 
+/** A friend's pointer on the map: glides to each update so it moves smoothly between the few updates a second. */
+function RemoteCursor({ at, name, color, animate }: { at: THREE.Vector3; name: string; color: string; animate: boolean }) {
+  const group = useRef<THREE.Group>(null);
+  const start = useMemo(() => at.clone(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useFrame((_, dt) => {
+    if (group.current) group.current.position.lerp(at, animate ? 1 - Math.exp(-Math.min(dt, 0.1) * 10) : 1);
+  });
+  return (
+    <group ref={group} position={start}>
+      <Html zIndexRange={[85, 80]} style={{ pointerEvents: "none" }}>
+        <span className={s.remoteCursor} style={{ ["--who" as string]: color }}>
+          <svg viewBox="0 0 20 22"><path d="M2 2l15 8-6.5 1.8L7.5 19z" /></svg>
+          <b>{name}</b>
+        </span>
+      </Html>
+    </group>
+  );
+}
+
 /** Faint filled bands for each zone; the one under the pointer glows a little. */
 function ZoneBands({ center, hover }: { center: THREE.Vector3; hover: RingZone | null }) {
   const bands: [RingZone, number, number, string][] = [
@@ -328,6 +373,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const hover = (e: ThreeEvent<PointerEvent>) => {
     const next = zoneOf(e);
     if (next !== zone) setZone(next);
+    rings.onPointer?.(e.point.x - center.x, e.point.z - center.z);
     if (mapCursor.mode !== "pan" && mapCursor.mode !== "drag") mapCursor.set(modeFor(next));
   };
   const place = (key: string, x: number, z: number): [number, number] => (drag.preview?.key === key ? [drag.preview.x, drag.preview.z] : [x, z]);
@@ -365,13 +411,13 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const t = themeAt.get(c.theme);
         return (
           <group key={c.key}>
-            {t && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : THEME_TINT[c.theme]} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
+            {t && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
             <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)}>
               <Suspense fallback={null}>
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
               </Suspense>
               <Token k={c.key} rings={rings} from={[c.x, c.z]} drag={drag} dim={dim(c.key)} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory`}
-                face={<span className={s.bubble} style={{ ["--c" as string]: THEME_TINT[c.theme] }}><img src={portraitUrl(c.avatar)} alt="" /><q>{c.text}</q></span>} />
+                face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q>{c.fromPhoto && <i className={s.photoBadge} title="From a photo, read privately">📷</i>}</span>} />
             </RingIsland>
           </group>
         );
@@ -381,9 +427,9 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const [x, z] = place(t.key, t.x, t.z);
         return (
           <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)}>
-            <Jar kind={JAR_OF[t.theme]} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
+            <Jar kind={t.jar} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
             <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} offset={[0, -0.8, 3]} label={`${t.label} theme`}
-              face={<span className={s.theme} style={{ ["--c" as string]: THEME_TINT[t.theme] }}><b>{t.label}</b><small>{t.count} shared</small></span>} />
+              face={<span className={s.theme} style={{ ["--c" as string]: t.tint }}><b>{t.label}</b><small>{t.count} shared</small></span>} />
           </RingIsland>
         );
       })}
@@ -397,13 +443,20 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
               return t ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
             })}
             {rings.selectedListingId === g.listingId && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
-            <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key)}>
+            <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
-                face={<span className={s.gift}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
+                face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
             </RingIsland>
           </group>
         );
       })}
+
+      {(rings.photos ?? []).map((ph, i) => (
+        <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate}>
+          <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label={`${ph.author}'s photo`}
+            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden>📷</i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
+        </RingIsland>
+      ))}
 
       {rings.ideas.map((idea, i) => (
         <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key) || idea.faded}>
@@ -416,6 +469,20 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         <Token k="box" rings={rings} from={[0, 0]} drag={{ ...drag, begin: () => undefined }} dim={dim("box")} offset={[0, 1.2, 9]} label="Our gift box"
           face={<span className={s.box}>🎁 <b>{rings.boxLabel}</b></span>} />
       </group>
+
+      {rings.pledge && <PledgeRing pledge={rings.pledge} animate={animate} />}
+      {rings.selectedKey === "box" && rings.boxPanel && (
+        <Html position={[GIFT_SPOT.x + 4.4, platformTop() + 1.6, GIFT_SPOT.z]} zIndexRange={[75, 65]}>
+          <div className={s.boxAnchor} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>{rings.boxPanel}</div>
+        </Html>
+      )}
+
+      {rings.overlay && (
+        <Html position={world(0, -RING_RADII.theme - 1, 4)} center zIndexRange={[78, 70]}>
+          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>{rings.overlay}</div>
+        </Html>
+      )}
+      {(rings.cursors ?? []).map((c) => <RemoteCursor key={c.key} at={world(c.x, c.z, 0.6)} name={c.name} color={c.color} animate={animate} />)}
 
       {rings.composer && (
         <Html position={world(rings.composer.x, rings.composer.z, 1)} center zIndexRange={[70, 60]}>

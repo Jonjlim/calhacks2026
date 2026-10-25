@@ -370,7 +370,7 @@ export default defineSchema({
     participantId: v.id("participants"),
     x: v.number(),
     y: v.number(),
-    space: v.optional(v.union(v.literal("sky"), v.literal("diagram"))),
+    space: v.optional(v.union(v.literal("sky"), v.literal("diagram"), v.literal("rings"))),
     updatedAt: v.number(),
   }).index("by_room_participant", ["roomId", "participantId"]),
 
@@ -401,6 +401,54 @@ export default defineSchema({
   /** One row per agent idea suggestion, for the per-room rate limit. No content is stored. */
   ideaCalls: defineTable({
     roomId: v.id("rooms"),
+    createdAt: v.number(),
+  }).index("by_room", ["roomId", "createdAt"]),
+
+  /** Photos a member added on the gift map, shared with the whole room (D20). Separate from private evidence media. */
+  roomPhotos: defineTable({
+    roomId: v.id("rooms"),
+    uploaderId: v.id("participants"),
+    storageId: v.id("_storage"),
+    sourceId: v.optional(v.id("evidenceSources")),
+    createdAt: v.number(),
+  })
+    .index("by_room", ["roomId", "createdAt"])
+    .index("by_storage", ["storageId"]),
+
+  /** Pull toward the present (+1) or push away (−1) on a memory or theme (D19). One per member per target; advisory only. */
+  mapSignals: defineTable({
+    roomId: v.id("rooms"),
+    participantId: v.id("participants"),
+    targetKind: v.union(v.literal("clue"), v.literal("theme")),
+    targetId: v.string(),
+    value: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_member_target", ["roomId", "participantId", "targetKind", "targetId"]),
+
+  /** Themes the council suggests to group published clues (D19). Interpretations, never room knowledge. */
+  mapThemes: defineTable({
+    roomId: v.id("rooms"),
+    label: v.string(),
+    clueIds: v.array(v.id("publishedClues")),
+    source: v.union(v.literal("agent"), v.literal("preset")),
+    knowledgeRevision: v.number(),
+    createdAt: v.number(),
+  }).index("by_room", ["roomId"]),
+
+  /** One sharpen round: a single question that splits the finalists (D19). Answering publishes the chosen clue as the answering member. */
+  mapSharpens: defineTable({
+    roomId: v.id("rooms"),
+    question: v.string(),
+    options: v.array(v.object({ label: v.string(), clue: v.string(), listingIds: v.array(v.id("productListings")) })),
+    finalistIds: v.array(v.id("productListings")),
+    source: v.union(v.literal("agent"), v.literal("preset")),
+    askedBy: v.id("participants"),
+    status: v.union(v.literal("open"), v.literal("answered"), v.literal("dismissed")),
+    answer: v.optional(v.number()),
+    answeredBy: v.optional(v.id("participants")),
+    knowledgeRevision: v.number(),
     createdAt: v.number(),
   }).index("by_room", ["roomId", "createdAt"]),
 

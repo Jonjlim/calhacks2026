@@ -46,6 +46,13 @@ export interface RoomData {
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
   /** Latest sourced Google Trends suggestions for one memory, and listings found from them. */
   trends?: TrendDiscoveryView;
+  /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
+  mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
+  mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
+  sharpen?: OkValue<FunctionReturnType<typeof api.agents.themes.getSharpen>>;
+  cursors?: OkValue<FunctionReturnType<typeof api.map.listCursors>>;
+  /** Photos members added on the map, shared with the whole room (D20). */
+  roomPhotos?: OkValue<FunctionReturnType<typeof api.photos.listRoomPhotos>>;
 }
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
@@ -80,4 +87,15 @@ export interface RoomActions {
   researchTrend?: Run<[trendJobId: string, query: string, publishedClueIds: string[]]>;
   /** Shared, attributed "doesn't fit" on a trend idea; `false` takes it back. */
   passTrend?: Run<[trendJobId: string, query: string, passed: boolean]>;
+  /** Pull a memory or theme toward the present (1), push it away (−1), or take the signal back (0). */
+  setDirection: Run<[targetKind: "clue" | "theme", targetId: string, value: 1 | -1 | 0]>;
+  suggestThemes: Run;
+  sharpen: Run;
+  answerSharpen: Run<[sharpenId: string, option: number]>;
+  dismissSharpen: Run<[sharpenId: string]>;
+  /** Adds 1–3 photos: a copy shared with the room, and a private copy read once for clues (with the uploader's tap on the recipient). */
+  importPhotos: Run<[items: { blob: Blob; marker?: { x: number; y: number } }[]]>;
+  deletePhoto: Run<[photoId: string]>;
+  /** Shares this viewer's pointer on the map plane; fire and forget. */
+  moveCursor: Run<[x: number, z: number]>;
 }
