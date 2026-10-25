@@ -2,6 +2,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { isLiveRoom } from "../lib/auth";
+import { internal } from "../_generated/api";
 import {
   TWIN_LIMITS,
   type AgentCollaboratorPostView,
@@ -17,6 +18,23 @@ export function giftTwinEnabled(): boolean {
 
 export function modelConfigured(): boolean {
   return Boolean(process.env.LLM_BASE_URL && process.env.LLM_API_KEY && process.env.LLM_MODEL);
+}
+
+export function mossConfigured(): boolean {
+  return process.env.GIFT_TWIN_MOSS_ENABLED === "true" &&
+    Boolean(process.env.MOSS_PROJECT_ID && process.env.MOSS_PROJECT_KEY);
+}
+
+/** Wake without creating another polling loop. The claim mutation dedupes bursts. */
+export async function enqueueTwinCheck(ctx: MutationCtx, roomId: Id<"rooms">) {
+  const twins = await ctx.db.query("agentCollaborators").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(20);
+  for (const twin of twins) {
+    if (twin.kind !== "gift_twin" || twin.status !== "active" || twin.vaultStatus !== "ready" ||
+      !twin.vaultUploadId || (twin.vaultExpiresAt ?? 0) <= Date.now()) continue;
+    await ctx.scheduler.runAfter(200, internal.giftTwin.agent.checkIdeas, {
+      collaboratorId: twin._id, uploadId: twin.vaultUploadId,
+    });
+  }
 }
 
 export async function sha256Hex(value: string): Promise<string> {
@@ -59,7 +77,8 @@ export async function loadUpload(
   uploadId: string,
 ): Promise<{ collaborator: Doc<"agentCollaborators">; room: Doc<"rooms"> } | null> {
   const collaborator = await ctx.db.get(collaboratorId);
-  if (!collaborator || collaborator.status !== "active" || collaborator.vaultUploadId !== uploadId) return null;
+  if (!collaborator || collaborator.status !== "active" || collaborator.vaultUploadId !== uploadId ||
+    (collaborator.vaultExpiresAt ?? 0) <= Date.now()) return null;
   const room = await ctx.db.get(collaborator.roomId);
   if (!isLiveRoom(room)) return null;
   return { collaborator, room };

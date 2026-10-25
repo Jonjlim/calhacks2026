@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { enqueueKnowledgeTurn } from "../agents/runtime";
+import { enqueueTwinCheck } from "../giftTwin/lib";
 
 /**
  * Bumps room.knowledgeRevision. Call on publish, withdraw, manual clue, and
@@ -13,5 +14,6 @@ export async function bumpKnowledgeRevision(ctx: MutationCtx, roomId: Id<"rooms"
   const next = room.knowledgeRevision + 1;
   await ctx.db.patch(roomId, { knowledgeRevision: next });
   await enqueueKnowledgeTurn(ctx, roomId);
+  await enqueueTwinCheck(ctx, roomId);
   return next;
 }

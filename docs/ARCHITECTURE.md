@@ -501,6 +501,63 @@ introduced. Offline fixture checks do not establish live model capability or
 prize eligibility.
 
 
+### D26 — Gift Twin local Moss memory (2026-10-25; local and Convex retrieval spikes verified)
+
+Use pinned `@moss-js/moss` in a Convex Node internal action to retrieve private
+recipient evidence for Gift Twin votes. Convex remains authoritative; Moss is an
+ephemeral derived index, rebuilt per evaluation and explicitly closed. Only local
+session add/query operations are used: never cloud create/add/push or disk save.
+Moss credentials stay server-side. The SDK authenticates/downloads its model and
+sends usage telemetry (opaque random session name, counts, timing, device ID);
+document/query text and metadata are not sent to Moss. The existing model provider
+still receives retrieved evidence in role `recipient`. The room and buyer agent
+receive only screened posts through the existing review path. No voice service,
+additional model, database or standalone service is introduced.
+
+The native SDK is externalized for Convex Node packaging. Flag-off and failures
+retain keyword recall. Each call checks upload identity and expiry through Convex;
+no private session is reused between uploads or rooms. Numeric server diagnostics
+separate setup/indexing from retrieval; cold indexing is not a sub-10ms operation.
+The authenticated local macOS spike passed paraphrase, ownership and dislike
+top-hit checks over eight synthetic messages (SDK 1.21.0): retrieval 1.3–2.0 ms,
+indexing 12.5 ms, cold setup/model loading 23.3 seconds. This establishes only the
+small local spike. Native deployment and the synthetic paraphrase probe also
+passed on dev `shiny-dotterel-658`: setup 2.25 s, indexing 27.1 ms, retrieval
+4.1 ms over three synthetic messages. `GIFT_TWIN_MOSS_ENABLED=true` is enabled
+there. Convex replaces JS `process.env` during invocation, so native `getenv`
+cannot see JS assignments. A temporary nonsecret config loaded with Node's
+`loadEnvFile` sets `MOSS_MODEL_CACHE_DIR=/tmp/unwrap-moss-models` in the native
+environment; the file is immediately removed. Only public model artifacts and
+device identity are cached; private session documents are never persisted.
+The full live room-to-model path, production deployment, larger vault performance,
+and cold-start variability remain **unverified**. Automated integration tests cover
+the room path using a mocked SDK; they do not establish live model answer quality.
+
+### D27 — Responsive twin evaluations (2026-10-25)
+
+Remove model calls from the first useful Gift Twin response. Server-pattern
+insights and explicit votes are stored and deterministically reviewed first;
+only unresolved votes need Moss/model processing. Model-only enrichment and
+votes settle independently and retain upload/expiry checks. The fast review
+receives exact inserted post IDs so concurrent unreviewed model posts cannot
+bypass their existing review. No AI permission, money, consent or data authority
+boundary changes.
+
+Room knowledge changes, new map sprouts and completed product listings schedule
+a transactional unchecked-idea claim after 200 ms. Duplicate wakeups do not create
+duplicate votes or polling loops. The existing 30-second watch is recovery only.
+Vault chunk reads run four at a time. Moss embeds a maximum of 256 distinct
+messages per evaluation, preferring gift/preference language and balancing old
+and recent evidence. Full-vault keyword checks remain; semantic-only recall
+outside the bounded working set is a documented tradeoff. No cross-action private
+cache, disk index, provider or table is added. Local synthetic indexing benchmark:
+2,048 messages, 2,196 ms before vs 309 ms after, with the historical pottery
+memory still ranked first. Live model and product-provider latency are separate.
+Deployed to dev `shiny-dotterel-658`; a live three-message synthetic room check
+passed with a published first finding at 518 ms and reviewed evaluation of a new
+message at 790 ms (client/network included). The temporary room was deleted.
+These timings cover deterministic evidence, not model-only or shopping latency.
+
 ## Bounded multi-gift box — Alex-authorized integration
 
 Alex requested both single and multiple gifts in the buying flow. Keep one

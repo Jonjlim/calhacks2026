@@ -8,6 +8,7 @@
  * clue, research and selection mutations.
  */
 import { v } from "convex/values";
+import { enqueueTwinCheck } from "./giftTwin/lib";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -164,7 +165,9 @@ export const storeSprouts = internalMutation({
     const now = Date.now();
     for (const s of fresh.slice(0, Math.max(0, room)))
       await ctx.db.insert("mapSprouts", { roomId: args.roomId, seedClueId: args.seedClueId, grownBy: args.grownBy, source: args.source, createdAt: now, ...s });
-    return Math.max(0, Math.min(room, fresh.length));
+    const added = Math.max(0, Math.min(room, fresh.length));
+    if (added > 0) await enqueueTwinCheck(ctx, args.roomId);
+    return added;
   },
 });
 

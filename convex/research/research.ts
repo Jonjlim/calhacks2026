@@ -3,6 +3,7 @@
  * Own job transitions locally so Dev 2's generic jobs.ts remains untouched.
  */
 import { v } from "convex/values";
+import { enqueueTwinCheck } from "../giftTwin/lib";
 import type { PublishedClue, RecommendationsView, Result, SearchBrief } from "../../lib/contracts";
 import { normalizedListingSchema } from "../../lib/validation";
 import { internal } from "../_generated/api";
@@ -226,6 +227,7 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
+    await enqueueTwinCheck(ctx, job.roomId);
     // Earlier pages hold many products; the current source sends one product per row (D24).
     const raw = Array.isArray(args.raw) ? args.raw.reduce((n: number, item: { shopping_results?: unknown[] }) => n + (Array.isArray(item?.shopping_results) ? item.shopping_results.length : 1), 0) : 0;
     await logSearch(ctx, job, "kept", `Searched Google Shopping for “${query}”: ${raw || listings.length} results came back and ${Math.min(listings.length, 60)} had a source link, a US price and a retrieval time.${raw > listings.length ? ` ${raw - listings.length} were dropped as incomplete or repeated.` : ""}`);

@@ -410,6 +410,57 @@ Errors: `refused` for policy, `validation_failed` for bad bodies. Never throw ra
 
 ### Agent collaborators and the Gift Twin (demo, D20, 2026-10-24)
 
+Latency update (Dev 3, 2026-10-25; consumers Dev 1/Dev 2): the first pass records
+screened deterministic insights/votes immediately and marks the vault ready.
+`internal.giftTwin.agent.enrichVault` adds model-only insights and unresolved votes
+independently in the background, with the same upload/expiry fences and dedupe.
+`recordFindings` and `reviewPosts` accept optional `deterministicReview: boolean`;
+only server-pattern findings use it to run the existing deterministic review
+without a second model round-trip. That review is restricted to the exact inserted
+`postIds`; it cannot pick up unrelated pending model posts. Model-generated
+insights retain model review.
+New-idea evaluation similarly records pattern votes first and sends only unresolved
+refs to Moss/model. Existing votes remain immutable advisory posts.
+
+`internal.giftTwin.agent.checkIdeas` accepts `{ collaboratorId, uploadId }`, claims
+unchecked current idea refs transactionally, and schedules their evaluation without
+starting another polling loop. Published room knowledge, new sprouts and completed
+listings wake it after 200 ms. The 30-second watch is a recovery fallback. Bursts
+dedupe at the transactional claim. No raw private data reaches the shared agent.
+
+Moss indexes at most 256 distinct messages per evaluation: gift/preference-bearing
+messages first, retaining both recent and older evidence; remaining space samples
+the rest. Keyword evidence still searches the entire authorized vault. This bounds
+embedding latency but semantic-only matches outside that working set may be missed.
+No private cross-action cache, disk index, new table or provider is introduced.
+
+Moss memory (2026-10-25): Owner Dev 3; consumers Dev 1 (existing screened feed),
+Dev 2 (authorization/purge review). `internal.giftTwin.memory.vote` accepts only
+`{ collaboratorId, uploadId, refs?: string[] }` and returns `TwinVoteCast[]`.
+It reuses the twin's authorized snapshot/chunk queries, builds an ephemeral local
+Moss session, and retrieves up to eight semantic/keyword matches per current
+room idea. Returned IDs must resolve to that invocation's authorized messages;
+SDK-returned text is never trusted. The recipient model gets those messages plus
+bounded keyword evidence (at most 12 excerpts and 3,600 message characters per
+idea). Only screened votes reach the existing `recordFindings`
+and review path. Buyer/council agents never receive raw recall results.
+
+Opt in with Convex server variables `GIFT_TWIN_MOSS_ENABLED=true`,
+`MOSS_PROJECT_ID`, and `MOSS_PROJECT_KEY`. Missing configuration or SDK failure
+uses existing keyword evidence. Local sessions are closed after each evaluation;
+no cloud index, disk snapshot, cross-upload cache, new table, public endpoint, or
+data migration. Setup/indexing and query timings are separate, numeric-only server
+diagnostics; no sub-10ms application latency claim. Moss sends usage telemetry
+(including opaque random session names, counts and timings), never message or
+query text. Vault expiry is checked on every read and before findings are saved,
+including when the scheduled deletion has not run yet. Existing insight extraction
+still scans the authorized vault; Moss supplies evidence for idea evaluation.
+`internal.giftTwin.memory.smoke` takes `{}` and returns `{ ok: true, passed,
+setupMs, indexingMs, queryMs }` from a fixed synthetic paraphrase check, or
+`{ ok: false, reason, stage?, category? }` with fixed diagnostic strings. It reads no room or
+vault data, creates no cloud index, and supports validating the native Convex
+runtime before enabling memory retrieval.
+
 **Status: demo, behind `GIFT_TWIN_DEMO_ENABLED=true`.** Owner: Dev 3 (agents). Consumers: Dev 1 (room UI), Dev 2 (schema review, purge). Full design: [GIFT_TWIN.md](GIFT_TWIN.md).
 
 An **agent collaborator** is an AI agent that joins a room next to people and posts notes the way a friend would ("I learned that Maya has been playing tennis"). It is not a `Participant`: it has no share, cap, selection, or approval, and its up/down votes are advisory posts, separate from participant `votes`. The first kind is `gift_twin`: the recipient pairs their Mac, grants **one-time permission** to upload the messages they sent into a temporary server-only vault, and a cloud twin agent acting for the recipient posts insights and votes on the room's ideas (existing and new) until the vault expires. `trend_scout` is reserved for the planned trend agent and uses the same tables and feed.
