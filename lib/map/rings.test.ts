@@ -18,7 +18,7 @@ describe("ring layout", () => {
 
   it("puts clues on the outer ring and only shows themes that have clues", () => {
     const layout = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }], []);
-    expect(layout.themes).toEqual([expect.objectContaining({ id: "interest", count: 2 })]);
+    expect(layout.themes).toEqual([expect.objectContaining({ id: "interest", label: "Loves", count: 2 })]);
     for (const c of layout.clues) expect(ringDistance(c.x, c.z)).toBeCloseTo(RING_RADII.input, 5);
   });
 
@@ -75,5 +75,29 @@ describe("zones", () => {
     expect(zoneAt(...at(40, R.theme))).toBe("theme");
     expect(zoneAt(...at(40, R.input))).toBe("outer");
     expect(zoneAt(...at(40, R.input + 9))).toBe("outer");
+  });
+});
+
+describe("council themes, signals and sharpen", () => {
+  const clues = [{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }, { id: "c", kind: "timing" }];
+  it("groups by council themes and collects the rest under one more theme", async () => {
+    const { layoutRings: lay, OTHER_THEME } = await import("./rings");
+    const out = lay(clues, [], { themes: [{ id: "t1", label: "Makes things", clueIds: ["a", "b", "zz"] }] });
+    expect(out.themes.map((t) => [t.id, t.count])).toEqual([["t1", 2], [OTHER_THEME, 1]]);
+    expect(out.clues.find((c) => c.id === "c")?.theme).toBe(OTHER_THEME);
+  });
+  it("pulls signalled clues and themes inward, and their gifts with them", async () => {
+    const { layoutRings: lay, ringDistance: dist } = await import("./rings");
+    const base = lay(clues, [gift({ clueIds: ["a"] })]);
+    const pulled = lay(clues, [gift({ clueIds: ["a"] })], { signals: { clue: { a: 2 }, theme: { interest: 2 } } });
+    const r = (l: typeof base, id: string) => { const c = l.clues.find((x) => x.id === id)!; return dist(c.x, c.z); };
+    expect(r(pulled, "a")).toBeLessThan(r(base, "a"));
+    expect(pulled.gifts[0]!.radius).toBeLessThan(base.gifts[0]!.radius);
+  });
+  it("fades non-finalists and brings the favoured gift close", async () => {
+    const { layoutRings: lay, GIFT_MIN_RADIUS: min } = await import("./rings");
+    const out = lay([], [gift({ listingId: "1", faded: true }), gift({ listingId: "2", favored: true }), gift({ listingId: "3" })]);
+    expect(out.gifts[0]!.radius).toBeGreaterThan(out.gifts[2]!.radius);
+    expect(out.gifts[1]!.radius).toBe(min);
   });
 });

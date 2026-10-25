@@ -35,6 +35,16 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(recorded.context.retriev
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("persisted live fashion discovery", () => {
+  it("accepts a selected sourced style and rejects model-invented style text", async () => {
+    const s = await completed();
+    const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], fashionJobId: s.jobId, idempotencyKey: "chosen-style" };
+    const result = value(await s.alex.mutation(api.research.research.startResearch, { ...args, discoveryQuery: "vintage loose fit jeans" }));
+    expect((await s.t.run(ctx => ctx.db.get(result.jobId)))?.brief?.queryTerms).toEqual(["vintage loose fit jeans"]);
+    expect(value(await s.alex.mutation(api.research.research.startResearch, args))).toEqual(result);
+    expect(await s.alex.mutation(api.research.research.startResearch, { ...args, idempotencyKey: "invented-style", discoveryQuery: "viral designer jacket" }))
+      .toMatchObject({ ok: false, error: { code: "validation_failed" } });
+  });
+
   it("cancels and purges discovery on room deletion without late writes or cross-room deletion", async () => {
     const s = await setup();
     vi.stubEnv("APIFY_TOKEN", "");

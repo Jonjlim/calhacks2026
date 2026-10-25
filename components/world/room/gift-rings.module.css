@@ -83,3 +83,135 @@
 .cursor[data-mode="gift"] i { background: #a07a2c; }
 .cursor[data-mode="node"] svg { transform: scale(1.15); }
 .cursor[data-mode="pan"] svg, .cursor[data-mode="drag"] svg { transform: scale(.9) rotate(-12deg); }
+
+/* The shared yes at the present */
+.boxAnchor { transform: translateY(-50%); }
+.boxPanel { width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border-radius: 22px; background: linear-gradient(180deg, var(--color-ivory), #f7ecd7); color: var(--color-dusk); font-family: var(--font-sans); box-shadow: 0 30px 60px -24px rgb(40 24 44 / .7), 0 0 0 1px rgb(217 182 111 / .5); animation: boxIn .35s cubic-bezier(.2,.9,.3,1.2) both; user-select: none; }
+.boxPanel input { user-select: text; }
+.boxDone { box-shadow: 0 30px 60px -24px rgb(40 24 44 / .7), 0 0 0 2px var(--color-gold), 0 0 46px rgb(255 212 122 / .55); }
+@keyframes boxIn { from { opacity: 0; transform: translateX(-14px) scale(.94); } to { opacity: 1; transform: none; } }
+.boxPanel header { display: flex; justify-content: space-between; align-items: center; }
+.boxPanel header span { font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a07a2c; }
+.boxPanel header button { border: 0; background: rgb(65 52 76 / .08); width: 24px; height: 24px; border-radius: 50%; font-size: 15px; line-height: 1; color: var(--color-dusk); cursor: pointer; }
+.boxGift { display: flex; gap: 10px; align-items: center; }
+.boxGift img, .boxGift > i { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; flex: none; background: radial-gradient(circle at 40% 35%, #fffaf0, #f1e2c8); border: 2px solid var(--color-gold); display: grid; place-items: center; font-size: 28px; font-style: normal; }
+.boxGift b { display: block; font: 600 18px/1.1 var(--font-display); }
+.boxGift a { font-size: 11.5px; color: var(--color-plum-soft); text-decoration: none; }
+.boxGift a:hover { text-decoration: underline; }
+.boxEmpty { margin: 0; font-size: 13px; color: var(--color-plum-soft); }
+.boxWarn { margin: 0; font-size: 12px; line-height: 1.45; background: rgb(239 111 94 / .12); color: #8c3b2c; border-radius: 12px; padding: 8px 10px; }
+.boxReset { margin: 0; font-size: 12px; line-height: 1.45; background: rgb(217 182 111 / .25); border-radius: 12px; padding: 8px 10px; }
+.boxReset button { border: 0; background: none; font-weight: 700; text-decoration: underline; cursor: pointer; color: inherit; }
+.boxMeter { position: relative; height: 26px; border-radius: 13px; background: rgb(65 52 76 / .08); overflow: hidden; }
+.boxMeter i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #e9c46a, #ffd98a); border-radius: 13px; transition: width .7s cubic-bezier(.2,.9,.3,1); box-shadow: 0 0 18px rgb(255 212 122 / .8); }
+.boxMeter span { position: relative; display: block; text-align: center; font-size: 11.5px; font-weight: 700; line-height: 26px; }
+.boxPeople { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.boxPeople li { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 14px; background: rgb(65 52 76 / .05); transition: background .4s; }
+.boxPeople img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; object-position: top; border: 2px solid var(--who); }
+.boxPeople b { font-size: 12.5px; }
+.boxPeople span { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.boxPeople small { font-size: 10px; font-weight: 700; color: var(--color-plum-soft); min-width: 46px; text-align: right; }
+.boxYes { background: color-mix(in srgb, var(--who) 22%, transparent) !important; }
+.boxYes small { color: #4f7a36; }
+.boxApprove { border: 0; border-radius: 16px; padding: 13px 14px; font: 700 14px var(--font-sans); color: #3b2a16; cursor: pointer; background: linear-gradient(100deg, #e9c46a 0%, #ffe3a0 40%, #e9c46a 60%, #f4d58f 100%); background-size: 220% 100%; animation: shimmer 3.2s linear infinite; box-shadow: 0 10px 24px -10px rgb(160 122 44 / .9); transition: transform .15s; }
+.boxApprove:hover { transform: translateY(-1px) scale(1.01); }
+.boxApprove:disabled { opacity: .55; cursor: not-allowed; animation: none; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -120% 0; } }
+.boxActions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.boxMine { margin: 0; font-weight: 700; font-size: 13px; color: #4f7a36; white-space: nowrap; }
+.boxGhost { border: 1px solid rgb(65 52 76 / .18); background: transparent; border-radius: 14px; padding: 6px 11px; font: 600 11.5px var(--font-sans); color: var(--color-dusk); cursor: pointer; }
+.boxGhost[aria-pressed="true"] { background: var(--color-gold); border-color: var(--color-gold); }
+.boxLimit { display: flex; flex-direction: column; gap: 4px; }
+.boxLimit label { font-size: 11px; font-weight: 700; }
+.boxLimit label small { font-weight: 500; color: var(--color-plum-soft); margin-left: 4px; }
+.boxLimit div { display: flex; gap: 6px; }
+.boxLimit input { flex: 1; min-width: 0; border: 1px solid rgb(65 52 76 / .2); border-radius: 12px; padding: 7px 10px; font: 600 13px var(--font-sans); background: #fff; color: var(--color-dusk); outline: none; }
+.boxLimit input:focus { border-color: var(--color-gold); }
+.boxLimit button { border: 0; border-radius: 12px; padding: 7px 12px; background: var(--color-dusk); color: var(--color-ivory); font: 600 12px var(--font-sans); cursor: pointer; }
+.boxLimit button:disabled { opacity: .5; }
+.boxPanel footer { display: flex; gap: 6px; flex-wrap: wrap; }
+.boxFine { font-size: 10px; color: var(--color-plum-soft); }
+.pledgeFace { display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 3px; border-radius: 16px; background: rgb(251 247 240 / .85); border: 2px solid var(--who); box-shadow: 0 6px 14px -6px rgb(40 24 44 / .6); font: 700 10.5px var(--font-sans); color: var(--color-dusk); white-space: nowrap; opacity: .75; transition: transform .3s, opacity .3s; pointer-events: none; user-select: none; }
+.pledgeFace img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; object-position: top; }
+.pledgeFace i { font-style: normal; }
+.pledgeYes { opacity: 1; transform: scale(1.12); background: var(--who); box-shadow: 0 0 18px var(--who); }
+@media (prefers-reduced-motion: reduce) { .boxApprove { animation: none; } .boxPanel { animation: none; } }
+
+/* Votes on memories and themes */
+.voteChips { position: absolute; top: -9px; left: -8px; display: flex; gap: 2px; pointer-events: none; }
+.voteChips i { font-style: normal; font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 9px; color: #fff; box-shadow: 0 2px 5px rgb(0 0 0 / .25); }
+.voteChips .yes { background: #6f9e52; color: #fff; }
+.voteChips .pass { background: #c9706b; color: #fff; }
+.pulse { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 4px 10px; border-radius: 14px; font: 700 11px var(--font-sans); color: #fff; box-shadow: 0 8px 20px rgb(0 0 0 / .3), 0 0 0 2px var(--who); pointer-events: none; animation: pulseUp 3s ease-out forwards; }
+.pulseYes { background: #6f9e52; }
+.pulsePass { background: #c9706b; }
+@keyframes pulseUp { 0% { opacity: 0; transform: translate(-50%, 8px) scale(.85); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1.05); } 22% { transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -12px); } }
+
+/* Friends' cursors on the map */
+.remoteCursor { display: flex; align-items: flex-start; gap: 1px; white-space: nowrap; pointer-events: none; user-select: none; }
+.remoteCursor svg { width: 18px; height: 20px; fill: var(--who); stroke: #fff; stroke-width: 1.4; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .4)); }
+.remoteCursor b { margin-top: 13px; background: var(--who); color: #2b2337; font: 700 10px var(--font-sans); padding: 2px 7px; border-radius: 8px; box-shadow: 0 2px 6px rgb(0 0 0 / .25); }
+
+/* The sharpen question and its finalists */
+.ask { position: relative; width: 340px; background: linear-gradient(180deg, var(--color-ivory), #f7ecd7); color: var(--color-dusk); border-radius: 20px; padding: 14px 16px 12px; text-align: center; font-family: var(--font-sans); box-shadow: 0 24px 50px -20px rgb(40 24 44 / .75), 0 0 0 1px rgb(217 182 111 / .55); animation: boxIn .35s cubic-bezier(.2,.9,.3,1.2) both; user-select: none; }
+.ask small { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a07a2c; }
+.ask p { margin: 6px 0 10px; font: 600 19px/1.2 var(--font-display); text-wrap: balance; }
+.ask div { display: flex; gap: 8px; }
+.ask div button { flex: 1; border: 1px solid rgb(65 52 76 / .15); background: #fff; border-radius: 14px; padding: 9px 8px; font: 700 12px var(--font-sans); color: var(--color-dusk); cursor: pointer; transition: background .15s, transform .15s; }
+.ask div button:hover { background: var(--color-gold); transform: translateY(-1px); }
+.ask div button:disabled { opacity: .5; }
+.askSkip { margin-top: 8px; border: 0; background: none; font: 600 11px var(--font-sans); color: var(--color-plum-soft); cursor: pointer; text-decoration: underline; }
+.askDone { width: 260px; }
+.askDone p { margin-bottom: 4px; }
+.finalist { box-shadow: 0 0 0 4px rgb(255 217 138 / .55), 0 0 30px rgb(255 212 122 / .8), 0 12px 24px -8px rgb(40 24 44 / .6); }
+.fadedGift { filter: grayscale(.7) opacity(.55); }
+
+/* Map tools beside Recenter */
+.tool { border: 0; border-radius: 999px; padding: 8px 14px; font: 600 13.5px var(--font-sans); color: var(--color-dusk); background: linear-gradient(180deg, #fffaf0, #f6e7c8); box-shadow: 0 6px 16px -8px rgb(40 24 44 / .5), 0 0 0 1px rgb(217 182 111 / .5); cursor: pointer; }
+.tool:hover { transform: translateY(-1px); }
+.tool:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* Photos: picked and marked in the add box, shown to their owner as polaroids */
+.photoPick { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--color-ivory); border: 2px dashed var(--color-gold); border-radius: 16px; padding: 14px 18px; font: 700 13px var(--font-sans); color: var(--color-dusk); box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); }
+.photoPick span { font-size: 20px; }
+.photoRow { display: flex; gap: 8px; }
+.polaroidPick { position: relative; padding: 5px 5px 14px; background: #fffdf8; border: 0; border-radius: 3px; box-shadow: 0 10px 20px -8px rgb(40 24 44 / .6); cursor: crosshair; transform: rotate(-2deg); }
+.polaroidPick:nth-child(2) { transform: rotate(2deg); }
+.polaroidPick img { display: block; width: 92px; height: 72px; object-fit: cover; }
+.pickState { display: block; margin-top: 3px; font: 700 10px var(--font-sans); color: var(--color-dusk); }
+/* Tap-the-person viewer: the world's ivory card and a large polaroid, over a soft dusk veil. */
+.markBackdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgb(65 52 76 / .45), rgb(40 24 44 / .72)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: markVeil .25s ease-out both; }
+.markCard { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: min(94vw, 940px); max-height: 94vh; padding: 16px 20px 14px; border-radius: 22px; background: linear-gradient(180deg, var(--color-ivory), #f7ecd7); color: var(--color-dusk); font: 500 13px var(--font-sans); text-align: center; box-shadow: 0 30px 60px -24px rgb(40 24 44 / .7), 0 0 0 1px rgb(217 182 111 / .5); animation: boxIn .35s cubic-bezier(.2,.9,.3,1.2) both; user-select: none; }
+.markCard header { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.markCard header small { font: 700 10px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: #a07a2c; }
+.markCard h2 { margin: 0; font: italic 600 24px/1.1 var(--font-display); color: var(--color-dusk); }
+.markCard > p { margin: 0; max-width: 46ch; font-size: 11.5px; line-height: 1.4; color: var(--color-plum-soft); }
+/* Not rotated: the mark is measured from the frame's box, so the frame must stay square to the screen. */
+.markPolaroid { display: flex; flex-direction: column; align-items: center; padding: 10px 10px 6px; background: #fffdf8; border-radius: 4px; box-shadow: 0 18px 34px -14px rgb(40 24 44 / .6), 0 0 0 1px rgb(65 52 76 / .06); }
+.markPolaroid > span { padding-top: 4px; font: 600 20px/1 var(--font-hand); color: var(--color-dusk); }
+.markFrame { position: relative; display: block; padding: 0; border: 0; background: none; cursor: crosshair; line-height: 0; }
+.markFrame img { display: block; max-width: min(84vw, 860px); max-height: 58vh; width: auto; height: auto; border-radius: 2px; }
+.markFrame i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral), 0 4px 10px rgb(40 24 44 / .45); pointer-events: none; animation: markPop .3s cubic-bezier(.2,.9,.3,1.4) both; }
+.markBtns { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.markBtns > button:not(.readBtn) { border: 1px solid rgb(65 52 76 / .25); border-radius: 14px; padding: 8px 14px; background: rgb(255 255 255 / .6); color: var(--color-dusk); font: 700 13px var(--font-sans); cursor: pointer; }
+.markBtns > button:not(.readBtn):hover { background: #fff; border-color: rgb(65 52 76 / .4); }
+@keyframes markVeil { from { opacity: 0; } to { opacity: 1; } }
+@keyframes markPop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .markBackdrop, .markCard, .markFrame i { animation: none; } }
+.readBtn:disabled { opacity: .5; cursor: default; }
+.polaroidPick i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral); }
+.readBtn { border: 0; border-radius: 14px; padding: 9px 16px; font: 700 13px var(--font-sans); color: #3b2a16; background: linear-gradient(180deg, #ffe3a0, #e9c46a); cursor: pointer; box-shadow: 0 8px 18px -8px rgb(160 122 44 / .9); }
+.readBtn:disabled { opacity: .6; }
+.polaroidStack { position: relative; display: block; width: 104px; height: 96px; }
+.polaroidStack img, .polaroidStack > i { position: absolute; left: 6px; top: 4px; width: 88px; height: 70px; object-fit: cover; background: #fffdf8; padding: 4px 4px 12px; border-radius: 3px; box-shadow: 0 8px 18px -8px rgb(40 24 44 / .7); transform: rotate(calc(var(--j, 0) * 5deg - 4deg)) translate(calc(var(--j, 0) * 4px), calc(var(--j, 0) * -2px)); font-style: normal; font-size: 30px; display: grid; place-items: center; }
+.polaroidStack em { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); white-space: nowrap; font: 15px var(--font-hand); color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / .7); }
+.polaroidStack b { position: absolute; top: -8px; right: -10px; background: var(--color-dusk); color: var(--color-ivory); font: 700 9px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 9px; }
+.found { display: flex; flex-direction: column; gap: 5px; align-items: stretch; text-align: left; background: rgb(47 39 55 / .82); padding: 9px 10px; border-radius: 14px; text-shadow: none; }
+.found > b { font: 700 9.5px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: #ffd98a; }
+.foundRow { display: flex; align-items: center; gap: 6px; }
+.foundRow em { flex: 1; font-style: normal; font-size: 12px; color: #fff; }
+.foundRow button { border: 0; border-radius: 10px; padding: 4px 9px; font: 700 11px var(--font-sans); background: #86b766; color: #fff; cursor: pointer; }
+.foundRow .foundNo { background: rgb(255 255 255 / .18); }
+.bubblePhoto { border-radius: 6px !important; width: 34px !important; height: 34px !important; object-position: center !important; }
+.photoBadge { position: absolute; bottom: -7px; right: -6px; font-style: normal; font-size: 12px; background: var(--color-ivory); border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; box-shadow: 0 2px 6px rgb(0 0 0 / .25); }
+.bubble { position: relative; }

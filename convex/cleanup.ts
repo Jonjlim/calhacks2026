@@ -31,6 +31,9 @@ export const sweepStaleUploads = internalMutation({
         .query("evidenceMedia")
         .withIndex("by_storage", (q) => q.eq("storageId", file._id))
         .first();
+      // Shared room photos (D20) are kept until their uploader or the room deletes them.
+      const shared = claimed ? null : await ctx.db.query("roomPhotos").withIndex("by_storage", (q) => q.eq("storageId", file._id)).first();
+      if (shared) continue;
       if (claimed) {
         if (file._creationTime < now - UNREAD_MEDIA_MAX_AGE_MS) {
           await discardSourceMedia(ctx, claimed.sourceId, "failed");

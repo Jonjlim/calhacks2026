@@ -100,12 +100,40 @@ export interface TrendDiscoverySample {
   context: TrendContext;
   publishedClueId: string;
   suggestions: TrendSuggestion[];
+  /** How suggestions were judged buyable: model classification (with news floor) or the word filter fallback. */
+  screen?: "model" | "words";
   evidenceSummary: { returnedRows: number; observations: number };
 }
 /** latestJob reuses the discovery job view shape shared with fashion discovery. */
 export interface TrendDiscoveryView {
   latestJob: FashionDiscoveryJobView | null;
   sample: (TrendDiscoverySample & { jobId: string }) | null;
+  /** Newest usable sample per memory (at most 6), newest first; `sample` is the first. */
+  samples?: (TrendDiscoverySample & { jobId: string })[];
+  /** Shared "doesn't fit" counts. A pass fades an idea for everyone; it never hides or deletes it. */
+  passes?: TrendPassSummary[];
+  /** Active listings found by research that shopped one of the current sample's suggestions. */
+  listingLinks?: TrendListingLink[];
+}
+/** Search context only: the listing was found while researching this trend query, not proven trending itself. */
+/** Sourced trend ideas the buyer agent may mention or shop. Passed ideas are left out. */
+export interface TrendAgentContext {
+  mode: "live_sample";
+  label: string;
+  ideas: { publishedClueId: string; query: string; signal: string; retrievedAt: number }[];
+}
+export interface TrendPassSummary {
+  trendJobId: string;
+  query: string;
+  count: number;
+  mine: boolean;
+  passerNames: string[];
+}
+export interface TrendListingLink {
+  listingId: string;
+  trendJobId: string;
+  query: string;
+  sourceUrl: string;
 }
 // ---------- Errors / results ----------
 
@@ -394,7 +422,18 @@ export interface Recommendation {
 
 // ---------- Selection, contributions, proposals ----------
 
+/** One observed product in a bounded gift box; no merchant order is implied. */
+export interface GiftBoxItem {
+  listingId: string;
+  quantity: 1;
+  listingSnapshot: Pick<ProductListing,
+    "title" | "sourceUrl" | "priceMinor" | "priceStatus" | "retrievedAt"
+    | "currency" | "shippingMinor" | "shippingStatus" | "imageUrl">;
+}
+
 export interface GiftSelection {
+  /** Complete box when present. Legacy fields describe the first item only. */
+  items?: GiftBoxItem[];
   id: string;
   roomId: string;
   listingId: string;
@@ -436,6 +475,8 @@ export type ProposalStatus =
   | "canceled";
 
 export interface ProposalRevision {
+  /** Frozen full box. Legacy rows without this field contain one gift. */
+  items?: GiftBoxItem[];
   id: string;
   roomId: string;
   selectionId: string;
@@ -689,6 +730,15 @@ export interface OrganizerCheckoutStore {
   settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
 }
 
+/** Server-only RC-011: the store authorizes exactly one contributor's frozen share. */
+export type ContributorCheckoutClaim = OrganizerCheckoutClaim & {
+  input: StripeCheckoutInput & { mode: "authorize" };
+};
+export interface ContributorCheckoutStore {
+  claim(): Promise<StripeAdapterResult<ContributorCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+
 export interface StripePaymentExpectation {
   binding: StripePaymentBinding;
   amountMinor: number;
@@ -709,4 +759,32 @@ export interface StripePaymentReadInput {
   checkoutSessionId?: string;
   paymentIntentId?: string;
   refundIds?: string[];
+}
+
+
+/** Explicit demo-only progress; never actual payment or merchant-order state. */
+export interface ContributionSimulationView {
+  mode: "simulation";
+  revisionId: string | null;
+  status: "no_proposal" | "waiting_for_approvals" | "ready" | "collecting" | "complete" | "wrapped" | "unavailable";
+  payerCount: number;
+  completedCount: number;
+  myShareMinor: number;
+  myCompleted: boolean;
+  canSimulate: boolean;
+  canWrap: boolean;
+}
+
+
+/** MAP-011 consumes the proposed ring contract; theme persistence remains Dev 2/3. */
+export interface MapTheme {
+  id: string;
+  roomId: string;
+  label: string;
+  clueIds: string[];
+  status: "suggested" | "accepted" | "dismissed";
+  source: "agent" | "member";
+  createdBy?: string;
+  knowledgeRevision: number;
+  updatedAt: number;
 }

@@ -13,6 +13,8 @@ import { allocate, sharesEqual } from "../allocations";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncRevisionPayments } from "../payments/sync";
+import { boxFingerprint, boxItem, boxListingIds, type StoredGiftBoxItem } from "./giftBox";
+import { isMoney } from "./input";
 
 /**
  * Statuses that a recompute may supersede. Pre-capture payment states stay
@@ -53,6 +55,7 @@ export async function orderedParticipants(
 }
 
 interface Draft {
+  items: StoredGiftBoxItem[];
   selectionId: Id<"giftSelections">;
   listingId: Id<"productListings">;
   payableTotalMinor: number;
@@ -67,33 +70,48 @@ async function draftRevision(
   roomId: Id<"rooms">,
   selection: Doc<"giftSelections">,
 ): Promise<Draft> {
-  const listing = await ctx.db.get(selection.listingId);
-  const base = { selectionId: selection._id, listingId: selection.listingId };
+  const items: StoredGiftBoxItem[] = [];
+  const base = { selectionId: selection._id, listingId: selection.listingId, items };
   const infeasible = (reason: string, payableTotalMinor = 0): Draft => ({
-    ...base,
-    payableTotalMinor,
-    shares: [],
-    conditions: [reason],
-    status: "infeasible",
-    infeasibleReason: reason,
+    ...base, payableTotalMinor, shares: [], conditions: [reason],
+    status: "infeasible", infeasibleReason: reason,
   });
-
-  if (!listing || listing.roomId !== roomId || listing.status === "invalid") {
-    return infeasible("The selected listing is no longer available.");
+  let payableTotalMinor = 0;
+  const conditions: string[] = [];
+  let problem: string | undefined;
+  for (const listingId of boxListingIds(selection)) {
+    const listing = await ctx.db.get(listingId);
+    if (!listing || listing.roomId !== roomId) {
+      problem ??= "A selected listing is no longer available.";
+      continue;
+    }
+    items.push(boxItem(listing));
+    if (listing.status === "invalid" || listing.availability === "unavailable") {
+      problem ??= "A selected listing is no longer available.";
+      continue;
+    }
+    if (listing.currency !== "USD") { problem ??= "Only USD listings are supported."; continue; }
+    if (listing.priceStatus !== "observed" || !isMoney(listing.priceMinor ?? -1) || !listing.priceMinor) {
+      problem ??= "A selected listing has no valid observed price yet.";
+      continue;
+    }
+    const shippingKnown = listing.shippingStatus === "observed" && listing.shippingMinor !== undefined;
+    if (listing.shippingStatus === "observed" && (!shippingKnown || !isMoney(listing.shippingMinor!))) {
+      problem ??= "A selected listing has invalid observed shipping.";
+      continue;
+    }
+    payableTotalMinor += listing.priceMinor + (shippingKnown ? listing.shippingMinor! : 0);
+    if (!isMoney(payableTotalMinor)) { problem ??= "The combined gift estimate is outside the supported money range."; continue; }
+    const prefix = boxListingIds(selection).length > 1 ? `${listing.title}: ` : "";
+    conditions.push(
+      `${prefix}Price observed at ${new Date(listing.retrievedAt).toISOString()} from ${listing.sourceUrl}.`,
+      shippingKnown ? `${prefix}Includes observed shipping.` : `${prefix}Shipping is not yet known and is not included.`,
+    );
+    if (listing.status === "stale") conditions.push(`${prefix}This listing observation is stale; refresh before buying.`);
   }
-  if (listing.currency !== "USD") return infeasible("Only USD listings are supported.");
-  if (listing.priceStatus !== "observed" || !listing.priceMinor || listing.priceMinor <= 0) {
-    return infeasible("The selected listing has no observed price yet.");
-  }
-
-  const shippingKnown = listing.shippingStatus === "observed" && listing.shippingMinor !== undefined;
-  const payableTotalMinor = listing.priceMinor + (shippingKnown ? listing.shippingMinor! : 0);
-  const conditions = [
-    `Price observed at ${new Date(listing.retrievedAt).toISOString()} from ${listing.sourceUrl}.`,
-    shippingKnown ? "Includes observed shipping." : "Shipping is not yet known and is not included.",
-    "Tax is not included.",
-  ];
-  if (listing.status === "stale") conditions.push("This listing observation is stale; refresh before buying.");
+  // Never present a partially known basket amount as fundable.
+  if (problem) return infeasible(problem);
+  conditions.push("Tax is not included.");
 
   const participants = await orderedParticipants(ctx, roomId);
   const limits = await ctx.db
@@ -135,8 +153,9 @@ function sameDeal(current: Doc<"proposalRevisions">, draft: Draft): boolean {
   if (current.selectionId !== draft.selectionId) return false;
   if (current.listingId !== draft.listingId) return false;
   if (current.payableTotalMinor !== draft.payableTotalMinor) return false;
+  if (boxFingerprint(current.items) !== boxFingerprint(draft.items)) return false;
   if (!sharesEqual(current.shares, draft.shares)) return false;
-  if (!draftFeasible && current.conditions[0] !== draft.conditions[0]) return false;
+  if (JSON.stringify(current.conditions) !== JSON.stringify(draft.conditions)) return false;
   return true;
 }
 
@@ -181,6 +200,14 @@ export async function recomputeProposal(ctx: MutationCtx, roomId: Id<"rooms">): 
   }
 
   const draft = await draftRevision(ctx, roomId, selection);
+  // The selected box shows current observations; older revisions retain frozen snapshots.
+  if (draft.items.length === boxListingIds(selection).length && boxFingerprint(selection.items) !== boxFingerprint(draft.items)) {
+    const first = draft.items[0]!.listingSnapshot;
+    await ctx.db.patch(selection._id, { items: draft.items, listingSnapshot: {
+      title: first.title, sourceUrl: first.sourceUrl, priceMinor: first.priceMinor,
+      priceStatus: first.priceStatus, retrievedAt: first.retrievedAt,
+    } });
+  }
   if (current && current.status !== "canceled" && sameDeal(current, draft)) {
     return { kind: "unchanged", revision: current, infeasibleReason: draft.infeasibleReason };
   }
@@ -195,6 +222,7 @@ export async function recomputeProposal(ctx: MutationCtx, roomId: Id<"rooms">): 
   const revisionId = await ctx.db.insert("proposalRevisions", {
     roomId,
     revisionNumber: (latest?.revisionNumber ?? 0) + 1,
+    items: draft.items,
     selectionId: draft.selectionId,
     listingId: draft.listingId,
     quantity: 1,
