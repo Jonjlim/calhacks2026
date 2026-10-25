@@ -675,7 +675,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
       })}
 
       {rings.ideas.map((idea, i) => {
-        const shown = rings.selectedKey === idea.key || close;
+        // Its attached card already reads the idea out, so a selected idea keeps its small face.
+        const shown = close;
         const caption = idea.tag ?? `gift idea · ${idea.author}`;
         const quiet = dim(idea.key) || !!idea.faded;
         return (

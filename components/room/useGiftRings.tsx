@@ -63,6 +63,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const [allGifts, setAllGifts] = useState(false);
   // Where this viewer started a search, so its progress shows on that theme.
   const [researchFrom, setResearchFrom] = useState<string | null>(null);
+  // When this viewer asked for trends, so the outcome of that lookup (not an older one) reaches the status line.
+  const [trendAsked, setTrendAsked] = useState<number | null>(null);
   /** Index of the photo open in the large tap-the-person view, if any. */
   const [marking, setMarking] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -344,7 +346,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       actions: [
         ...voteActs("clue", clue.id),
         ...findGiftsFrom(theme),
-        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "trend" as const, label: "Look for trends", more: true, disabled: !!pending, run: () => void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here.") }] : []),
+        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "trend" as const, label: "Look for trends", more: true, disabled: !!pending, run: () => { setTrendAsked(Date.now()); void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here."); } }] : []),
         ...(actions && clue.publisherId === me.id ? [{ icon: "undo" as const, label: "Take it back", more: true, disabled: !!pending, run: () => void run(() => actions.withdrawClue(clue.id), "Your memory was withdrawn from the room.").then((ok) => ok && setSelectedKey(null)) }] : []),
       ],
     };
@@ -675,5 +677,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
     },
     actionsFor,
   };
-  return { rings, notice, error, openBox };
+  // A trend lookup this viewer started: say when it stops, so a failure never reads as "still checking".
+  const trendJob = data.trends?.latestJob;
+  const trendFailed = trendAsked !== null && trendJob && trendJob.createdAt >= trendAsked - 5000 && (trendJob.status === "failed" || trendJob.status === "stale")
+    ? `The trend lookup stopped${trendJob.lastError ? `: ${trendJob.lastError}` : "."} Memories and gifts are unchanged.`
+    : null;
+  return { rings, notice, error: error ?? trendFailed, openBox };
 }
