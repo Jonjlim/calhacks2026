@@ -70,6 +70,15 @@ Safeguards:
 
 ## Recipient page (no CLI)
 
+Members can press **Send Gift Twin link** directly in the room controls or phone
+view to create the recipient's single-use invitation. **Send link** opens the
+device share sheet when available; otherwise it copies the link for the member
+to send. A separate copy button and selectable URL support manual sharing. The
+same controls are available in the twin studio. Only the recipient invitation
+uses `/twin#invite=...`; the friend QR remains a `/join/...` link. Both use the
+host page's actual origin, including its port, without a configured URL override.
+Creating or sharing the link does not pair the recipient or grant data access.
+
 Room members create the twin at `/room/<roomId>/twin` and copy its invitation link. The recipient opens it at `/twin`, reads and accepts the privacy terms, connects, then selects their own Mac's `~/Library/Messages/chat.db`. A bundled SQLite WASM reader follows the CLI's same read-and-upload pipeline. The “Choose Messages file” button opens the system file picker. Selecting the file after consent immediately uploads the messages through the companion's existing `planUpload`, with no added review or local preference extraction. The server removes emoji sequences before vault storage and skips emoji-only messages; the vault enforces a 1 MiB UTF-8 text limit. The recipient manages status, deletion, or disconnecting on the same page. Sample data is available and clearly labelled.
 
 The browser cannot directly access iMessage or request automatic macOS database access. The recipient must select the file; macOS may prevent this. Files above 512 MB are refused to limit browser memory usage. The newest 1 MiB of message content is scanned, including incoming content in the read budget, exactly as in the CLI. The existing companion preparation then uploads only sent messages, with the same 2,000-character limit per message. This reads the database snapshot only; recent messages in the separate SQLite WAL may be absent. Use the CLI if the database cannot be selected or a complete live snapshot is required. Real macOS file-selection compatibility remains unverified.
