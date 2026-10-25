@@ -128,6 +128,8 @@ export interface GiftChoreography {
   halo: number;
   /** The ribbon loops fly outward at the burst, 0..1. */
   sweep: number;
+  /** 0..1 through the burst: the walls, lid, floor and ribbon fly outward. */
+  burst: number;
 }
 
 /** Highest lift in world units. About a fifth of the present's height. */
@@ -143,16 +145,19 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
   const lidClose = smooth(span(t, T.lidClose[0], T.lidClose[1]));
   const closing = t >= T.lidClose[0];
   const lidOpen = 1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2);
-  const lid = closing ? 1 - lidClose : lidOpen;
+  const popped = 1 + 1.4 * Math.pow(span(t, T.burst[0], T.burst[0] + 0.3) - 1, 3) + 0.4 * Math.pow(span(t, T.burst[0], T.burst[0] + 0.3) - 1, 2);
+  const lid = t >= T.burst[0] ? popped : closing ? 1 - lidClose : lidOpen;
 
   const wall: number[] = [];
   for (let i = 0; i < WALL_COUNT; i++) {
     const opening = span(t, 0.5 + i * 0.07, T.boxOpen[1] - (3 - i) * 0.05);
     const shutting = smoother(span(t, T.wallsClose[0] + (3 - i) * 0.05, T.wallsClose[1] - i * 0.03));
-    wall.push(t < T.wallsClose[0] ? flop(opening) : Math.min(1, flop(opening)) * (1 - shutting));
+    const exploding = flop(span(t, T.burst[0] + i * 0.03, T.burst[0] + 0.38));
+    wall.push(t >= T.burst[0] ? exploding : t < T.wallsClose[0] ? flop(opening) : Math.min(1, flop(opening)) * (1 - shutting));
   }
   const backFold = clamp01(wall[BACK_WALL]! * 1.15);
-  const hollow = t >= T.boxOpen[0] && t < T.lidClose[1];
+  const burstEnd = T.burst[1];
+  const hollow = (t >= T.boxOpen[0] && t < T.lidClose[1]) || (t >= T.burst[0] && t < burstEnd + 0.05);
 
   // --- The ribbon: unties quickly, then winds back on. -------------------
   const untie = (a: number, b: number) => 1 - smooth(span(t, a, b));
@@ -176,9 +181,10 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
   const tiltX = Math.sin(t * 18.3 + 0.6) * 0.03 * shake + anticipate * 0.05;
 
   // --- Burst: a brief swell, then the present gives way to the gift. ------
+  // The present bursts open and outward: it never shrinks, its parts fly away and it is gone once they have.
   const pop = span(t, T.burst[0], T.burst[0] + 0.14);
-  const gone = smooth(span(t, T.burst[0] + 0.14, T.burst[0] + 0.5));
-  const presence = t < T.burst[0] ? 1 : (1 + 0.14 * smooth(pop)) * (1 - gone);
+  const presence = t < burstEnd + 0.05 ? 1 + 0.1 * smooth(pop) : 0;
+  const burst = span(t, T.burst[0], burstEnd);
   const sweep = smooth(span(t, T.burst[0], T.burst[0] + 0.6));
   const squash = anticipate * 0.1;
 
@@ -205,6 +211,7 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
     glow,
     halo,
     sweep,
+    burst,
   };
 }
 

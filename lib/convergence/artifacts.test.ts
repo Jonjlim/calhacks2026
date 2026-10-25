@@ -86,6 +86,7 @@ describe("giftChoreography", () => {
     const amp = (t: number) => Math.max(...Array.from({ length: 60 }, (_, i) => Math.abs(giftChoreography(t + i / 120, 1).shakeX)));
     expect(amp(8.5)).toBeGreaterThan(amp(7.1));
     expect(giftChoreography(CONVERGENCE_TIMES.end, 1).presence).toBe(0);
+    expect(giftChoreography(CONVERGENCE_TIMES.burst[0] + 0.1, 1).presence).toBeGreaterThanOrEqual(1);
   });
 
   it("walks through the story in order", () => {

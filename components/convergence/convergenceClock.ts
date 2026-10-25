@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { type ArtifactInput } from "@/lib/convergence/artifacts";
+import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { CONVERGENCE_TIMES, EXIT_TIME, type ConvergenceState, stateAt } from "@/lib/convergence/timeline";
 
 /**
@@ -36,6 +36,8 @@ class ConvergenceClock {
   selectionId: string | null = null;
   /** What flies in: published memories and ideas of the room, with where their islands float. */
   inputs: ArtifactInput[] = [];
+  /** When each island's artifact lands in the box (by ring node key); the island is gone from then on. */
+  arrivals = new Map<string, number>();
   /** Total shared things, including any that were grouped rather than drawn. */
   total = 0;
   /** Reduced motion (or reopening the finished reveal): straight to the end state. */
@@ -87,6 +89,7 @@ class ConvergenceClock {
     this.selectionId = opts.selectionId;
     this.inputs = opts.inputs;
     this.total = opts.total;
+    this.arrivals = new Map(buildArtifacts(opts.inputs).artifacts.map((a) => [a.key, a.arrive]));
     this.startPose = null;
     this.run++;
     this.lastState = stateAt(this.t);

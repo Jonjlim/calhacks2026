@@ -413,9 +413,29 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       }
       const a = WALL_FOLD * fold * w.dir;
       pivot.rotation.set(w.axis === "x" ? a : 0, 0, w.axis === "z" ? a : 0);
+      // At the burst each wall (and the lid riding the back one) is flung outward from the centre.
+      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
+      const len = Math.hypot(w.pivot[0], w.pivot[2]) || 1;
+      pivot.position.set(w.pivot[0] + (w.pivot[0] / len) * out * 3.2, w.pivot[1] + Math.sin(out * Math.PI) * 0.5 + out * 0.3, w.pivot[2] + (w.pivot[2] / len) * out * 3.2);
     });
     const lidAngle = LID_OPEN_ANGLE * (cv ? cv.lid : 1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2));
     if (lidPivot.current) lidPivot.current.rotation.x = -THREE.MathUtils.lerp(lidAngle, Math.PI / 2, backFold);
+
+    if (hollowBox.current) {
+      // The floor rises and swells away, and the ribbon is carried up and out with the burst.
+      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
+      hollowBox.current.position.y = out * 1.2;
+      hollowBox.current.scale.setScalar(1 + out * 0.6);
+      if (cv && cv.burst > 0) {
+        if (bands.current) bands.current.visible = cv.burst < 0.5;
+        if (tails.current) tails.current.visible = cv.burst < 0.5;
+        if (bands.current) bands.current.scale.setScalar(1 + out * 0.7);
+        if (tails.current) tails.current.position.y = ribbons.top + out * 0.6;
+      } else if (bands.current) {
+        bands.current.scale.setScalar(1);
+        if (tails.current) tails.current.position.y = ribbons.top;
+      }
+    }
 
     const sway = animate ? Math.sin(t * 2.1) * 0.03 : 0;
     const unfurl = rb ? (1 - Math.min(1, rb.bow)) * 0.9 + (cv && convergence.t >= 9 ? cv.sweep * 0.8 : 0) : collapse * 0.9;
@@ -426,7 +446,11 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       // Loops fold down into the knot as the ribbon is pulled through it.
       bow.current.scale.setScalar(Math.max(0.0001, (1 + s.hover * 0.04 + Math.abs(flap) * 0.15) * (rb ? Math.max(0, rb.bow) : 1 - collapse * 0.92)));
       bow.current.position.set(0, ribbons.top + 0.02 + Math.sin(collapse * Math.PI) * 0.06, 0);
-      bow.current.rotation.set(0, 0.55 + collapse * 0.8, 0);
+      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + (cv ? cv.burst * 3 : 0), 0);
+      if (cv && cv.burst > 0) {
+        bow.current.position.y += (1 - Math.pow(1 - cv.burst, 3)) * 2.2;
+        bow.current.visible = cv.burst < 0.8;
+      }
     }
   });
 

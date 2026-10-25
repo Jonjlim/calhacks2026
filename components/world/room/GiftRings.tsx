@@ -14,6 +14,8 @@ import type { IslandShape } from "../terrain";
 import { Jar } from "./TowerInterior";
 import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
+import { convergence, useConvergenceActive } from "@/components/convergence/convergenceClock";
+import { smooth, span } from "@/lib/convergence/timeline";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
 import s from "./gift-rings.module.css";
@@ -134,7 +136,14 @@ function useRingDrag(center: THREE.Vector3, onDrag: RingsWorld["onDrag"]) {
 }
 
 /** One floating island that glides to its ring position and bobs gently. */
-function RingIsland({ at, kind, delay, animate, muted, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; children?: ReactNode }) {
+/** During the gift reveal: 1 until this island's memory has flown into the box, then it shrinks away; it grows back when the reveal closes. */
+function revealScale(arrive: number | undefined): number {
+  if (!convergence.active || arrive === undefined) return 1;
+  const gone = 1 - smooth(span(convergence.t, arrive, arrive + 0.6));
+  return convergence.leaving ? gone + (1 - gone) * smooth(span(convergence.exit, 0.2, 1.2)) : gone;
+}
+
+function RingIsland({ at, kind, delay, animate, muted, arrive, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; arrive?: () => number | undefined; children?: ReactNode }) {
   const group = useRef<THREE.Group>(null);
   // Set once: passing a fresh position on every render would snap the island back to its entrance spot each time.
   const start = useMemo(() => at.clone().setY(at.y - 3), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -146,7 +155,9 @@ function RingIsland({ at, kind, delay, animate, muted, children }: { at: THREE.V
     if (born.current < 0) born.current = clock.elapsedTime;
     const age = clock.elapsedTime - born.current - delay;
     const grow = animate ? THREE.MathUtils.smoothstep(age, 0, 0.9) : 1;
-    g.scale.setScalar(Math.max(0.001, grow) * (muted ? 0.82 : 1));
+    const away = revealScale(arrive?.());
+    g.visible = away > 0.004;
+    g.scale.setScalar(Math.max(0.001, grow * away) * (muted ? 0.82 : 1));
     g.position.lerp(at, animate ? 1 - Math.exp(-dt * 4) : 1);
     if (animate) g.position.y = at.y + Math.sin(clock.elapsedTime * 0.9 + at.x) * 0.18 - (1 - grow) * 3;
   });
@@ -338,6 +349,13 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const themeAt = new Map(rings.themes.map((t) => [t.theme, place(t.key, t.x, t.z)]));
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
 
+  // A theme island empties once every memory in it has flown into the box.
+  const themeGone = (theme: RingTheme) => {
+    const times = rings.clues.filter((c) => c.theme === theme).map((c) => convergence.arrivals.get(c.key));
+    return times.length && times.every((t) => t !== undefined) ? Math.max(...(times as number[])) : undefined;
+  };
+  const revealing = useConvergenceActive();
+
   const onBackdrop = (e: ThreeEvent<MouseEvent>) => {
     if (e.delta > 6 || mapView.locked) return;
     e.stopPropagation();
@@ -365,8 +383,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const t = themeAt.get(c.theme);
         return (
           <group key={c.key}>
-            {t && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : THEME_TINT[c.theme]} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
-            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)}>
+            {t && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : THEME_TINT[c.theme]} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
+            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)}>
               <Suspense fallback={null}>
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
               </Suspense>
@@ -380,7 +398,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
       {rings.themes.map((t, i) => {
         const [x, z] = place(t.key, t.x, t.z);
         return (
-          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)}>
+          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)}>
             <Jar kind={JAR_OF[t.theme]} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
             <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} offset={[0, -0.8, 3]} label={`${t.label} theme`}
               face={<span className={s.theme} style={{ ["--c" as string]: THEME_TINT[t.theme] }}><b>{t.label}</b><small>{t.count} shared</small></span>} />
@@ -394,10 +412,10 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           <group key={g.key}>
             {g.themes.map((theme) => {
               const t = themeAt.get(theme);
-              return t ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
+              return t && !revealing ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
             })}
-            {rings.selectedListingId === g.listingId && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
-            <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key)}>
+            {rings.selectedListingId === g.listingId && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
+            <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key)} arrive={() => convergence.arrivals.get(g.key)}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
                 face={<span className={s.gift}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
             </RingIsland>
@@ -406,7 +424,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
       })}
 
       {rings.ideas.map((idea, i) => (
-        <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)}>
+        <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)} arrive={() => convergence.arrivals.get(idea.key)}>
           <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={dim(idea.key)} offset={[0, -0.4, 2.2]} label={`${idea.author}'s gift idea`}
             face={<span className={s.idea}><img src={portraitUrl(idea.avatar)} alt="" /><span><b>{idea.text}</b><small>gift idea · {idea.author}</small></span></span>} />
         </RingIsland>
