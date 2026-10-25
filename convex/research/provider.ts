@@ -5,13 +5,10 @@
 import { z } from "zod";
 import type { SearchBrief } from "../../lib/contracts";
 
-/**
- * automation-lab's Google Shopping scraper (D24): one row per product.
- * Replaced johnvc's actor, whose free-plan monthly allowance ($1) ran out mid-session.
- * Live check failed: all 16 rows had empty product URLs. No build is approved/pinned yet.
- */
-export const VERIFIED_ACTOR = "automation-lab~google-shopping-scraper";
-/** Maximum requested count; the charge cap can end a run before this count. */
+/** Scrapewise replacement (D25). Build verified by one bounded live query; fixture retained. */
+export const VERIFIED_ACTOR = "scrapewise~google-shopping";
+export const SHOPPING_BUILD = "0.1.46";
+/** Maximum requested count; the charge cap can end a run earlier. */
 export const SHOPPING_MAX_RESULTS = 20;
 export const PROVIDER_DEADLINE_MS = 180_000;
 export const PROVIDER_MAX_RESPONSE_BYTES = 750_000;
@@ -76,9 +73,12 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
       const q = (brief.queryTerms.map(term => term.trim()).find(Boolean) ?? "").slice(0, 200);
       if (!q) return Promise.resolve({ kind: "failed", message: "Publish an interest or wish before searching." });
       // Bound each paid run; this cap does not guarantee a result count or usable links.
-      return runRequest("acts/" + VERIFIED_ACTOR + "/runs?timeout=120&maxTotalChargeUsd=0.40",
+      return runRequest("acts/" + VERIFIED_ACTOR + "/runs?build=" + SHOPPING_BUILD + "&timeout=120&maxTotalChargeUsd=0.40",
       "POST", {
-        queries: [q], country: "us", language: "en", maxResults: SHOPPING_MAX_RESULTS,
+        queries: [q], country: "us", language: "en", maxItems: SHOPPING_MAX_RESULTS,
+        maxItemsPerQuery: SHOPPING_MAX_RESULTS, maxPagesPerQuery: 1,
+        includeOffers: false, includeStoreLink: false, includeDetails: false,
+        compareWithPreviousRun: false,
         ...(brief.budgetMinor !== undefined && brief.budgetMinor > 0
           ? { maxPrice: brief.budgetMinor / 100 } : {}),
       });

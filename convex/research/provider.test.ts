@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createProvider, PROVIDER_MAX_RESPONSE_BYTES, SHOPPING_MAX_RESULTS, VERIFIED_ACTOR } from "./provider";
+import { createProvider, PROVIDER_MAX_RESPONSE_BYTES, SHOPPING_MAX_RESULTS, SHOPPING_BUILD, VERIFIED_ACTOR } from "./provider";
 import type { SearchBrief } from "../../lib/contracts";
 
 const brief: SearchBrief = {
@@ -16,11 +16,13 @@ describe("Apify provider adapter", () => {
     const [url, options] = fetcher.mock.calls[0]!;
     expect(String(url)).toContain("acts/" + VERIFIED_ACTOR + "/runs");
     expect(String(url)).toContain("maxTotalChargeUsd=0.40");
+    expect(String(url)).toContain("build=" + SHOPPING_BUILD);
     expect(String(url)).not.toContain("test-secret");
     expect(options?.headers).toMatchObject({ Authorization: "Bearer test-secret" });
     expect(options?.redirect).toBe("error");
     expect(JSON.parse(String(options?.body))).toEqual({
-      queries: ["pottery tools"], country: "us", language: "en", maxResults: SHOPPING_MAX_RESULTS, maxPrice: 80,
+      queries: ["pottery tools"], country: "us", language: "en", maxItems: SHOPPING_MAX_RESULTS, maxItemsPerQuery: SHOPPING_MAX_RESULTS, maxPagesPerQuery: 1,
+      includeOffers: false, includeStoreLink: false, includeDetails: false, compareWithPreviousRun: false, maxPrice: 80,
     });
   });
   it("does not retry a timed-out POST or expose the network exception", async () => {

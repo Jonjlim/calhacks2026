@@ -119,6 +119,20 @@ export function normalizeShoppingRow(raw: unknown, retrievedAt: number): Normali
   return validated.success ? validated.data : null;
 }
 
+/** D25: keep the Google product URL paired with its observed card price/store.
+ * A separately resolved store offer may differ and must not borrow this price.
+ */
+export function normalizeScrapewiseRow(raw: unknown, retrievedAt: number): NormalizedListing | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const row = raw as Record<string, unknown>;
+  if (row.errorCode !== undefined && row.errorCode !== null && row.errorCode !== "") return null;
+  if (row.country !== "us") return null;
+  return normalizeShoppingRow({
+    title: row.title, productUrl: row.productUrl, currency: row.currency,
+    price: row.priceText, priceNumeric: row.price, merchant: row.store, imageUrl: row.imageUrl,
+  }, retrievedAt);
+}
+
 /**
  * Text a source returned instead of products, such as a usage-limit notice, so a
  * search that found nothing can say why. Never a product or price fact.
@@ -157,7 +171,8 @@ export function normalizeDataset(raw: unknown, retrievedAt: number): NormalizedL
     const rows: NormalizedListing[] = [];
     const seenRows = new Set<string>();
     for (const item of raw) {
-      const listing = normalizeShoppingRow(item, retrievedAt);
+      const isScrapewise = !!item && typeof item === "object" && ("priceText" in item || "searchQuery" in item || "store" in item);
+      const listing = isScrapewise ? normalizeScrapewiseRow(item, retrievedAt) : normalizeShoppingRow(item, retrievedAt);
       if (!listing) continue;
       const key = JSON.stringify([listing.sourceUrl, listing.sellerName ?? "", listing.title]);
       if (seenRows.has(key)) continue;

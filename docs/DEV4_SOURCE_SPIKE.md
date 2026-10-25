@@ -1,6 +1,6 @@
 # Dev 4 source spike (RC-002)
 
-Current status: **live discovery blocked**. The replacement automation-lab actor returned 16 products but no usable links in the 2026-10-25 check; see D24 in [ARCHITECTURE.md](ARCHITECTURE.md). The results below describe the historical johnvc spike, whose account allowance is now exhausted.
+Current status: **conditional go with Scrapewise build 0.1.46**. One 2026-10-25 synthetic hiking-backpack search returned 20 usable listings with product links, observed USD prices and images. Links go to Google product pages; retailer checkout remains unverified. See D25 in [ARCHITECTURE.md](ARCHITECTURE.md). The historical johnvc spike below is retained; its allowance ran out. The intervening automation-lab replacement failed because every product link was empty.
 
 Candidate: [johnvc Google Shopping API](https://apify.com/johnvc/google-shopping-api-google-shopping-products-prices-deals).
 Chosen for documented keyword search, US targeting, one-page limit, and nested shopping_results with product_link/extracted_price/source. This is a community Actor; documentation is not evidence of live reliability.
