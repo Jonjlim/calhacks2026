@@ -16,6 +16,8 @@ import { directionPoint, fadeOf, trendClouds } from "@/lib/map/directions";
 import { emptyTrendNote, isTrendKey, TREND_KEY_PREFIX, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
+import { book } from "@/components/book/bookStore";
+import { mapView } from "@/components/world/room/mapView";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
 import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
@@ -58,7 +60,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; story: ReactNode | null } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -183,7 +185,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   const openBox = () => setSelectedKey("box");
-  if (!active) return { rings: null, notice, error, openBox, story: null };
+  // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
+  const startAdd = (what: "memory" | "wish" | "idea") => {
+    if (!actions) return;
+    setSelectedKey(null);
+    const [x, z] = what === "idea" ? ringPoint(300, RING_RADII.gift - 0.4) : ringPoint(RING_THEMES[what === "wish" ? "wish" : "interest"].angle, RING_RADII.input);
+    setComposer({ x, z, zone: what === "idea" ? "gift" : "memory", kind: what === "wish" ? "explicit_wish" : "interest" });
+    mapView.focus(x * 0.6, z * 0.6, 0.8);
+  };
+  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null, story: null };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -247,6 +257,29 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const d = directionOf(selectedKey.slice(10));
     if (d) highlight = new Set([selectedKey, ...d.clueIds.map((id) => `clue:${id}`),
       ...recs.filter((r) => r.foundBy?.directionId === d.id).map((r) => `gift:${r.listingId}`)]);
+  }
+  // Progressive disclosure: choosing a memory, a theme or a gift lights up only what connects to it, and everything else recedes.
+  if (!highlight && selectedKey && (selectedKey.startsWith("clue:") || selectedKey.startsWith("theme:") || selectedKey.startsWith("gift:"))) {
+    const set = new Set<string>(["box", selectedKey]);
+    const addTheme = (id: string) => {
+      set.add(`theme:${id}`);
+      for (const c of layout.clues) if (c.theme === id) set.add(`clue:${c.id}`);
+      for (const g of layout.gifts) if (g.themes.includes(id)) set.add(`gift:${g.listingId}`);
+    };
+    if (selectedKey.startsWith("clue:")) {
+      const theme = themeOfClue.get(selectedKey.slice(5));
+      if (theme) {
+        set.add(`theme:${theme}`);
+        for (const g of layout.gifts) if (g.themes.includes(theme)) set.add(`gift:${g.listingId}`);
+      }
+    } else if (selectedKey.startsWith("theme:")) {
+      addTheme(selectedKey.slice(6));
+    } else {
+      const listingId = selectedKey.slice(5);
+      for (const g of layout.gifts) if (g.listingId === listingId) for (const id of g.themes) set.add(`theme:${id}`);
+      for (const id of recs.find((r) => r.listingId === listingId)?.publishedClueIds ?? []) if (themeOfClue.has(id)) set.add(`clue:${id}`);
+    }
+    highlight = set;
   }
 
   // Research progress shows where it was started; a search someone else started shows at the present.
@@ -728,6 +761,16 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     else if (!recs.length && !isOrganizer && !searching) nextStep = { icon: "sprout", label: "The organizer finds gifts next" };
     else if (recs.length >= 2 && !sharpenOpen) nextStep = { ...act("Help us choose")!, label: pending === "sharpen" ? "Thinking…" : "Can’t decide? Ask one question" };
   }
+  // The same council tools, as buttons for the bar's "More" menu (Ally's layout).
+  const tools = councilActs.length ? (
+    <>
+      {councilActs.map((a) => (
+        <button key={a.label} type="button" className={s.tool} disabled={a.disabled} onClick={a.run}>
+          <MapIcon name={a.icon} size={15} />{a.label}
+        </button>
+      ))}
+    </>
+  ) : null;
 
   // Other members: their recent votes on memories and themes, and their cursors on the map.
   const pulses: Record<string, { name: string; value: number; color: string }> = {};
@@ -795,6 +838,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     boxPanel: selection ? boxPanel : null,
     nextStep,
     boxLabel: selection ? `${selectedIds.size} ${selectedIds.size === 1 ? "gift" : "gifts"} · ${revision && revision.status !== "infeasible" ? formatMinor(revision.payableTotalMinor) : "Review estimate"} · ${approved}/${participants.length} yes` : "Our gift box",
+    onOpenBook: (listingId) => book.show({ listingId: listingId ?? null }),
     selectedKey,
     highlight,
     composer: composer && (photoComposer ?? composerNode) ? { x: composer.x, z: composer.z, node: photoComposer ?? composerNode } : null,
@@ -810,6 +854,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       else if (key !== null) setOpenTheme(null);
       // “Why?” stays lit while its gift or the box is open.
       if (key !== "box" && key !== `gift:${whyListing}`) setWhyListing(null);
+      // Choosing a memory, theme, gift or direction glides the camera to it, keeping the viewer's angle.
+      const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) ?? directionNodes.find((d) => d.key === key) : undefined;
+      if (at) mapView.focus(at.x, at.z);
     },
     onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);
@@ -864,5 +911,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The council's reaction to the room's passes reaches everyone's status line as it happens.
   const reaction = (data.trail ?? []).findLast((e) => e.actor === "council" && now - e.at < REACTION_MS
     && (e.text.startsWith("Retired") || e.text.startsWith("Suggested") || e.text.startsWith("Couldn’t find")));
-  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, story: storyNode };
+  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
 }

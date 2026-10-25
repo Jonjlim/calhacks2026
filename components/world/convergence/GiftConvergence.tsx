@@ -71,7 +71,7 @@ function tagShape() {
 const PAPER = "#fbf3e3";
 
 /** One artifact's body: a toon-lit little object with a warm glow of its own colour. */
-function buildBody(shape: ArtifactShape, color: string): THREE.Group {
+export function buildBody(shape: ArtifactShape, color: string): THREE.Group {
   const tint = paint(`conv-${color}`, { color, emissive: color, emissiveIntensity: 0.3 });
   // Paper tinted a little towards the artifact's colour, so each note reads against the pale sky.
   const paper = paint(`conv-paper-${color}`, { color: new THREE.Color(PAPER).lerp(new THREE.Color(color), 0.5), emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide });
@@ -84,6 +84,16 @@ function buildBody(shape: ArtifactShape, color: string): THREE.Group {
     return m;
   };
   switch (shape) {
+    case "heart": {
+      const h = new THREE.Shape();
+      h.moveTo(0, -0.2);
+      h.bezierCurveTo(-0.34, 0.02, -0.26, 0.3, -0.1, 0.3);
+      h.bezierCurveTo(-0.04, 0.3, 0, 0.26, 0, 0.2);
+      h.bezierCurveTo(0, 0.26, 0.04, 0.3, 0.1, 0.3);
+      h.bezierCurveTo(0.26, 0.3, 0.34, 0.02, 0, -0.2);
+      add(geo("heart", () => new THREE.ExtrudeGeometry(h, { depth: 0.08, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 })), paint("conv-heart", { color: "#ec8a9c", emissive: "#e0607a", emissiveIntensity: 0.4 }), [0, 0, -0.04]);
+      break;
+    }
     case "note": {
       add(geo("note", () => new THREE.BoxGeometry(0.46, 0.035, 0.34)), paper);
       // A folded corner and a ribbon of the artifact's colour.
@@ -148,6 +158,24 @@ function glowTexture() {
   return glowTex;
 }
 
+let ringTex: THREE.Texture | null = null;
+function ringTexture() {
+  if (ringTex) return ringTex;
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, S * 0.38, S / 2, S / 2, S / 2);
+  g.addColorStop(0, "rgba(255,230,170,0)");
+  g.addColorStop(0.55, "rgba(255,238,190,0.95)");
+  g.addColorStop(1, "rgba(255,220,160,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  ringTex = new THREE.CanvasTexture(c);
+  ringTex.colorSpace = THREE.SRGBColorSpace;
+  return ringTex;
+}
+
 let raysTex: THREE.Texture | null = null;
 function raysTexture() {
   if (raysTex) return raysTex;
@@ -202,20 +230,21 @@ function makePieces(count: number, salt: number, kind: "paper" | "petal" | "star
   return Array.from({ length: count }, (_, i) => {
     const key = `${kind}:${i}`;
     const r = (n: number) => seeded(key, salt + n);
-    const burst = r(0) > 0.55;
+    const burst = r(0) > 0.3;
     const a = r(1) * Math.PI * 2;
-    const out = burst ? 1.8 + r(2) * 2.6 : 0.5 + r(2) * 0.9;
-    const up = burst ? 1.4 + r(3) * 2.4 : 1.0 + r(3) * 1.4;
+    // The burst throws pieces wide and fast, well past the box, to fill the screen.
+    const out = burst ? 3.2 + r(2) * 6.5 : 0.5 + r(2) * 0.9;
+    const up = burst ? 2.2 + r(3) * 4.2 : 1.0 + r(3) * 1.4;
     return {
       burst,
-      born: burst ? CONVERGENCE_TIMES.burst[0] + r(4) * 0.25 : 7.25 + Math.pow(r(4), 1.6) * 1.7,
-      life: burst ? 2.6 + r(5) * 1.0 : 1.5 + r(5) * 0.8,
+      born: burst ? CONVERGENCE_TIMES.burst[0] + r(4) * 0.3 : 7.25 + Math.pow(r(4), 1.6) * 1.9,
+      life: burst ? 2.8 + r(5) * 1.2 : 1.5 + r(5) * 0.8,
       v: [Math.cos(a) * out, up, Math.sin(a) * out],
-      drag: burst ? 1.5 : 0.6,
+      drag: burst ? 1.1 : 0.6,
       gravity: kind === "paper" ? 2.1 : 1.1,
       spin: [(r(6) - 0.5) * 9, (r(7) - 0.5) * 9, (r(8) - 0.5) * 9],
       phase: r(9) * 6.28,
-      size: (kind === "star" ? 0.085 : kind === "petal" ? 0.07 : 0.06) * (0.8 + r(10) * 0.7),
+      size: (kind === "star" ? 0.1 : kind === "petal" ? 0.085 : 0.07) * (0.8 + r(10) * 0.7) * (burst ? 1.35 : 1),
     };
   });
 }
@@ -290,12 +319,14 @@ function Stage() {
   const glow = useRef<THREE.Sprite>(null);
   const halo = useRef<THREE.Mesh>(null);
   const rays = useRef<THREE.Sprite>(null);
+  const shock = useRef<THREE.Sprite>(null);
   const center = useMemo(CENTER, []);
   const { artifacts } = useMemo(() => buildArtifacts(convergence.inputs), [run]); // eslint-disable-line react-hooks/exhaustive-deps
   const base = ringBase();
 
   const glowMat = useMemo(() => new THREE.SpriteMaterial({ map: glowTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), []);
   const raysMat = useMemo(() => new THREE.SpriteMaterial({ map: raysTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), []);
+  const shockMat = useMemo(() => new THREE.SpriteMaterial({ map: ringTexture(), transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false }), []);
   const haloMat = useMemo(() => new THREE.MeshBasicMaterial({ map: glowTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, color: "#ffd9a0" }), []);
   const glimmer = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: "#ffd98a", opacity: 0.55, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), []);
 
@@ -309,9 +340,10 @@ function Stage() {
   useEffect(() => () => {
     glowMat.dispose();
     raysMat.dispose();
+    shockMat.dispose();
     haloMat.dispose();
     glimmer.dispose();
-  }, [glowMat, raysMat, haloMat, glimmer]);
+  }, [glowMat, raysMat, shockMat, haloMat, glimmer]);
 
   useFrame(({ clock }) => {
     const t = convergence.t;
@@ -378,12 +410,21 @@ function Stage() {
       const swell = Math.sin(Math.min(1, k * 1.6) * Math.PI) * (1 - smooth(span(k, 0.5, 1)) * 0.0);
       r.visible = k > 0 && k < 1;
       r.position.set(center.x, center.y + 0.4, center.z);
-      r.scale.setScalar(2.2 + 4.2 * smoother(Math.min(1, k * 1.4)));
-      raysMat.opacity = Math.max(0, Math.min(0.55, swell * 0.6)) * (1 - smooth(span(k, 0.55, 1)));
+      r.scale.setScalar(3 + 13 * smoother(Math.min(1, k * 1.3)));
+      raysMat.opacity = Math.max(0, Math.min(0.6, swell * 0.7)) * (1 - smooth(span(k, 0.5, 1)));
       raysMat.rotation = clock.elapsedTime * 0.18;
     }
+    // A shockwave ring races out from the box at the burst.
+    const sh = shock.current;
+    if (sh) {
+      const k = span(t, CONVERGENCE_TIMES.burst[0], CONVERGENCE_TIMES.burst[0] + 0.9);
+      sh.visible = k > 0 && k < 1;
+      sh.position.set(center.x, center.y + 0.4, center.z);
+      sh.scale.setScalar(1 + 24 * (1 - Math.pow(1 - k, 3)));
+      shockMat.opacity = 0.7 * (1 - k) * (1 - k);
+    }
     // Sparkle puffs during the charge and the burst.
-    const want = Math.floor(span(t, CONVERGENCE_TIMES.charge[0] + 0.3, CONVERGENCE_TIMES.charge[1]) * 7) + (t >= CONVERGENCE_TIMES.burst[0] ? 3 : 0) + (t >= CONVERGENCE_TIMES.burst[0] + 0.18 ? 2 : 0);
+    const want = Math.floor(span(t, CONVERGENCE_TIMES.charge[0] + 0.3, CONVERGENCE_TIMES.charge[1]) * 9) + (t >= CONVERGENCE_TIMES.burst[0] ? 4 : 0) + (t >= CONVERGENCE_TIMES.burst[0] + 0.1 ? 3 : 0) + (t >= CONVERGENCE_TIMES.burst[0] + 0.25 ? 3 : 0);
     while (burstsFired.current < want && t - CONVERGENCE_TIMES.charge[0] < 6) {
       const n = burstsFired.current++;
       sparkles.current?.burst(_p.set(center.x + (seeded("s", n) - 0.5) * 1.2, center.y + c.lift + 0.9, center.z + (seeded("t", n) - 0.5) * 1.2), n);
@@ -420,12 +461,13 @@ function Stage() {
       ))}
       <sprite ref={glow} material={glowMat} visible={false} renderOrder={4} />
       <sprite ref={rays} material={raysMat} visible={false} renderOrder={5} />
+      <sprite ref={shock} material={shockMat} visible={false} renderOrder={6} />
       <mesh ref={halo} material={haloMat} rotation={[-Math.PI / 2, 0, 0]} position={[center.x, platformTop() + 0.03, center.z]} visible={false} renderOrder={1}>
         <planeGeometry args={[1, 1]} />
       </mesh>
-      <Confetti kind="paper" count={90} salt={1} origin={center} />
-      <Confetti kind="petal" count={44} salt={2} origin={center} />
-      <Confetti kind="star" count={26} salt={3} origin={center} />
+      <Confetti kind="paper" count={150} salt={1} origin={center} />
+      <Confetti kind="petal" count={70} salt={2} origin={center} />
+      <Confetti kind="star" count={44} salt={3} origin={center} />
       <SparkleBurst ref={sparkles} />
     </group>
   );

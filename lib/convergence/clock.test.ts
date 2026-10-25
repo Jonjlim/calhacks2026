@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CONVERGENCE_TIMES, EXIT_TIME } from "@/lib/convergence/timeline";
-import { convergence } from "./convergenceClock";
+import { convergence } from "@/components/convergence/convergenceClock";
 
 const start = (instant = false) => convergence.start({ selectionId: "sel_1", inputs: [], total: 0, instant });
 

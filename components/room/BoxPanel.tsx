@@ -8,6 +8,7 @@ import type { AppError, GiftSelection, Participant, ProductListing, ProposalView
 import { formatMinor, parseMajorToMinor } from "@/lib/money";
 import { portraitUrl } from "@/lib/room/avatars";
 import { useResultAction } from "@/lib/useResultAction";
+import { GiftIcon } from "@/components/ui/Icons";
 import type { RoomActions } from "./types";
 
 /**
@@ -88,7 +89,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
         <div aria-label="Gifts in the box">
           <p className={s.boxMine}>{items.length} {items.length === 1 ? "gift" : "gifts"} in your box</p>
           {items.map(item => <div className={s.boxGift} key={item.listingId}>
-            {item.listingSnapshot.imageUrl ? <img src={item.listingSnapshot.imageUrl} alt="" /> : <i aria-hidden><MapIcon name="present" size={30} /></i>}
+            {item.listingSnapshot.imageUrl ? <img src={item.listingSnapshot.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={30} /></i>}
             <div>
               <b>{item.listingSnapshot.title}</b>
               <a href={item.listingSnapshot.sourceUrl} target="_blank" rel="noopener noreferrer">

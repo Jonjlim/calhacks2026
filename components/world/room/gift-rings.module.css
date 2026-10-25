@@ -456,3 +456,127 @@
 
 .ask > .askSkip { display: block; margin: 7px auto 0; }
 .boxGift + .boxGift { margin-top: 10px; }
+/* --- Ally’s living memory world styles (merged after the quiet map, so hers win on overlap) --- */
+/* The AI council's familiars on the map: a name tag and, only when something real happened, a thought bubble. */
+.familiar {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.familiarName {
+  font: 600 11px/1 var(--font-figtree, system-ui);
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #3b2d44;
+  background: color-mix(in srgb, #fffaf1 86%, var(--tint));
+  border: 1px solid color-mix(in srgb, var(--tint) 55%, transparent);
+  box-shadow: 0 6px 14px -8px rgba(65, 52, 76, 0.5);
+}
+.councilBubble {
+  position: relative;
+  margin: 0;
+  width: max-content;
+  min-width: 120px;
+  max-width: 230px;
+  padding: 7px 12px;
+  border-radius: 16px;
+  font: 500 12.5px/1.25 var(--font-figtree, system-ui);
+  color: #3b2d44;
+  text-align: center;
+  background: #fffaf1;
+  border: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  box-shadow: 0 10px 22px -12px rgba(65, 52, 76, 0.6);
+  animation: councilPop 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.councilBubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  transform: translateX(-50%) rotate(45deg);
+}
+.councilBubble.working::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--tint);
+  animation: councilPulse 1s ease-in-out infinite;
+}
+.councilBubble.failed { background: #fff0ec; color: #8c3b2c; }
+@keyframes councilPop { from { opacity: 0; transform: translateY(6px) scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes councilPulse { 50% { opacity: 0.35; transform: scale(0.7); } }
+@media (prefers-reduced-motion: reduce) {
+  .councilBubble, .councilBubble.working::before { animation: none; }
+}
+
+/* The overview stays calm: labels are short until you hover or choose something. */
+.compact .bubble { max-width: 128px; }
+.compact .bubble q { -webkit-line-clamp: 1; }
+.compact .idea { max-width: 128px; }
+.compact .idea small { display: none; }
+.compact:hover .bubble, .compact:hover .idea { max-width: 220px; }
+.compact:hover .bubble q { -webkit-line-clamp: 4; }
+.compact:hover .idea small { display: block; }
+.compact:hover { z-index: 5; }
+.statusDot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; animation: councilPulse 1s ease-in-out infinite; }
+
+/* The council dock: bubbles sit beside the companion, pointing back at it. */
+.dock { display: flex; align-items: center; pointer-events: none; }
+.dockBubble { margin-left: 4px; text-align: left; }
+.dockBubble::after { left: -6px; bottom: 50%; transform: translateY(50%) rotate(135deg); }
+.dockName { display: block; margin-bottom: 2px; font: 700 10.5px/1 var(--font-figtree, system-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tint); }
+
+/* One calm marker stands in for the researched gifts that are not on show; the book holds them all. */
+.moreGifts { white-space: nowrap; font: 600 12.5px/1 var(--font-figtree, system-ui); color: var(--color-plum, #4e2f42); background: #fff8e3; border: 2px dashed var(--color-gold, #e2bd6b); border-radius: 999px; padding: 7px 14px; cursor: pointer; box-shadow: 0 10px 22px -10px rgb(40 24 44 / .55); }
+.moreGifts b { margin-right: 4px; }
+.moreGifts:hover { background: #fff2cc; }
+
+/* Small windows: the overview keeps only faces and prices; words wait for a tap. */
+@media (max-width: 700px) {
+  .compact .bubble q, .compact .idea b, .compact .idea small { display: none; }
+  .compact .bubble, .compact .idea { padding: 4px; max-width: none; }
+  .compact:hover .bubble q, .compact:hover .idea b { display: inline; }
+}
+
+/* Council bubbles fade in and out gently; they are short and never stay. */
+.gentle { opacity: 0; transform: translateX(-6px); animation: none !important; transition: opacity 0.45s ease, transform 0.45s ease; }
+.gentleOn { opacity: 1; transform: none; }
+.gentleIn { animation: councilPop 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Calm by default: a memory or an idea in the overview is just a face (and its object); its words come on hover, focus or choice. */
+.compact .bubble q, .compact .idea b, .compact .idea small { display: none; }
+.compact .bubble, .compact .idea { padding: 4px; max-width: none; border-radius: 999px; }
+.compact:hover .bubble q, .compact:focus-within .bubble q { display: -webkit-box; -webkit-line-clamp: 4; }
+.compact:hover .idea b, .compact:focus-within .idea b, .compact:hover .idea small, .compact:focus-within .idea small { display: block; }
+.compact:hover .bubble, .compact:focus-within .bubble { padding: 6px 10px 6px 6px; max-width: 220px; border-radius: 16px 16px 16px 4px; }
+.compact:hover .idea, .compact:focus-within .idea { padding: 5px 12px 5px 5px; max-width: 220px; border-radius: 22px; }
+.recede { opacity: 0.62; filter: saturate(0.85); }
+.recede:hover, .recede:focus-within { opacity: 1; filter: none; }
+.themeIcon { display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 3px; border-radius: 50%; color: var(--color-plum, #4e2f42); background: rgb(255 255 255 / 0.6); box-shadow: inset 0 0 0 1.5px rgb(78 47 66 / 0.18); }
+
+/* Choosing something opens a small parchment menu: readable text on paper, with the actions as labelled rows. */
+.menu { position: relative; width: 252px; margin-top: 10px; padding: 14px 14px 12px; border-radius: 16px; text-align: left; color: var(--color-dusk, #413450); background: linear-gradient(180deg, #fbf3df, #f3e5c4); box-shadow: 0 16px 30px -14px rgb(40 24 44 / .65), 0 0 0 1.5px #c79a6a, inset 0 0 14px rgb(150 100 60 / .16); animation: bloom .22s ease-out both; }
+.menu .caption { margin: 0 18px 0 0; width: auto; max-width: none; text-align: left; font-size: 12.5px; line-height: 1.4; color: inherit; text-shadow: none; animation: none; }
+.menu .caption b { font: 600 16px/1.15 var(--font-display); }
+.menuClose { position: absolute; top: 6px; right: 8px; width: 24px; height: 24px; border: 0; border-radius: 50%; background: rgb(91 74 82 / .1); color: #4e2f42; font: 600 16px/1 var(--font-figtree, system-ui); cursor: pointer; }
+.menuClose:hover { background: rgb(91 74 82 / .22); }
+.menu .actions { flex-direction: column; gap: 5px; margin-top: 10px; }
+.menu .act { width: 100%; height: auto; min-height: 34px; border-radius: 999px; justify-content: flex-start; display: flex; align-items: center; gap: 9px; padding: 6px 12px 6px 6px; background: #fffaf0; box-shadow: 0 0 0 1.5px rgb(91 74 82 / .22); font-size: 13px; text-align: left; }
+.menu .act:hover { transform: translateX(2px); background: #fff; }
+.menu .actIcon { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: rgb(91 74 82 / .08); font-size: 13px; }
+.menu .act small { position: static; transform: none; opacity: 1; white-space: normal; background: none; color: inherit; font: 600 12.5px/1.2 var(--font-figtree, system-ui); padding: 0; pointer-events: auto; }
+.menu .act.gold { background: #f6e3b0; box-shadow: 0 0 0 1.5px #c79a3a; }
+.menu .act.yes[aria-pressed="true"], .menu .act.pass[aria-pressed="true"], .menu .act.gold[aria-pressed="true"] { box-shadow: 0 0 0 1.5px currentColor; }
+.menu .act.yes[aria-pressed="true"] { background: #cfe6bb; color: #2f5a22; }
+.menu .act.pass[aria-pressed="true"] { background: #f4cdc9; color: #8c3b2c; }

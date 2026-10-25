@@ -45,6 +45,11 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
   const reduced = useReducedMotion() ?? false;
   const [size, setSize] = useState({ w: 1440, h: 900 });
   const heading = useRef<HTMLHeadingElement>(null);
+  // The gift frame appears in the middle of the screen where the box burst, then slides to the left as the camera settles.
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    if (!active) setDocked(false);
+  }, [active]);
 
   // The one frame loop for the whole sequence.
   useEffect(() => {
@@ -53,6 +58,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
     let last = performance.now();
     const loop = (now: number) => {
       convergence.advance((now - last) / 1000);
+      setDocked(convergence.t >= CONVERGENCE_TIMES.reveal[0] + 0.9);
       last = now;
       raf = requestAnimationFrame(loop);
     };
@@ -149,7 +155,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
             exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.35 } }}
             transition={reduced ? { duration: 0.25 } : { type: "spring", stiffness: 130, damping: 13, mass: 0.9 }}
             className="pointer-events-none absolute z-20 m-0"
-            style={{ left: cx - frameW / 2, top: cy - (frameW * 1.18) / 2, width: frameW }}
+            style={{ left: (docked ? cx : size.w / 2) - frameW / 2, top: cy - (frameW * 1.18) / 2, width: frameW, transition: "left 0.95s cubic-bezier(0.22, 1, 0.36, 1)" }}
           >
             <motion.div animate={reduced ? undefined : { y: [0, -7, 0] }} transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }} className="relative rounded-[10px] bg-[#fbf3e3] p-3 pb-9 shadow-[0_28px_50px_-22px_rgba(60,36,30,0.65),0_0_0_1px_rgba(120,84,60,0.18)]">
               <span aria-hidden className="absolute -top-3 left-1/2 h-6 w-20 -translate-x-1/2 -rotate-2 rounded-[3px] bg-[#f3b9c4]/80 shadow-sm" />
@@ -158,7 +164,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
                   <img src={photoUrl} alt={snapshot.title} className="h-full w-full object-contain" onError={() => setPhotoFailed(true)} />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_40%,#fff4d6,#f6dcc7)] px-5 text-center">
-                    <span aria-hidden className="text-[#a07a2c]"><MapIcon name="present" size={44} /></span>
+                    <svg aria-hidden width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#c9694d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="9" width="17" height="11" rx="1.5" /><path d="M3 9h18v-3H3zM12 6v14M12 6c-1-3-5-3.5-5-1.2C7 6 9 6 12 6zM12 6c1-3 5-3.5 5-1.2C17 6 15 6 12 6z" /></svg>
                     <span className="font-display text-[18px] leading-tight text-dusk">{snapshot.title}</span>
                     <span className="text-[11px] text-dusk/55">Photo unavailable</span>
                   </div>
