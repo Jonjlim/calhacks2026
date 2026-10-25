@@ -43,7 +43,16 @@ export const start = mutation({
     const previous = await ctx.db.query("councilRuns").withIndex("by_room_request", q => q.eq("roomId", room._id).eq("idempotencyKey", args.idempotencyKey)).unique();
     if (previous?.researchJobId) return ok({ runId: previous.runId, jobId: previous.researchJobId });
     const recent = await ctx.db.query("councilRuns").withIndex("by_room", q => q.eq("roomId", room._id)).order("desc").take(20);
-    const active = recent.find(r => ["running", "uncertain"].includes(r.status));
+    const open = recent.filter(r => ["running", "uncertain"].includes(r.status));
+    for (const old of open.filter(r => r.knowledgeRevision !== room.knowledgeRevision)) {
+      const message = "Memories changed. Start a new council request with the current clues.";
+      await ctx.db.patch(old._id, { status: "failed", error: message, updatedAt: Date.now() });
+      const job = old.researchJobId ? await ctx.db.get(old.researchJobId) : null;
+      if (job && ["pending", "running", "uncertain"].includes(job.status)) {
+        await ctx.db.patch(job._id, { status: "stale", lastError: message });
+      }
+    }
+    const active = open.find(r => r.knowledgeRevision === room.knowledgeRevision);
     if (active?.researchJobId) return ok({ runId: active.runId, jobId: active.researchJobId });
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, ids, room.budgetMinor ?? null]);
     const { roomId: _, ...storedBrief } = brief;
@@ -118,6 +127,18 @@ export const expire = internalMutation({
   args: runArgs,
   handler: async (ctx, args) => {
     const run = await ctx.db.query("councilRuns").withIndex("by_run", q => q.eq("runId", args.runId)).unique();
+    if (run?.status === "running" && run.roomId) {
+      const room = await ctx.db.get(run.roomId);
+      if (!room || room.knowledgeRevision !== run.knowledgeRevision) {
+        const message = "Memories changed. Start a new council request with the current clues.";
+        await ctx.db.patch(run._id, { status: "failed", error: message, updatedAt: Date.now() });
+        const job = run.researchJobId ? await ctx.db.get(run.researchJobId) : null;
+        if (job && ["pending", "running", "uncertain"].includes(job.status)) {
+          await ctx.db.patch(job._id, { status: "stale", lastError: message });
+        }
+        return;
+      }
+    }
     if (run?.status === "running") await ctx.db.patch(run._id, { status: "uncertain", error: "The council was interrupted. Resume this request to check its existing research.", updatedAt: Date.now() });
   },
 });

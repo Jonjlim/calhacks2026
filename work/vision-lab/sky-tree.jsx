@@ -222,3 +222,6 @@ export function SkyTree({items=[],themes=[],gifts=[],products,art,rank,excluded=
     </Suspense>
   </Canvas><div className="tree-instruction">{dragging?(dir==='box'?'Release to put it in the box':dir===1?'Release: ♥ feels like Maya':dir===-1?'Release: ✕ pass for now':'Toward the box supports · away passes'):stage===0?'Click empty space to add a memory, photo or idea':'Drag toward the box to support · away to pass'}<span>Click a node to act · drop a gift on the box to choose it</span></div></div>;
 }
+
+// Reuse the established storybook assets in the isolated interaction film.
+export { Spirit, Tree, Present, GiftProp };
