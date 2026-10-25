@@ -1,5 +1,50 @@
 # Contracts
 
+## Member budget ranges (2026-10-25)
+
+Owner: Dev 2. Consumers: Dev 1 (join prompt/right-edge slider), Dev 3 (buyer and
+direction context), Dev 4 (ranking/research briefs). Additive, no data migration.
+
+```ts
+interface MemberBudgetRange {
+  roomId: string; participantId: string;
+  minMinor: number; maxMinor: number; currency: "USD"; updatedAt: number;
+}
+interface GroupBudgetGuidance {
+  lowerMinor: number; upperMinor: number; currency: "USD";
+  responseCount: number; participantCount: number; conflicting: boolean;
+}
+```
+
+- `budgetRanges` is contributor-private, indexed by `roomId` and by
+  `[roomId, participantId]`. Values are integer cents, 0 ≤ min ≤ max ≤ 10,000,000.
+- `budgets.state({roomId})` is a member-only query returning
+  `Result<{range: MemberBudgetRange | null, guidance: GroupBudgetGuidance | null,
+  participantCount: number}>`. It returns only the caller's range.
+- `budgets.setRange({roomId,minMinor,maxMinor})` is a member-only mutation returning
+  `Result<MemberBudgetRange>`. It resolves the participant from auth; no caller
+  can choose another owner. Expected errors: unauthorized, not_found,
+  validation_failed. No AI tool can call this mutation.
+- `Room.budgetGuidance?`, `SearchBrief.budgetGuidance?`, and
+  `BuyerSnapshot.budgetGuidance?` contain only the derived group guidance. Lower is
+  the rounded arithmetic mean of submitted minima; upper is the smallest submitted
+  maximum times the CURRENT number of room participants. Missing ranges remain
+  unknown (never zero); responseCount makes incomplete guidance visible. No
+  submitted ranges means no guidance. Conflicting is true when lower > upper;
+  retain the requested formulas rather than silently swapping them.
+- Set, join and leave recompute guidance atomically. Leaving deletes the private
+  range; room purge includes it. Live catalog ranking reads current guidance,
+  including for already-fetched products. Updates do not spend on a new search,
+  change knowledgeRevision, or modify shares, approvals, payment/contribution caps.
+- Guidance changes only the budget-fit score, not eligibility: products outside
+  either bound remain candidates. It is not copied into the provider's maxPrice
+  or into budgetMinor. Unknown prices remain unknown. Models get aggregates only
+  and are told the bounds are context, never a cutoff or spending authorization.
+- First room entry asks for an explicit range. The right-edge two-handle bar stays
+  editable; saved sliders update on release/key change. Suggested initial values
+  are not stored or counted until a member confirms them. The raw ranges never
+  appear in participant projections, council payloads, logs or recipient tools.
+
 Shared interfaces for parallel work. These TypeScript shapes are documentation, not compiled code. When implementation starts, copy them into `lib/contracts/` and keep this file authoritative for names and semantics.
 
 Owners change this document in the same PR as the code. Consumers mock; they do not invent sibling types.
@@ -931,6 +976,8 @@ May enqueue `AgentJob` `evaluate_thread`.
 
 Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
+After sharing a room photo, the map waits for the saved photo to arrive on the room subscription, focuses its island, and opens its private review panel. Closing the composer is not a published clue: the uploader must still review and publish each suggestion. Failed photo reads and completed reads without suggestions must not remain labeled “Reading”.
+
 ### `extractClues`
 
 | | |
@@ -1212,6 +1259,11 @@ Semantics: events are idempotent by `eventId`; state per actor is the highest `s
 ---
 
 ### Room council integration (Dev 1 + Dev 3 + Dev 4)
+
+Client parity (Dev 1; consumers: map, book, phone): adding a gift uses `addGiftToBox` on every surface and never silently replaces an existing collection. Approval screens show every frozen `revision.items` entry and retain revision controls after pledging. The phone/list surface also serves as the accessible fallback if WebGL fails.
+
+Live display projection: `RoomData.researchJobs?` carries the existing authorized `jobs.listRoomJobs` rows, now including optional `directionId` and up to 25 unfinished jobs alongside the ten newest jobs (deduplicated); `RoomWorld.members?` carries derived `CouncilMemberState` values from council events and authorized agent/research/trend jobs. Active jobs take precedence over historical events; pending, uncertain, failed, canceled and stale work have distinct captions. The display sequence is a change token for projected jobs, not an ingested council-event sequence. No synthetic events are persisted. Private extraction activity stays owner-only. Pending direction/theme/sharpen actions additionally drive the requesting viewer’s Muse caption only for the actual promise lifetime. Ring research supports `uncertain` separately from `running`, and per-direction progress uses the stored direction ID. These fields are additive; older clients can use `latestResearch`.
+
 
 The authenticated room uses `councilRoom.start({roomId, publishedClueIds, idempotencyKey})`, returning `Result<{runId, jobId}>`. Membership, active room clues, room knowledge revision and the stated room budget are checked in Convex. The coordinator receives only published clues and public room context. No private imports, unpublished extractions or contribution limits cross this boundary.
 
@@ -1923,7 +1975,7 @@ interface MapDirection {
 - `agents.directions.list({ roomId })` → `Result<MapDirection[]>`, membership-checked.
 - **Probe questions** reuse `mapSharpens` with optional `directionId` and empty `listingIds`/`finalistIds`. Answering publishes the chosen sentence as the answering member's memory, as Sharpen does. A preset Sharpen option (no model) now has an empty `clue`; answering it casts that member's up vote on its listing instead of publishing product text as a memory.
 - **Signals.** `mapSignals.targetKind` adds `"direction"` (target: direction ID) and `"trend"` (target: `trendJobId:query` from a usable sample). On a trend, +1 = caught, −1 = let it drift. A direction or gift fades once passed and leaves the map when at least half the room has passed and nobody pulled it in. Nothing is deleted.
-- **Research per direction.** `research.startResearch` accepts optional `directionId`. The direction's `query` becomes the one search; its clues must be included. The job stores `directionId`; jobs in different directions run side by side, and only a newer job **in the same direction** makes one stale. `listRecommendations` merges the newest succeeded pool per visible direction (top 2 each, after variety) with the general pool (top 2 when directions exist, otherwise the usual 12).
+- **Research per direction.** `research.startResearch` accepts optional `directionId`. The direction's `query` becomes the one search; its clues must be included. The job stores `directionId`; jobs in different directions run side by side, and only a newer job **in the same direction** makes one stale. `listRecommendations` merges the newest succeeded pool per visible direction (top `GIFTS_PER_DIRECTION` = 4 each, after variety) with the general pool (top 4 when directions exist, otherwise the usual 12).
 - `SearchOrigin.source` adds `"direction"` with optional `directionId`. `RecommendationsView` adds optional `searchPools: { jobId, directionId?, query, found, removedByClues, foldedDuplicates, shown }[]`, so "Why this gift?" can show what each search did.
 - **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
 - **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.
@@ -1933,7 +1985,7 @@ interface MapDirection {
 - **Reasons.** `votes.castVote` and `mapSignals.setDirection` accept optional `reason: "style" | "price" | "has_similar" | "vibe"` on a pass ("not her style", "too pricey", "she has something like it", "wrong vibe"). Stored on the vote/signal row; ignored on pulls. Skipping the reason is still a pass.
 - **Retiring.** A direction is retired (`mapDirections.retiredAt`, never deleted) when the room has let the direction go (`fadeOf` = gone) or let `GIFT_PASSES_TO_RETIRE` (2) of the gifts its newest search found go. Retired directions leave `agents.directions.list` and the catalog; their search, reasons and history stay in the decision log.
 - **Replacement.** Retiring schedules `internal.agents.directions.replace`: one new direction beside the others (`replaces` links them), drafted with the same model/preset path and checks, told which directions the room passed on and why ("too pricey" asks for a simpler or smaller gift). It never deletes or resets other directions and starts no trend lookup.
-- **Pulls.** A direction pulled in (more pulls than passes) shows 3 gifts instead of 2. `listRecommendations` is ordered by the room's net gift votes, then score: pulled gifts lead and passed ones trail. Scores and citations are unchanged; the map keeps this server order.
+- **Pulls.** A direction pulled in (more pulls than passes) shows one more gift (5 instead of 4). `listRecommendations` is ordered by the room's net gift votes, then score: pulled gifts lead and passed ones trail. Scores and citations are unchanged; the map keeps this server order.
 - The retirement and the replacement each write one council line to the decision log, which also reaches every member's status line for 15 seconds.
 
 #### Decision log — "How we got here" (D23 trial)
@@ -1976,6 +2028,8 @@ money, or changes the explicit listing votes table. Organizer-only
 ties remain open or can be skipped through the existing dismissal operation.
 Existing answerSharpen remains for compatibility; the live map uses poll votes.
 
+Gift selection UI: Pass records the gift's downvote on the first click; a reason can be added separately. Gift vote counts and own-vote state are visible alongside the selected product. Votes remain advisory: they do not publish facts, select products or approve payments. One net vote moves the gift 2.2 world units along its ring radius (bounded by the existing ring limits), making human steering more visible without changing source relevance. Selecting a gift runs a 1.2-second eased camera dolly to the actual island photo (reduced motion snaps). The orbit UI uses that same visible photo, with no replacement image, and appears after arrival; closing glides back to the prior view. Four main orbit actions: add to box, support, pass, and its recorded journey. Ownership/price feedback and the source link remain secondary actions.
+
 Research ordering applies direct gift votes, then question support, then existing
 relevance/deterministic tie order BEFORE truncating a pool. Question support is
 an advisory signal from explicitly linked product IDs or literal product-title
@@ -1991,3 +2045,34 @@ existing proposal recomputation/approval invalidation. `setGiftBox` remains full
 replacement; `selectGift` remains legacy replace-with-one. The live map now uses
 add/remove, presents Add to box as a primary action and renders every item and
 the combined proposal estimate. Votes never select gifts or approve a proposal.
+
+#### Themes that form on their own (D23 trial)
+
+- **No kind buckets.** Until the council groups them, memories float individually on the outer ring (`lib/map/rings.ts`: theme `UNGROUPED = ""`, steady golden-angle seats). The Loves / Wishes / Moments jar buckets and the "Also shared" catch-all are gone from the map; a memory no theme holds yet floats until the next regroup.
+- **Automatic regroup.** `bumpKnowledgeRevision` schedules `internal.agents.themes.autoRegroup({ roomId, revision })` `AUTO_THEME_DELAY_MS` (5 s) later. A run whose revision is no longer current gives way, so a burst of changes regroups once. Fewer than 3 memories clears the themes; without a model or within-budget call (`IDEA_CALLS_PER_WINDOW`) the current themes stay unchanged. The model is shown the current themes and asked to keep them unless the memories clearly call for a change.
+- **Stable identity.** `storeThemes` reconciles instead of replacing: `matchThemes` pairs each new grouping with the existing theme it shares at least a third of its memories with (strongest first), keeping that `mapThemes._id` (and so its island, position and votes); unmatched themes are added or removed. A "Regrouped N memories into K themes" line is logged only when something changed.
+- The manual `suggestThemes` action remains for compatibility, but the map no longer shows a grouping button.
+
+#### Every gift on the map (D23 trial)
+
+The map draws every gift the catalog returns, apart from ones the room let go. Only past `CROWDED_AT` (16) gifts does `lib/map/giftBundles` fold each theme's extras (beyond its best `SHOWN_PER_GROUP` = 3) into a "+N" bundle placed where they would sit; tapping a bundle fans it out on that screen. The chosen gift and gifts on the branch in focus are always drawn. The Book of Possibilities still lists everything. Replaces the earlier top-3 and top-6 caps.
+
+#### TikTok inspiration (D25 trial)
+
+- `research.tiktokLooks.look({ roomId, trendJobId, query })` → `Result<{ lookId }>`, membership-checked; `query` must be a suggestion of a usable trend sample in the room. Reuses a pending/running search or one that succeeded in the last 24 h for the same room and query.
+- `research.tiktokLooks.list({ roomId })` → `Result<{ id, query, status, posts: { url, videoId }[], retrievedAt?, lastError? }[]>`. Posts are public TikTok links (private accounts and ads dropped), at most 6.
+- New `tiktokLooks` table (room-scoped, purged with the room). A successful search logs one "looked at N public TikToks" line in the decision log.
+
+Map subscriptions fail independently: an unavailable optional endpoint (for example TikTok inspiration) must not remove saved photos, directions, or other successfully loaded map data. The room names the unavailable feature instead of treating it as an empty successful result. Combine reports when no new direction was saved.
+
+### Gift story and gift tag (D26, Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 (reveal panel, `/gift/[token]`). Additive; no existing field changes.
+
+- `GiftStory = { recipientName, occasion, friends: string[], gifts: { title, imageUrl? }[], memories: string[], words: { word, count }[], themes: string[], directions: { label, why }[], photos: string[], stats: { memories, friends, photos, themes, directions, thrownOut, searches, products, votes } }`. First names only. `memories` are active published clues of kind `interest`/`explicit_wish`/`timing`, without authors or the `Gift idea: ` prefix. `thrownOut` = decision-log `rejected` lines + retired directions. `votes` = up/down votes + map signals.
+- `story.summary({ roomId })` → `Result<GiftStory>`, membership-checked, photos always included.
+- `story.tag({ roomId })` → `Result<{ token, includePhotos, createdAt } | null>`, membership-checked.
+- `story.createTag({ roomId, includePhotos })` → `Result<{ token, includePhotos, createdAt }>`. Organizer only (`unauthorized`); needs an active gift selection (`validation_failed`). Reuses the live tag so a printed QR keeps working; `includePhotos` updates in place.
+- `story.revokeTag({ roomId })` → `Result<{ revoked }>`. Organizer only.
+- `story.byToken({ token })` → `Result<GiftStory>`. **Public, no auth.** `not_found` for malformed, revoked, deleted-room or no-active-gift. `photos` is empty unless the tag includes them. No prices or source links.
+- New `giftStories` table `{ roomId, token, createdBy, includePhotos, createdAt, revokedAt? }`, indexed `by_token` and `by_room`, purged with the room.

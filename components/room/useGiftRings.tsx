@@ -1,5 +1,8 @@
 "use client";
 
+import { relevantResearchJob, roomResearchJobs, isResearchActive } from "@/lib/room/researchActivity";
+import { addToGiftBox } from "@/lib/room/giftBox";
+
 import { QuestionPoll } from "./QuestionPoll";
 
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +25,7 @@ import { mapView } from "@/components/world/room/mapView";
 import { playChoose, playCouncilTick } from "@/components/world/sfx";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
+import { TikTokBoard } from "./TikTokBoard";
 import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
 import { playSfx } from "@/components/world/sounds";
 
@@ -40,8 +44,6 @@ const looksPasted = (text: string) => text.length > PASTE_CHARS || text.split(/\
 /** How long another member's vote keeps its bubble, and how long a still cursor stays on the map. */
 const PULSE_MS = 3200;
 const CURSOR_MS = 8000;
-/** Gifts shown on the map before the rest fold behind “+N more”. */
-const TOP_GIFTS = 6;
 /** How long woven threads stay before they settle, and the longest the council may reach before giving up. */
 const WEAVE_MS = 5200;
 const REACH_MAX_MS = 30_000;
@@ -66,18 +68,19 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null } {
+}): { councilThinking: string | null; rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
   const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean } | null>(null);
+  const composerDraft = useRef("");
   // Photos picked in the add box before they're sent.
+  const [sharedPhotoSource, setSharedPhotoSource] = useState<string | null>(null);
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
   // “Why?” on one gift: its memories, themes and the gift light up together.
   const [whyListing, setWhyListing] = useState<string | null>(null);
   // The theme whose memories are fanned out to read; the rest rest as face dots.
   const [openTheme, setOpenTheme] = useState<string | null>(null);
-  const [allGifts, setAllGifts] = useState(false);
   // Where this viewer started a search, so its progress shows on that theme.
   const [researchFrom, setResearchFrom] = useState<string | null>(null);
   const [hiddenPoll, setHiddenPoll] = useState<string | null>(null);
@@ -89,6 +92,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [passing, setPassing] = useState<string | null>(null);
   /** "How we got here": the whole room's story, or one gift's (its listing id). */
   const [story, setStory] = useState<{ listingId?: string } | null>(null);
+  /** The trend cloud whose TikTok inspiration board is open (D23 trial). */
+  const [tiktok, setTiktok] = useState<{ trendJobId: string; query: string } | null>(null);
+  const closeTiktok = useCallback(() => setTiktok(null), []);
   const closeStory = useCallback(() => setStory(null), []);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -159,8 +165,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const own = row.voters.find((v) => v.participantId === me.id);
       if (own) mine[key] = own.value;
     }
+    for (const [id, vote] of Object.entries(data.votes)) tally[`gift:${id}`] = { up: vote.tally.up, down: vote.tally.down };
     return { clue, theme, tally, mine };
-  }, [signalRows, me.id]);
+  }, [signalRows, me.id, data.votes]);
 
   const sharpen = data.sharpen ?? null;
   const finalists = useMemo(() => new Set<string>(sharpen?.status === "open" ? sharpen.finalistIds : []), [sharpen]);
@@ -217,16 +224,23 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   }, [data.trends?.samples, data.trends?.sample, clues, layout.clues, trendNet, usedTrends, now]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
+  const focusedGift = selectedKey?.startsWith("gift:") ? layout.gifts.find(g => `gift:${g.listingId}` === selectedKey) : undefined;
+  useEffect(() => {
+    if (focusedGift) mapView.trackGift(focusedGift.x, focusedGift.z);
+    else if (mapView.target.giftFocus === 1) mapView.returnFromGift();
+  }, [selectedKey, focusedGift?.x, focusedGift?.z]);
+
   const openBox = () => setSelectedKey("box");
   // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
   const startAdd = (what: "memory" | "wish" | "idea") => {
     if (!actions) return;
     setSelectedKey(null);
+    composerDraft.current = "";
     const [x, z] = what === "idea" ? ringPoint(300, RING_RADII.gift - 0.4) : ringPoint(RING_THEMES[what === "wish" ? "wish" : "interest"].angle, RING_RADII.input);
     setComposer({ x, z, zone: what === "idea" ? "gift" : "memory", kind: what === "wish" ? "explicit_wish" : "interest" });
     mapView.focus(x * 0.6, z * 0.6, 0.8);
   };
-  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null, story: null };
+  if (!active) return { councilThinking: null, rings: null, notice, error, openBox, startAdd, tools: null, story: null };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -316,9 +330,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   }
 
   // Research progress shows where it was started; a search someone else started shows at the present.
-  const job = data.latestResearch;
+  const researchJobs = roomResearchJobs(data);
+  const job = relevantResearchJob(researchJobs);
   const research: RingResearch = !job ? null
-    : job.status === "pending" || job.status === "running" || job.status === "uncertain" ? "running"
+    : isResearchActive(job) ? "running"
+    : job.status === "uncertain" ? "uncertain"
     : (job.status === "failed" || job.status === "stale") && now > 0 && now - job.createdAt < RESEARCH_FAIL_MS ? "failed"
     : null;
   const researchTheme = research && researchFrom && researchFrom !== "box" && layout.themes.some((t) => t.id === researchFrom) ? researchFrom : null;
@@ -357,7 +373,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const reasonActs = (key: string): RingAction[] => {
     const give = (reason?: PassReason) => {
       setPassing(null);
-      if (key.startsWith("gift:")) vote(key.slice(5), "down", reason);
+      if (key.startsWith("gift:")) {
+        if (!reason && data.votes[key.slice(5)]?.myVote === "down") return;
+        vote(key.slice(5), "down", reason);
+      }
       else if (key.startsWith("direction:")) signal("direction", key.slice(10), -1, reason);
     };
     return [
@@ -373,7 +392,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       return;
     }
     void (isOrganizer
-      ? run(() => actions.addGiftToBox ? actions.addGiftToBox(listingId) : actions.selectGift(listingId), actions.addGiftToBox ? "Added to the box. Your other gifts stay; everyone approves the updated collection." : "Gift selected. Everyone approves this version.").then((ok) => ok && setSelectedKey("box"))
+      ? run(() => addToGiftBox(actions, selection, listingId), actions.addGiftToBox ? "Added to the box. Your other gifts stay; everyone approves the updated collection." : "Gift selected. Everyone approves this version.").then((ok) => ok && setSelectedKey("box"))
       : run(() => actions.castVote(listingId, "up"), "Your vote is in. The organizer puts the final gift in the box."));
   };
 
@@ -442,12 +461,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         actions: actions ? [
           { icon: "present", label: isOrganizer ? (inBox ? "In the box ✓" : !actions.addGiftToBox && selection ? "Backend update needed" : "Add to box") : "Vote for the box", tone: "gold", on: inBox, disabled: !!pending || (isOrganizer && !actions.addGiftToBox && !!selection && !inBox), run: () => inBox ? setSelectedKey("box") : choose(listingId) },
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
-          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: passFirst(key, mine === "down", () => vote(listingId, "down")) },
+          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
           { icon: "thread", label: "Why?", on: whyListing === listingId, run: () => setWhyListing((w) => (w === listingId ? null : listingId)) },
 
+          { icon: "drift", label: "Add a reason for passing", more: true, disabled: !!pending, run: () => setPassing(key) },
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "coins", label: "Too pricey for me", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
-          { icon: "thread", label: "How we got here", more: true, run: () => setStory({ listingId }) },
+          ...(data.trail ? [{ icon: "thread" as const, label: "How we got here", more: true, run: () => setStory({ listingId }) }] : []),
           { icon: "open", label: "Open the listing", more: true, run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
           ...(trendByListing.has(listingId) ? [{ icon: "trend" as const, label: "See the trend", more: true, run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
@@ -467,6 +487,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
             run: () => void run(() => actions.setDirection("trend", target, mineCaught ? 0 : 1), mineCaught ? "Let go. It drifts back into the sky." : "Caught. Ask the council for directions to weave it in.") },
           { icon: "drift" as const, label: "Let it drift", tone: "pass" as const, disabled: !!pending,
             run: () => void run(() => actions.setDirection("trend", target, -1), "It drifted away for the room. Her memories didn’t change.").then((ok) => ok && setSelectedKey(null)) },
+          // Public TikToks for this idea, as inspiration: one capped search, shared with the room for a day.
+          ...(actions?.lookTikTok ? [{ icon: "spark" as const, label: "See TikToks", disabled: !!pending,
+            run: () => { setTiktok({ trendJobId: node.trendJobId, query: node.query }); void run(() => actions.lookTikTok!(node.trendJobId, node.query), `Looking for public TikToks for “${node.query}”.`); } }] : []),
           { icon: "open" as const, label: "See the source", more: true, run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
         ] : [],
       };
@@ -475,16 +498,20 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const d = directionNodes.find((n) => n.key === key);
       if (!d) return null;
       const found = recs.filter((r) => r.foundBy?.directionId === d.id).length;
-      const searching = research === "running" && researchFrom === key;
+      const directionJob = relevantResearchJob(researchJobs.filter((j) => j.directionId === d.id));
+      const searching = isResearchActive(directionJob);
+      const uncertain = directionJob?.status === "uncertain";
       const asking = sharpen?.status === "open" && sharpen.directionId === d.id;
       return {
         caption: <><b>{d.label}</b><small>{d.why}</small>
           <small>Joins {d.memories.map((m) => `“${m.text}”`).join(" + ")}{d.trend ? ` · with the caught trend “${d.trend.query}”` : ""}</small>
           {asking && <small>The council asked the room one question to sharpen this.</small>}
+          {uncertain && <small>The search is awaiting confirmation. Its results are not known yet.</small>}
+          {directionJob?.status === "failed" && <small>The search failed. You can try again.</small>}
           {d.stale && <small>Memories changed since. Ask the council again to refresh it.</small>}</>,
         actions: [
           ...(isOrganizer && actions?.researchDirection ? [{ icon: "sprout" as const, label: searching ? "Searching…" : found ? "Search again" : "Find gifts for this", tone: "gold" as const, disabled: !!pending || searching,
-            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. Two gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
+            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. A few gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
           ...voteActs("direction", d.id),
         ],
       };
@@ -494,11 +521,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (!group) return null;
       const mine = group.uploaderId === me.id;
       const found = mine ? foundFor(group.sourceId) : [];
+      const source = mine ? data.evidence.find((e) => e.id === group.sourceId) : undefined;
+      const photoStatus = source?.media?.status;
       return {
         caption: mine ? (
           <span className={s.found}>
             <b>Your photo · everyone sees it</b>
-            {found.length === 0 ? <span>{group.clueIds.length ? `${group.clueIds.length} shared from it. Nothing left to review.` : "Reading it… what Unwrap guesses appears here, only for you."}</span> : (
+            {found.length === 0 ? <span>{group.clueIds.length ? `${group.clueIds.length} shared from it. Nothing left to review.` : photoStatus === "failed" ? "Your photo is shared, but Unwrap couldn’t read it. No guesses were published." : photoStatus === "uploaded" ? "Reading it… what Unwrap guesses appears here, only for you." : "Your photo is shared. No suggestions to review; you can add a memory in your own words."}</span> : (
               <>
                 <span>Only you see these guesses until you share them:</span>
                 {found.map((c) => (
@@ -541,7 +570,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const trendSample = (data.trends?.samples ?? []).find((sample) => sample.publishedClueId === clue.id);
     const trendNote = trendSample ? emptyTrendNote(trendSample) : null;
     return {
-      caption: <><b>“{clue.text}”</b><small>{twinAuthor ? `${twinAuthor} · AI insight` : `${name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory`} · in {themeLabel(theme)}</small>{trendNote && <small>{trendNote}</small>}</>,
+      caption: <><b>“{clue.text}”</b><small>{twinAuthor ? `${twinAuthor} · AI insight` : `${name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory`} · {theme ? <>in {themeLabel(theme)}</> : "the council will group it soon"}</small>{trendNote && <small>{trendNote}</small>}</>,
       // Trend discovery runs when directions are requested, not once per memory.
       actions: [
         ...voteActs("clue", clue.id),
@@ -559,41 +588,47 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     if (composer.zone === "gift") {
       void run(async () => {
         const shared = await actions.addManualClue("interest", GIFT_IDEA_PREFIX + text);
-        const id = shared.ok ? (shared.value as { _id?: string; id?: string })._id ?? (shared.value as { id?: string }).id : undefined;
-        // The idea is saved either way; a busy council just means research starts on the next "Find gifts".
-        if (id && isOrganizer) void actions.startResearch([...allClueIds, id]).catch(() => undefined);
+        if (!shared.ok) return shared;
+        // Saving an idea and starting its search are separate outcomes.
+        setComposer(null);
+        const id = (shared.value as { _id?: string; id?: string })._id ?? (shared.value as { id?: string }).id;
+        if (id && isOrganizer) {
+          try {
+            const search = await actions.startResearch([...allClueIds, id]);
+            if (!search.ok) return { ok: false as const, error: { ...search.error, message: `Your idea was saved, but research did not start: ${search.error.message}` } };
+          } catch {
+            return { ok: false as const, error: { code: "unknown" as const, message: "Your idea was saved, but the search request could not be confirmed. Check its status before trying again." } };
+          }
+        }
         return shared;
-      }, isOrganizer ? "Gift idea shared. The council is looking for real listings." : "Gift idea shared with the room.").then(done);
+      }, isOrganizer ? "Gift idea shared. Research requested; watch Scout for progress." : "Gift idea shared with the room.");
       return;
     }
     if (looksPasted(text)) {
       void run(() => actions.importEvidence("Pasted on the map", text), "Reading your paste privately. Review the clues it finds before anything is shared.").then((ok) => { done(ok); if (ok) onPaste(); });
       return;
     }
-    void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
+    void run(() => actions.addManualClue(composer.kind, text), "Shared with the room. The council will fold it into a theme in a moment.").then(done);
     if (composer.kind === "explicit_wish") playSfx("wish");
   };
   const composerNode = composer && actions && (
     <div className={s.write} data-map-token>
-      {composer.zone === "memory" && (
-        <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-          {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
-          ))}
-          <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos"><MapIcon name="camera" size={14} />Photo</button>
-        </div>
-      )}
       <span className={`${s.cloud} ${s.writeCloud} ${composer.zone === "gift" ? s.ideaCloud : ""}`}>
-      <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
-        className={composer.zone === "gift" ? s.ideaInput : undefined}
+      <textarea autoFocus defaultValue={composerDraft.current} onChange={(e) => { composerDraft.current = e.currentTarget.value; }} maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
+        className={composer.zone === "gift" ? s.ideaInput : s.memoryInput}
         placeholder={composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat"}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(e.currentTarget.value); }
           if (e.key === "Escape") setComposer(null);
         }} />
+      {composer.zone === "memory" && <button type="button" className={s.mediaButton} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos" title="Add photos"><MapIcon name="camera" size={19} /></button>}
       <i className={s.trail} aria-hidden />
       </span>
+      {composer.zone === "memory" && <label className={s.wishOption} title="An explicit wish gets priority in gift searches.">
+        <input type="checkbox" checked={composer.kind === "explicit_wish"} onChange={(e) => setComposer({ ...composer, kind: e.currentTarget.checked ? "explicit_wish" : "interest" })} />
+        They asked for this <span>Wish</span>
+      </label>}
       <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
     </div>
   );
@@ -622,7 +657,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const readPhotos = () => {
     if (!actions || !photoPick.length) return;
     const picked = photoPick;
-    void run(() => actions.importPhotos(picked.map(({ blob, marker }) => ({ blob, marker }))), "Shared with the room. Unwrap is reading them; only you see what it guesses until you share it.", "photos").then((ok) => {
+    void run(async () => {
+      const result = await actions.importPhotos(picked.map(({ blob, marker }) => ({ blob, marker })));
+      if (result.ok && result.value && typeof result.value === "object" && "sourceId" in result.value && typeof result.value.sourceId === "string") {
+        setSharedPhotoSource(result.value.sourceId);
+      }
+      return result;
+    }, "Photo shared. Review its private suggestions before sharing them as memories.", "photos").then((ok) => {
       if (ok) {
         setComposer(null);
         setPhotoPick([]);
@@ -660,12 +701,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
-      <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-        {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-          <button key={kind} type="button" role="radio" aria-checked={false} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
-        ))}
-        <button type="button" role="radio" aria-checked><MapIcon name="camera" size={14} />Photo</button>
-      </div>
+      <button type="button" className={s.backToWriting} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
       {photoPick.length === 0 ? (
         <label className={s.photoPick}>
           <MapIcon name="camera" size={22} />Choose up to 3 photos
@@ -708,6 +744,19 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const found = mine ? foundFor(g.sourceId).length : 0;
     return { key: g.key, images: g.urls, author: name(g.uploaderId), mine, found, reading: mine && source?.media?.status === "uploaded" && !found, x, z };
   });
+  // Wait for the authoritative subscription before opening the newly shared photo.
+  // Photos sit on the outer ring and can otherwise land outside the current view.
+  useEffect(() => {
+    if (!sharedPhotoSource || !active) return;
+    const group = groups.find((g) => g.sourceId === sharedPhotoSource && g.uploaderId === me.id);
+    const node = group && photoNodes.find((p) => p.key === group.key);
+    if (!node) return;
+    setSelectedKey(node.key);
+    setOpenTheme(null);
+    mapView.focus(node.x, node.z, 0.65);
+    setSharedPhotoSource(null);
+  }, [sharedPhotoSource, active, groups, photoNodes, me.id]);
+
   const thumbFor = (clueId: string) => groups.find((g) => g.clueIds.includes(clueId))?.urls[0];
 
   // The shared yes at the present.
@@ -776,7 +825,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     setTrendAsked(Date.now());
     playCouncilTick();
     setWeave({ id: Date.now(), phase: "reaching", since: Date.now(), fresh: [] });
-    void run(() => actions.proposeDirections!(), "The council wove your memories into gift directions. Open one to find gifts.", "directions")
+    void run(async () => {
+      const result = await actions.proposeDirections!();
+      if (result.ok && result.value && typeof result.value === "object" && "directions" in result.value && result.value.directions === 0) {
+        return { ok: false as const, error: { code: "validation_failed" as const, message: "No new directions were added. Existing searches already cover these ideas, or the map is full. Share another interest or pass on a direction to make room." } };
+      }
+      return result;
+    }, "Gift directions saved. Open one to find gifts.", "directions")
       .then((ok) => { if (!ok) setWeave(null); });
   };
   // The weave's threads. Every one is a real link: memories being weighed, the memories each new
@@ -791,7 +846,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
 
   const councilActs: RingAction[] = actions ? [
     ...(actions.proposeDirections ? [{ icon: "spark" as const, label: thinking ? "Combining…" : directions.length ? "New directions" : "Combine into directions", disabled: !!pending || clues.length < 2, run: proposeDirections }] : []),
-    { icon: "gather", label: pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes", disabled: !!pending || clues.length < 3, run: () => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes") },
+    // Themes form on their own as memories change (D23 trial); there is no grouping button.
     ...(isOrganizer && !actions.proposeDirections ? [{ icon: "sprout" as const, label: searching ? "Searching…" : recs.length ? "Find more gifts" : "Find gifts", disabled: !!pending || searching || !allClueIds.length, run: () => startSearch("box") }] : []),
     { icon: "scales", label: pending === "sharpen" ? "Thinking…" : "Help us choose", disabled: !!pending || recs.length < 2 || sharpenOpen, run: () => void run(() => actions.sharpen(), "The council has one question for you.", "sharpen") },
     ...(data.trail ? [{ icon: "thread" as const, label: "How we got here", disabled: !data.trail.length, run: () => setStory({}) }] : []),
@@ -804,7 +859,6 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     else if (clues.length < 2 && actions.proposeDirections) nextStep = { icon: "cloud", label: "Share one more memory, then the council can combine them" };
     else if (!directions.length && actions.proposeDirections) nextStep = { icon: "spark", label: thinking ? "Combining…" : `Combine ${clues.length} memories into gift directions`, disabled: !!pending, run: proposeDirections };
     else if (directions.length && !recs.length && !searching) nextStep = { icon: "sprout", label: isOrganizer ? "Open a direction and find gifts for it" : "The organizer finds gifts for a direction next" };
-    else if (clues.length >= 3 && !councilThemes.length) nextStep = { ...act("Group into themes")!, label: pending === "themes" ? "Grouping…" : `Group ${clues.length} memories into themes` };
     else if (!recs.length && isOrganizer && !searching) nextStep = { ...act("Find gifts")!, label: "Find gifts from these memories" };
     else if (!recs.length && !isOrganizer && !searching) nextStep = { icon: "sprout", label: "The organizer finds gifts next" };
     else if (recs.length >= 2 && !sharpenOpen) nextStep = { ...act("Help us choose")!, label: pending === "sharpen" ? "Thinking…" : "Can’t decide? Ask one question" };
@@ -872,10 +926,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         up, down, fixture: l.source === "manual_fixture",
         finalist: finalists.has(g.listingId), faded: (finalists.size > 0 && !finalists.has(g.listingId)) || fade === "faded",
         // Only the leading few show; the chosen gift, finalists and anything open or explained stay visible.
-        hidden: (fade === "gone" && !kept) || (!allGifts && i >= TOP_GIFTS && !kept && !finalists.has(g.listingId)),
+        // Every gift is on the map unless the room let it go; a crowded map bundles extras (GiftRings).
+        hidden: fade === "gone" && !kept,
       };
     }),
-    moreGifts: layout.gifts.length > TOP_GIFTS ? { count: layout.gifts.length - TOP_GIFTS, open: allGifts, toggle: () => setAllGifts((v) => !v) } : null,
     boxResearch: research && !researchTheme ? research : null,
     votes: signals.tally,
     evaluations: twin.evaluations,
@@ -905,13 +959,16 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       // “Why?” stays lit while its gift or the box is open.
       if (key !== "box" && key !== `gift:${whyListing}`) setWhyListing(null);
       // Choosing a memory, theme, gift or direction glides the camera to it, keeping the viewer's angle.
-      const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) ?? directionNodes.find((d) => d.key === key) : undefined;
-      if (at) mapView.focus(at.x, at.z);
+      const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) ?? directionNodes.find((d) => d.key === key) ?? photoNodes.find((p) => p.key === key) : undefined;
+      if (at && key?.startsWith("gift:")) mapView.focusGift(at.x, at.z);
+      else if (at) mapView.focus(at.x, at.z);
+      else if (key === null && selectedKey?.startsWith("gift:")) mapView.returnFromGift();
     },
     onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);
       setWhyListing(null);
       setOpenTheme(null);
+      if (point) composerDraft.current = "";
       setComposer(point && actions ? { x: point[0], z: point[1], zone: zone === "gift" ? "gift" : "memory", kind: "interest" } : null);
     },
     onDrag: (key: string, result: RingDragResult) => {
@@ -961,5 +1018,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The council's reaction to the room's passes reaches everyone's status line as it happens.
   const reaction = (data.trail ?? []).findLast((e) => e.actor === "council" && now - e.at < REACTION_MS
     && (e.text.startsWith("Retired") || e.text.startsWith("Suggested") || e.text.startsWith("Couldn’t find")));
-  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
+  return { councilThinking: pending === "directions" ? "Combining memories…" : pending === "themes" ? "Grouping memories…" : pending === "sharpen" ? "Thinking of a question…" : null, rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
 }

@@ -202,6 +202,10 @@ const mapSharpens: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 const mapDirections: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapDirections").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const tiktokLooks: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("tiktokLooks").withIndex("by_room_query", (q) => q.eq("roomId", roomId)).take(limit));
+const giftStories: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("giftStories").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 const roomTrail: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("roomTrail").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
@@ -211,6 +215,7 @@ const participants: Purger = async (ctx, roomId, limit) =>
 /** Order matters: jobs first (see file comment), private data next, membership last. */
 export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ...GIFT_TWIN_PURGE_PHASES,
+  ["giftStories", giftStories],
   ["fashionJobs", fashionJobs],
   ["trendPasses", trendPasses],
   ["trendJobs", trendJobs],
@@ -220,6 +225,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["evidenceSources", evidenceSources],
   ["mediaUploadGrants", mediaUploadGrants],
   ["proposedClues", proposedClues],
+  ["budgetRanges", async (ctx, roomId, limit) => deleteAll(ctx, await ctx.db.query("budgetRanges").withIndex("by_room", q => q.eq("roomId", roomId)).take(limit))],
   ["contributionLimits", contributionLimits],
   ["recipientProfiles", recipientProfiles],
   ["chatMessages", chatMessages],
@@ -245,6 +251,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["mapSharpens", mapSharpens],
   ["mapDirections", mapDirections],
   ["roomTrail", roomTrail],
+  ["tiktokLooks", tiktokLooks],
   ["roomPhotos", roomPhotos],
   ["participants", participants],
 ];

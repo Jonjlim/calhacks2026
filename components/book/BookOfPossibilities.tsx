@@ -1,5 +1,7 @@
 "use client";
 
+import { giftIsInBox } from "@/lib/room/giftBox";
+
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomActions, RoomData } from "@/components/room/types";
 import { useRings } from "@/components/world/room/ringsStore";
@@ -69,7 +71,7 @@ function useItems(data: RoomData): Item[] {
         myVote: data.votes[listing.id]?.myVote === "up" ? "up" : data.votes[listing.id]?.myVote === "down" ? "down" : undefined,
         saved: data.votes[listing.id]?.tally.up ?? 0,
         themes: themesOf.get(listing.id) ?? [],
-        selected: data.selection?.status === "active" && data.selection.listingId === listing.id,
+        selected: giftIsInBox(data.selection, listing.id),
       }));
     return items.sort((a, b) => (b.rec?.score ?? -1) - (a.rec?.score ?? -1));
   }, [data.listings, data.recommendations, data.votes, data.selection, rings]);
@@ -112,18 +114,24 @@ export function BookOfPossibilities({ data, actions, isOrganizer, onChoose }: { 
       return () => clearTimeout(t);
     }
     setLeaving(false);
+    if (!book.drawOpening) {
+      setShown(true);
+      return;
+    }
     const t = setTimeout(() => setShown(true), BOOK_OPEN_MS - 150);
     return () => clearTimeout(t);
   }, [open]);
   if (!shown) return null;
-  return <Pages data={data} actions={actions} isOrganizer={isOrganizer} onChoose={onChoose} leaving={leaving} />;
+  return <Pages key={book.run} data={data} actions={actions} isOrganizer={isOrganizer} onChoose={onChoose} leaving={!open && leaving} />;
 }
 
 function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomData; actions?: RoomActions; isOrganizer: boolean; onChoose(listingId: string): Promise<{ ok: true } | { ok: false; message: string }>; leaving: boolean }) {
   const items = useItems(data);
-  const first = !book.seen;
-  const [ready, setReady] = useState(false);
+  const [first] = useState(() => book.drawOpening);
   const [skipped, setSkipped] = useState(false);
+  const reducedMotion = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const instant = !first || skipped || reducedMotion;
+  const [ready, setReady] = useState(instant);
   const [filter, setFilter] = useState<Filter>({ kind: "all" });
   const [page, setPage] = useState(0);
   const [detail, setDetail] = useState<string | null>(book.listingId);
@@ -131,7 +139,6 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
   const [lifted, setLifted] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  const k = first ? 1 : 0.38;
   // Illustrations follow what was being explored: the theme in focus when the book was opened.
   const rings = useRings();
   const motif = useMemo(() => {
@@ -142,43 +149,44 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Drawing, then painting, then reading: about three and a half seconds the first time, a third of that after.
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setReady(true);
-      book.markSeen();
-    }, 3500 * k);
-    // Graphite while it draws, a soft wash as the color blooms.
-    playPencil(2.6 * k);
-    const wash = setTimeout(playWash, 2100 * k);
-    return () => {
-      clearTimeout(t);
-      clearTimeout(wash);
-    };
-  }, [k]);
-  const instant = skipped || (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  // Draw and paint only on the first opening. Skip cancels the remaining work.
   useEffect(() => {
     if (instant) {
       setReady(true);
-      book.markSeen();
+      return;
     }
+    const t = setTimeout(() => {
+      setReady(true);
+    }, 3500);
+    // Graphite while it draws, a soft wash as the color blooms.
+    const stopPencil = playPencil(2.6);
+    const wash = setTimeout(playWash, 2100);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(wash);
+      stopPencil?.();
+    };
   }, [instant]);
   useEffect(() => {
     dialog.current?.focus({ preventScroll: true });
   }, []);
 
   const close = useCallback(() => book.hide(), []);
+  const skipDrawing = useCallback(() => {
+    setSkipped(true);
+    setReady(true);
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
-      if (!ready) setSkipped(true);
+      if (!ready) skipDrawing();
       else if (detail) setDetail(null);
       else close();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [ready, detail, close]);
+  }, [ready, detail, close, skipDrawing]);
 
   const counts = { saved: items.filter((i) => i.myVote === "up").length, passed: items.filter((i) => i.myVote === "down").length };
   const themeChips = useMemo(() => {
@@ -226,10 +234,9 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
     setError(null);
   };
 
-  const cls = `${s.stage} ${leaving ? s.out : ""} ${instant ? s.instant : ""}`;
-  const speed = { ["--k" as string]: k } as CSSProperties;
+  const cls = `${s.stage} ${leaving ? s.out : ""} ${instant ? s.drawn : ""} ${reducedMotion ? s.instant : ""}`;
   return (
-    <div className={cls} style={speed}>
+    <div className={cls}>
       <div ref={dialog} role="dialog" aria-modal="true" aria-label="Book of Possibilities" tabIndex={-1} className={`${s.book} ${open ? s.detailMode : ""}`}>
         {/* The pages: pencil first, then watercolor. */}
         <svg className={s.ink} viewBox="0 0 1120 730" aria-hidden>
@@ -320,7 +327,7 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
         </div>
 
         <div className={s.corner}>
-          {!ready && <button type="button" className={s.skip} onClick={() => setSkipped(true)}>Skip drawing</button>}
+          {!ready && <button type="button" className={s.skip} onClick={skipDrawing}>Skip drawing</button>}
           <button type="button" className={s.close} onClick={close} aria-label="Close the book">Close</button>
         </div>
       </div>
@@ -372,7 +379,7 @@ function Detail({ item, clues, isOrganizer, busy, canAct, onBack, onVote, onChoo
           <span className={s.fine}>No source link was saved.</span>
         )}
         {isOrganizer && canAct && (
-          <button type="button" className={`${s.act} ${s.primary}`} disabled={busy || item.selected} onClick={onChoose}>{item.selected ? "Already in our gift box" : busy ? "Choosing…" : "Put in our gift"}</button>
+          <button type="button" className={`${s.act} ${s.primary}`} disabled={busy || item.selected} onClick={onChoose}>{item.selected ? "Already in our gift box" : busy ? "Choosing…" : "Add to our gift box"}</button>
         )}
       </div>
       <p className={s.fine}>Choosing a gift is not buying it. Nothing is charged; the group agrees shares next.</p>

@@ -16,6 +16,7 @@ export interface BuyerSnapshot {
   occasion: string;
   knowledgeRevision: number;
   budgetMinor?: number;
+  budgetGuidance?: import("../../lib/contracts").GroupBudgetGuidance;
   deadlineAt?: number;
   latestMessageId?: string;
   mode: "quiet" | "auto";
@@ -212,6 +213,7 @@ export function validateDecision(
         roomId: snapshot.roomId,
         knowledgeRevision: snapshot.knowledgeRevision,
         budgetMinor: snapshot.budgetMinor,
+      budgetGuidance: snapshot.budgetGuidance,
         occasion: snapshot.occasion,
         mustExclude: [
           ...new Set(

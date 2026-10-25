@@ -1,5 +1,6 @@
 "use client";
 
+import { GiftOrbitMenu } from "@/components/room/GiftOrbitMenu";
 import { Html, QuadraticBezierLine } from "@react-three/drei";
 import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +25,9 @@ import { PledgeRing, type PledgeWorld } from "./PledgeRing";
 import { platformTop } from "../props/Stonework";
 import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import { MagicTrail } from "./MagicTrail";
+import { MapBridge } from "./MapBridge";
+import { MainIslandOccluders, OCCLUDERS } from "./MainIslandOccluders";
+import { giftBundles } from "@/lib/map/giftBundles";
 import { WeaveThread, type WeaveMode } from "./WeaveThread";
 import { buildBody } from "../convergence/GiftConvergence";
 import { paint } from "../painterly/materials";
@@ -56,7 +60,7 @@ export interface RingDetail {
   actions: RingAction[];
 }
 
-export type RingResearch = "running" | "failed" | null;
+export type RingResearch = "running" | "uncertain" | "failed" | null;
 
 export interface RingsWorld {
   clues: { key: string; text: string; author: string; agent?: boolean; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
@@ -274,7 +278,7 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
     // The icon rides on the island and scales with the camera (small when zoomed out, large up close); its menu stays one readable size.
     return (
       <>
-        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={24} zIndexRange={selected ? [60, 50] : [20, 0]}>
+        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={24} zIndexRange={selected ? [60, 50] : [20, 0]} occlude={selected ? undefined : OCCLUDERS}>
           <div data-map-token className={cls} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
           <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
             onPointerDown={(e) => drag.begin(k, from, e)}
@@ -290,7 +294,10 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
           {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
           </div>
         </Html>
-        {info && (
+        {info && (k.startsWith("gift:") ? (
+          <Html fullscreen zIndexRange={[90, 80]} style={{ pointerEvents: "none" }}><GiftOrbitMenu gift={rings.gifts.find(g => g.key === k)!} detail={info} onMap
+            evaluations={rings.evaluations?.[k]} onClose={() => rings.onSelect(null)} /></Html>
+        ) : (
           <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>
             <div data-map-token className={cls} style={{ marginTop: 470 }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
         {info && (
@@ -317,12 +324,13 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
         )}
             </div>
           </Html>
-        )}
+        ))}
+
       </>
     );
   }
   return (
-    <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
+    <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]} occlude={selected ? undefined : OCCLUDERS}>
       <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
         onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
         <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
@@ -656,7 +664,7 @@ function fanOut(theme: { x: number; z: number }, keys: string[]): Map<string, [n
   return out;
 }
 
-const researchNote = (r: RingResearch | undefined) => (r === "running" ? "Looking for gifts…" : r === "failed" ? "The search stopped · try again" : null);
+const researchNote = (r: RingResearch | undefined) => (r === "running" ? "Looking for gifts…" : r === "failed" ? "The search stopped · try again" : r === "uncertain" ? "Awaiting search confirmation" : null);
 
 function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const center = useMemo(() => new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z), []);
@@ -664,6 +672,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const nav = useMapNavigation(center);
   const close = useCloseZoom();
   const [zone, setZone] = useState<RingZone | null>(null);
+  /** Gift bundles someone tapped open on this screen. */
+  const [openBundles, setOpenBundles] = useState<ReadonlySet<string>>(() => new Set());
   const latest = useRef(rings);
   latest.current = rings;
   // Escape closes whatever is open, like clicking the sky.
@@ -699,7 +709,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openT?.theme, openT?.x, openT?.z, rings.clues.map((c) => c.key + c.theme).join()],
   );
-  const open = (c: RingsWorld["clues"][number]) => close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
+  // A memory no theme holds yet floats on its own and is always shown; grouped ones rest on their theme until opened.
+  const open = (c: RingsWorld["clues"][number]) => !c.theme || close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
   /** Where a node is drawn right now, for threads that join nodes (the weave). */
   const anchorOf = (key: string): [number, number] | null => {
     const c = rings.clues.find((x) => x.key === key);
@@ -708,14 +719,10 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     return idea ? place(idea.key, idea.x, idea.z) : null;
   };
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
-  // Never more than three gift candidates are prominent at once: the top ranked overall, or the best of the focused branch, plus the chosen one.
-  // The rest stay in the room's data and in the Book of Possibilities; here they are summed up in one marker.
-  const rankedGifts = rings.gifts.filter((g) => !g.hidden || g.listingId === rings.selectedListingId).sort((a, b) => a.rank - b.rank);
-  const pool = rings.highlight ? rankedGifts.filter((g) => rings.highlight!.has(g.key)) : rankedGifts;
-  const shownGifts = pool.slice(0, 3);
-  const chosen = rankedGifts.find((g) => g.listingId === rings.selectedListingId);
-  if (chosen && !shownGifts.includes(chosen)) shownGifts.push(chosen);
-  const hiddenGifts = rings.gifts.length - shownGifts.length;
+  // Every gift is on the map; only a crowded map folds each theme's extras into a "+N" bundle (D23 trial).
+  const visibleGifts = rings.gifts.filter((g) => !g.hidden || g.listingId === rings.selectedListingId);
+  const { shown: shownGifts, bundles } = giftBundles(visibleGifts, { selectedListingId: rings.selectedListingId, highlight: rings.highlight, open: openBundles });
+  const hiddenGifts = visibleGifts.length - shownGifts.length;
 
   // A theme island empties once every memory in it has flown into the box.
   const themeGone = (theme: string) => {
@@ -735,6 +742,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
 
   return (
     <group>
+      <MainIslandOccluders />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center.x, center.y - 0.2, center.z]} onClick={onBackdrop} onPointerDown={nav.start}
         onPointerMove={hover} onPointerOut={() => setZone(null)}>
         <planeGeometry args={[220, 220]} />
@@ -763,17 +771,15 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         );
       })}
 
-      {/* A faint thread from every theme island to the present: the one quiet reminder that they all belong to the same gift. */}
+      {/* A rope bridge from every theme island to the main island: the one quiet reminder that they all belong to the same gift. */}
       {!revealing && rings.themes.map((t) => {
         const [x, z] = place(t.key, t.x, t.z);
         const len = Math.hypot(x, z) || 1;
-        // Ends at the edge of the main island, not in the middle of it; sags a little below the straight line.
-        const ex = (x / len) * 5.4;
-        const ez = (z / len) * 5.4;
+        // From the near edge of the theme island to the main island's rim.
+        const near = Math.max(0, len - 2.4) / len;
+        const rim = 5.6 / len;
         const focused = !!rings.highlight && rings.highlight.has(t.key);
-        return (
-          <QuadraticBezierLine key={`thread:${t.key}`} start={world(x, z, 0.5)} end={world(ex, ez, 0.2)} mid={world((x + ex) / 2, (z + ez) / 2, -1.3)} color="#a98aa6" lineWidth={focused ? 2.4 : 1.8} dashed dashSize={0.5} gapSize={0.45} transparent opacity={rings.highlight && !focused ? 0.15 : 0.6} />
-        );
+        return <MapBridge key={`bridge:${t.key}`} start={world(x * near, z * near, 0.1)} end={world(x * rim, z * rim, 0.25)} sag={0.55} quiet={!!rings.highlight && !focused} />;
       })}
 
       {rings.themes.map((t, i) => {
@@ -807,19 +813,28 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           </group>
         );
       })}
-      {rings.moreGifts && rings.moreGifts.count > 0 && (
-        <Html position={world(-RING_RADII.gift * RING_STRETCH - 1.5, 0, 1.2)} center zIndexRange={[25, 20]}>
-          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); rings.moreGifts?.toggle(); }}
-            onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
-            {rings.moreGifts.open ? "Show the top gifts only" : `+${rings.moreGifts.count} more ${rings.moreGifts.count === 1 ? "gift" : "gifts"}`}
+      {/* A crowded theme's extra gifts, folded where they would sit; tapping fans them out. */}
+      {!revealing && bundles.map((b) => (
+        <Html key={`bundle:${b.id}`} position={world(b.x, b.z, 0.6)} center zIndexRange={[24, 10]} occlude={OCCLUDERS}>
+          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setOpenBundles((open) => new Set(open).add(b.id)); }}
+            onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}
+            aria-label={`Show ${b.count} more ${b.count === 1 ? "gift" : "gifts"} here`}>
+            <b>+{b.count}</b> {b.count === 1 ? "gift" : "gifts"}
+          </button>
+        </Html>
+      ))}
+      {openBundles.size > 0 && (
+        <Html position={world(-RING_RADII.gift * RING_STRETCH - 1.5, 0, 1.2)} center zIndexRange={[25, 20]} occlude={OCCLUDERS}>
+          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setOpenBundles(new Set()); }}>
+            Fold the extra gifts again
           </button>
         </Html>
       )}
-
       {hiddenGifts > 0 && rings.onOpenBook && (
         <Html position={world(6.2, 9.4, 0.4)} center zIndexRange={[24, 10]}>
-          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label={`${hiddenGifts} more researched gifts in the Book of Possibilities`}>
-            <b>+{hiddenGifts}</b> more in the book
+          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label="Every researched gift, in the Book of Possibilities">
+            All gifts in the book
           </button>
         </Html>
       )}
@@ -869,7 +884,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           face={<span className={`${s.box} ${rings.selectedKey === "box" ? s.boxOn : ""}`}>{rings.boxResearch === "running" && <i className={s.spinner} aria-hidden />}<GiftIcon size={16} /> <b>{rings.boxLabel}</b>{researchNote(rings.boxResearch) && <em className={rings.boxResearch === "failed" ? s.researchFailed : s.researchNote}>{researchNote(rings.boxResearch)}</em>}</span>} />
       </group>
       {rings.nextStep && rings.selectedKey !== "box" && (
-        <Html position={world(0, 9, 1.2)} center zIndexRange={[26, 21]}>
+        <Html position={world(0, 9, 1.2)} center zIndexRange={[26, 21]} occlude={OCCLUDERS}>
           {/* Same anchor as the present's label, drawn just below it, so the two stay together from any angle. */}
           <div className={s.nextAnchor}>
           {rings.nextStep.run ? (

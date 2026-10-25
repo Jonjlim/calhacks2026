@@ -2,7 +2,9 @@
 export function extractInviteToken(input: string): string {
   const trimmed = input.trim();
   const match = /\/join\/([^/?#\s]+)/.exec(trimmed);
-  return match ? decodeURIComponent(match[1]!) : trimmed;
+  const token = match ? decodeURIComponent(match[1]!) : trimmed;
+  // Short room codes are not case-sensitive; older long links keep their exact spelling.
+  return token.length <= 8 ? token.toUpperCase() : token;
 }
 
 export function inviteUrl(joinPath: string, origin: string): string {

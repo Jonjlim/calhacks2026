@@ -58,11 +58,10 @@ export function RecipientInvitationLink({ url, expiresAt, recipientName }: Recip
   return (
     <div className="mt-3 rounded-xl bg-white/60 p-3 text-left">
       <p className="text-[13px] text-dusk/75">Only send this to {recipientName}. They choose whether to connect; this does not join them to the gift room.</p>
-      <input aria-label="Recipient invitation link" readOnly value={url} onFocus={(event) => event.target.select()}
-        className="mt-3 w-full rounded-lg border border-dusk/15 bg-white p-2 text-sm text-dusk" />
+      <input aria-label="Recipient invitation link" readOnly value={url} onFocus={(event) => event.target.select()} className="sr-only" tabIndex={-1} />
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="btn-primary text-[13px]" onClick={send} disabled={expired}>Send link</button>
-        <button type="button" className="btn-secondary text-[13px]" onClick={copy} disabled={expired}>Copy recipient link</button>
+        <button type="button" className="btn-secondary text-[13px]" onClick={copy} disabled={expired}>Copy link</button>
       </div>
       <p className="mt-2 text-[12px] text-dusk/60">{expired ? "This link expired. Create a new invitation." : `One use · expires at ${new Date(expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}</p>
       <p role="status" className="mt-1 text-[13px] text-dusk/75">{message}</p>
@@ -70,8 +69,10 @@ export function RecipientInvitationLink({ url, expiresAt, recipientName }: Recip
   );
 }
 
-export function GiftTwinInviteButton({ roomId, recipientName, twin, className }: {
+export function GiftTwinInviteButton({ roomId, recipientName, twin, className, placement = "inline" }: {
   roomId: Id<"rooms">;
+  /** `top-center`: a button at the top middle of the screen, and a page that opens in the middle. */
+  placement?: "inline" | "top-center";
   recipientName: string;
   twin?: AgentCollaboratorView;
   className?: string;
@@ -104,11 +105,44 @@ export function GiftTwinInviteButton({ roomId, recipientName, twin, className }:
     return <Link href={`/room/${roomId}/twin`} className={className}>Gift Twin connected</Link>;
   }
 
+  if (placement === "top-center") {
+    return (
+      <>
+        <button type="button" disabled={pairing.pending} aria-expanded={open} aria-controls={panelId}
+          className="paper-card pointer-events-auto absolute top-5 left-1/2 z-30 -translate-x-1/2 rounded-full px-5 py-2.5 text-[14px] font-semibold text-dusk shadow-sm transition hover:-translate-y-0.5"
+          onClick={() => invitation && Date.now() < invitation.expiresAt ? setOpen(!open) : void create()}>
+          {pairing.pending ? "Getting the link ready…" : `Invite ${recipientName}’s gift twin`}
+        </button>
+        {open && invitation && (
+          <div className="pointer-events-auto fixed inset-0 z-[58] grid place-items-center bg-[rgb(60,40,70,0.28)] p-5 backdrop-blur-[2px]" onClick={() => setOpen(false)}>
+            <section id={panelId} role="dialog" aria-modal="true" aria-label={`Invite ${recipientName}’s gift twin`} onClick={(e) => e.stopPropagation()}
+              className="w-[min(480px,100%)] rounded-[28px] bg-[linear-gradient(180deg,#fcf6e6,#f6ebd0)] p-7 shadow-[0_34px_70px_-30px_rgba(60,36,30,0.7),0_0_0_1.5px_#c79a6a]">
+              <p className="text-[11px] font-bold tracking-[0.14em] text-coral uppercase">Stuck?</p>
+              <h2 className="mt-1.5 font-display text-[32px] leading-[1.05] text-dusk">Invite {recipientName}’s gift twin</h2>
+              <p className="mt-3 text-[14.5px] leading-snug text-dusk/80">
+                A gift twin is a bot that knows all about {recipientName}: what they like, what they have, what they would never wear. It helps your group choose.
+              </p>
+              <p className="mt-2 text-[14.5px] leading-snug text-dusk/80">
+                You are <b>not</b> inviting {recipientName}. You are inviting the twin that knows them. Give this link <b>only to {recipientName}</b>. If they accept, their gift twin joins the collaboration.
+              </p>
+              <RecipientInvitationLink {...invitation} recipientName={recipientName} />
+              <div className="mt-4 flex items-center justify-between">
+                <button type="button" className="text-[12px] text-dusk/65 underline underline-offset-2" onClick={create} disabled={pairing.pending}>Make a new link</button>
+                <button type="button" className="btn-secondary h-10 px-5 text-[13.5px]" onClick={() => setOpen(false)}>Close</button>
+              </div>
+            </section>
+          </div>
+        )}
+        {pairing.error && <div className="paper-card pointer-events-auto absolute top-20 left-1/2 z-30 -translate-x-1/2 rounded-xl p-3"><ErrorText error={pairing.error} /></div>}
+      </>
+    );
+  }
+
   return (
     <div className="flex max-w-[min(300px,calc(100vw-40px))] flex-col items-end">
       <button type="button" className={className} disabled={pairing.pending} aria-expanded={open} aria-controls={panelId}
         onClick={() => invitation && Date.now() < invitation.expiresAt ? setOpen(!open) : void create()}>
-        {pairing.pending ? "Creating recipient link…" : "Send Gift Twin link"}
+        {pairing.pending ? "Creating recipient link…" : `Invite ${recipientName}’s gift twin`}
       </button>
       {open && invitation && (
         <section id={panelId} aria-label="Invite the gift recipient" className="paper-card mt-2 w-full rounded-[20px] p-3.5">

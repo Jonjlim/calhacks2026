@@ -133,16 +133,25 @@ export const listRoomJobs = query({
       .withIndex("by_room", (q) => q.eq("roomId", roomId))
       .order("desc")
       .take(10);
+    // A newer completed search must not push unfinished work out of the UI window.
+    const openResearchRows = await ctx.db.query("researchJobs")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .filter((q) => q.or(q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain")))
+      .order("desc")
+      .take(25);
+    const visibleResearch = [...new Map([...researchRows, ...openResearchRows].map((job) => [job._id, job])).values()]
+      .sort((a, b) => b.createdAt - a.createdAt);
     return ok({
       // Extraction jobs reveal that someone imported evidence; only the owner sees theirs.
       agentJobs: agentRows
         .filter((j) => j.kind !== "extract" || j.actingParticipantId === member.me._id)
         .map((j) => ({ _id: j._id, kind: j.kind, status: j.status, createdAt: j.createdAt })),
-      researchJobs: researchRows.map((j) => ({
+      researchJobs: visibleResearch.map((j) => ({
         _id: j._id,
         status: j.status,
         createdAt: j.createdAt,
         knowledgeRevision: j.knowledgeRevision,
+        directionId: j.directionId,
         lastError: j.lastError,
       })),
     });

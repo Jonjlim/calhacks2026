@@ -32,6 +32,7 @@ const GIFT_IDEA_PREFIX = "Gift idea: ";
 
 interface DirectionRoom {
   recipient: string;
+  budgetGuidance?: import("../../lib/contracts").GroupBudgetGuidance;
   knowledgeRevision: number;
   participantId: Id<"participants">;
   memories: DirectionMemory[];
@@ -73,6 +74,7 @@ export const directionContext = internalQuery({
     const openQuestion = (await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).order("desc").first())?.status === "open";
     return {
       recipient: room.recipientDisplayName,
+      budgetGuidance: room.budgetGuidance,
       knowledgeRevision: room.knowledgeRevision,
       participantId: member._id,
       memories: clues.slice(-40).map((c): DirectionMemory => ({ id: c._id as string, kind: c.kind, text: c.text })),
@@ -287,6 +289,8 @@ async function draftDirections(ctx: ActionCtx, roomId: Id<"rooms">, room: Direct
         instructions: BASE_INSTRUCTIONS + INSTRUCTIONS + (passed.length ? PASSED_INSTRUCTIONS : ""),
         input: {
           recipient: "{name}",
+          budgetGuidance: room.budgetGuidance,
+          budgetPolicy: "Use these group bounds as flexible gift context, never hard cutoffs or spending authorization.",
           memories: positive.map((m, n) => ({ n, kind: m.kind, text: m.text })),
           avoid,
           caughtTrends: room.caught.map((t, i) => ({ i, search: t.query })),

@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { useUnwrapPhase, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { roomStage, useRoomStage } from "@/components/room/roomStage";
-import type { CouncilActor, CouncilEvent, DecorationSpec } from "@/lib/council/contracts";
+import type { CouncilActor, CouncilEvent, CouncilMemberState, DecorationSpec } from "@/lib/council/contracts";
 import { cueFromTarget, playSfx, resumeMusic, setSfxEnabled } from "./sounds";
 
 const WorldCanvas = dynamic(() => import("./WorldCanvas"), { ssr: false });
@@ -21,6 +21,7 @@ export interface RoomWorld {
   roomId: string;
   viewerId?: string;
   events: CouncilEvent[];
+  members?: Record<CouncilActor, CouncilMemberState>;
   decorations: DecorationSpec[];
   participants: { id: string; displayName: string; joinedAt?: number }[];
   clues: { id: string; kind: string; publisherId: string }[];
@@ -110,6 +111,7 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
       unwrapClock.reset();
     }
   }, [pathname]);
+  const markUnavailable = useCallback(() => setWebgl(false), []);
   const markReady = useCallback(() => setReady(true), []);
   const assetStatus = useCallback((actor: CouncilActor, status: "ready" | "failed") => setAssets(prev => prev[actor] === status ? prev : { ...prev, [actor]: status }), []);
   const toggleSound = useCallback(() => setSoundEnabled(on => {
@@ -136,16 +138,16 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const inTower = useRoomStage().shown === "tower";
   return (
     <WorldContext.Provider value={value}>
-      {visible && <div className="fixed inset-0 z-0 world-fallback" aria-hidden="true">
-        {webgl && <ErrorBoundary key={retry} fallback={<div className="world-fallback h-full" />}>
+      {visible && <div className="fixed inset-0 z-0 world-fallback">
+        {webgl && <ErrorBoundary key={retry} onError={markUnavailable} fallback={<div className="world-fallback h-full" />}>
           <div className={`h-full transition-opacity duration-[1400ms] ${ready ? "opacity-100" : "opacity-0"} ${phase !== "landingReady" ? "pointer-events-none" : ""}`}>
-            <WorldCanvas reducedMotion={reducedMotion} soundEnabled={soundEnabled} painterlyStrength={painterlyStrength} introActive={phase !== "landingReady"} onReady={markReady} council={activeCouncil} roomActive={!!roomId} onAssetStatus={assetStatus} />
+            <WorldCanvas reducedMotion={reducedMotion} soundEnabled={soundEnabled} painterlyStrength={painterlyStrength} introActive={phase !== "landingReady"} onReady={markReady} onUnavailable={markUnavailable} council={activeCouncil} roomActive={!!roomId} onAssetStatus={assetStatus} />
           </div>
         </ErrorBoundary>}
       </div>}
       {visible && <StageVeil />}
       {children}
-      {visible && webgl === false && <p className="fixed bottom-3 right-3 z-30 rounded-full bg-paper/90 px-4 py-2 text-xs text-dusk">Painted backdrop · 3D unavailable. All room controls still work.</p>}
+      {visible && webgl === false && <p className="fixed bottom-3 right-3 z-30 rounded-full bg-paper/90 px-4 py-2 text-xs text-dusk">3D unavailable · using the room’s list view.</p>}
       {activeCouncil && inTower && Object.values(assets).includes("failed") && <div role="alert" className="fixed bottom-3 right-3 z-30 rounded-2xl bg-paper px-4 py-3 text-sm text-dusk shadow-sm">An agent model could not load. <button className="underline" onClick={() => { setAssets({}); setRetry(n => n + 1); }}>Retry models</button></div>}
       {activeCouncil && inTower && !Object.values(assets).includes("failed") && Object.keys(assets).length < 5 && webgl && <p role="status" className="fixed bottom-3 right-3 z-30 rounded-full bg-paper/90 px-4 py-2 text-xs">The council is arriving…</p>}
     </WorldContext.Provider>

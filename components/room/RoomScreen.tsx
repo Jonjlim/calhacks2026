@@ -1,11 +1,13 @@
 "use client";
 
-import { useAction, useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo } from "react";
 import { api } from "@/convex/_generated/api";
+import { getFunctionName, type FunctionArgs, type FunctionReference, type FunctionReturnType } from "convex/server";
+import { convexToJson } from "convex/values";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useSession } from "@/components/providers/ConvexClientProvider";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
@@ -21,6 +23,7 @@ import {
 } from "@/lib/mocks/queries";
 import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
 import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
+import { useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { RoomLayout } from "./RoomLayout";
 import { RevealHarness } from "./RevealHarness";
 import type { RoomActions, RoomData } from "./types";
@@ -138,6 +141,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const answerSharpen = useMutation(api.agents.themes.answerSharpen);
   const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
   const proposeDirections = useAction(api.agents.directions.propose);
+  const lookTikTok = useMutation(api.research.tiktokLooks.look);
   const moveCursor = useMutation(api.map.moveCursor);
 
   const actions = useMemo<RoomActions>(
@@ -185,6 +189,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
       proposeDirections: () => proposeDirections({ roomId }),
+      lookTikTok: (trendJobId, query) => lookTikTok({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query }),
       researchDirection: (directionId, clueIds) => researchTrend({
         roomId, publishedClueIds: clueIds as Id<"publishedClues">[], directionId: directionId as Id<"mapDirections">, idempotencyKey: newRequestKey(),
       }),
@@ -227,7 +232,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
       selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
-      proposeDirections,
+      proposeDirections, lookTikTok,
     ],
   );
 
@@ -252,6 +257,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     evidence: value(evidenceRes, []).map(withId),
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
+    researchJobs: jobsRes?.ok ? jobsRes.value.researchJobs : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
     trends: trendsRes?.ok ? trendsRes.value : undefined,
   };
@@ -274,27 +280,48 @@ function RoomWithCouncil({ roomId, data, actions, surface }: { roomId: Id<"rooms
   );
 }
 
+/** Convex useQueries returns errors per subscription instead of throwing away sibling data. */
+function useIsolatedQuery<Q extends FunctionReference<"query">>(query: Q, args: FunctionArgs<Q>) {
+  const name = getFunctionName(query);
+  const serializedArgs = JSON.stringify(convexToJson(args));
+  // Like Convex's useQuery, preserve the subscription across equivalent arguments.
+  // A fresh request object on every render causes useQueries to re-render indefinitely.
+  const requests = useMemo(() => ({ result: { query, args } }), [name, serializedArgs]);
+  const value: unknown = useQueries(requests).result;
+  return {
+    result: value instanceof Error ? undefined : value as FunctionReturnType<Q> | undefined,
+    failed: value instanceof Error,
+  };
+}
+
 /** Gift map extras: votes on memories and themes, council themes, the sharpen round, and live cursors. Optional by design. */
 function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
   const args = { roomId };
-  const signals = useQuery(api.mapSignals.listSignals, args);
-  const themes = useQuery(api.agents.themes.listThemes, args);
-  const sharpen = useQuery(api.agents.themes.getSharpen, args);
-  const cursors = useQuery(api.map.listCursors, args);
-  const photos = useQuery(api.photos.listRoomPhotos, args);
-  const collaborators = useQuery(api.giftTwin.room.getFeed, args);
-  const directions = useQuery(api.agents.directions.list, args);
-  const trail = useQuery(api.trail.list, args);
+  const signals = useIsolatedQuery(api.mapSignals.listSignals, args);
+  const themes = useIsolatedQuery(api.agents.themes.listThemes, args);
+  const sharpen = useIsolatedQuery(api.agents.themes.getSharpen, args);
+  const cursors = useIsolatedQuery(api.map.listCursors, args);
+  const photos = useIsolatedQuery(api.photos.listRoomPhotos, args);
+  const collaborators = useIsolatedQuery(api.giftTwin.room.getFeed, args);
+  const directions = useIsolatedQuery(api.agents.directions.list, args);
+  const tiktokLooks = useIsolatedQuery(api.research.tiktokLooks.list, args);
+  const trail = useIsolatedQuery(api.trail.list, args);
   const extras: RoomData = {
     ...data,
-    directions: directions?.ok ? directions.value : undefined,
-    trail: trail?.ok ? trail.value : undefined,
-    mapSignals: signals?.ok ? signals.value : undefined,
-    mapThemes: themes?.ok ? themes.value : undefined,
-    sharpen: sharpen?.ok ? sharpen.value : undefined,
-    cursors: cursors?.ok ? cursors.value : undefined,
-    roomPhotos: photos?.ok ? photos.value : undefined,
-    agentCollaborators: collaborators?.ok ? collaborators.value : undefined,
+    mapUnavailable: [
+      [signals.failed, "Memory votes"], [themes.failed, "Themes"], [sharpen.failed, "Questions"],
+      [cursors.failed, "Friend cursors"], [photos.failed, "Photos"], [collaborators.failed, "Gift Twin"],
+      [directions.failed, "Gift directions"], [tiktokLooks.failed, "TikTok inspiration"], [trail.failed, "Gift history"],
+    ].flatMap(([failed, label]) => failed ? [String(label)] : []),
+    directions: directions.result?.ok ? directions.result.value : undefined,
+    tiktokLooks: tiktokLooks.result?.ok ? tiktokLooks.result.value : undefined,
+    trail: trail.result?.ok ? trail.result.value : undefined,
+    mapSignals: signals.result?.ok ? signals.result.value : undefined,
+    mapThemes: themes.result?.ok ? themes.result.value : undefined,
+    sharpen: sharpen.result?.ok ? sharpen.result.value : undefined,
+    cursors: cursors.result?.ok ? cursors.result.value : undefined,
+    roomPhotos: photos.result?.ok ? photos.result.value : undefined,
+    agentCollaborators: collaborators.result?.ok ? collaborators.result.value : undefined,
   };
   const legacyActions = { ...actions, addGiftToBox: undefined, removeGiftFromBox: undefined, voteQuestion: undefined, finishQuestion: undefined };
   return <ErrorBoundary fallback={<RoomSurfaceView surface={surface} data={extras} actions={legacyActions} />}>
@@ -307,12 +334,20 @@ function RoomWithQuestionPoll({ roomId, data, actions, legacyActions, surface }:
   roomId: Id<"rooms">; data: RoomData; actions: RoomActions; legacyActions: RoomActions; surface: RoomSurface;
 }) {
   const poll = useQuery(api.questionPolls.state, { roomId });
-  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined }}
+  // The simulated checkout is shared state: everyone in the room reaches the same ending from it.
+  const sim = useQuery(api.payments.simulation.getState, { roomId });
+  const simulate = useMutation(api.payments.simulation.simulateContribution);
+  const wrap = useMutation(api.payments.simulation.wrapGift);
+  const view = sim?.ok ? sim.value : null;
+  const revisionId = view?.revisionId as Id<"proposalRevisions"> | null | undefined;
+  const simulation = view && revisionId ? { view, simulate: () => simulate({ roomId, revisionId }), wrap: () => wrap({ roomId, revisionId }) } : view ? { view, simulate: async () => ({ ok: false as const, error: { code: "invalid_revision" as const, message: "There is no proposal yet." } }), wrap: async () => ({ ok: false as const, error: { code: "invalid_revision" as const, message: "There is no proposal yet." } }) } : undefined;
+  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined, simulation }}
     actions={poll?.ok ? actions : legacyActions} />;
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {
-  return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
+  const { webgl } = useIslandWorld();
+  return surface === "phone" || webgl === false ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {

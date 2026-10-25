@@ -195,11 +195,17 @@ export const askedSlotStatus = v.union(
   v.literal("abandoned"),
 );
 
+export const budgetGuidance = v.object({
+  lowerMinor: v.number(), upperMinor: v.number(), currency: v.literal("USD"),
+  responseCount: v.number(), participantCount: v.number(), conflicting: v.boolean(),
+});
+
 export const searchBrief = v.object({
   knowledgeRevision: v.number(),
   queryTerms: v.array(v.string()),
   mustExclude: v.array(v.string()),
   budgetMinor: v.optional(v.number()),
+  budgetGuidance: v.optional(budgetGuidance),
   occasion: v.optional(v.string()),
   listingLimit: v.number(),
 });
