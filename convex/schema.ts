@@ -41,6 +41,8 @@ export default defineSchema({
     deadlineAt: v.optional(v.number()),
     currency: V.currency,
     budgetMinor: v.optional(v.number()),
+    /** Unused (see participants). */
+    budgetMinMinor: v.optional(v.number()),
     budgetGuidance: v.optional(V.budgetGuidance),
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
@@ -68,6 +70,9 @@ export default defineSchema({
     displayName: v.string(),
     role: V.participantRole,
     joinedAt: v.number(),
+    /** Unused: an earlier budget attempt left these on some dev rows. Budgets now live in budgetRanges. */
+    budgetMinMinor: v.optional(v.number()),
+    budgetMaxMinor: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])

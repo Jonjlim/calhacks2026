@@ -187,10 +187,10 @@ describe("ownership matching variants", () => {
 });
 
 it("uses both group budget bounds as soft ranking signals, retaining every eligible listing", () => {
-  const listings = [1000,5000,20000].map((priceMinor,i) => ({...fixtureListings[0],id:`budget-${i}`,priceMinor,priceStatus:"observed" as const,shippingMinor:0,shippingStatus:"observed" as const}));
+  const listings = [1000,5000,20000].map((priceMinor,i) => ({...fixtureListings[0],id:`budget-${i}`,priceMinor,priceStatus:"observed" as const,shippingMinor:0,shippingStatus:"observed" as const})) as ProductListing[];
   const ranked = rankListings({listings,clues:[],budgetGuidance:{lowerMinor:3000,upperMinor:10000,currency:"USD",responseCount:2,participantCount:2,conflicting:false}});
   expect(ranked).toHaveLength(3);
-  expect(ranked[0].listingId).toBe("budget-1");
+  expect(ranked[0]?.listingId).toBe("budget-1");
   expect(ranked.find(r=>r.listingId==="budget-0")?.budgetFit).toBeLessThan(1);
   expect(ranked.find(r=>r.listingId==="budget-2")?.budgetFit).toBeLessThan(1);
 });
