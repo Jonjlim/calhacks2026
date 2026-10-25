@@ -96,12 +96,6 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => sfx.setEnabled(soundEnabled), [soundEnabled]);
-  // The camera pulling back from the present to the map gets a whoosh; arriving straight on the map doesn't.
-  const lastStage = useRef(stage);
-  useEffect(() => {
-    if (stage === "map" && lastStage.current !== "map") playWhoosh();
-    lastStage.current = stage;
-  }, [stage]);
   // The room opens under a warm rose-gold sunrise unless the person has picked a sky of their own.
   useEffect(() => {
     if (!hasChosenSky()) setTimeOfDay("sunrise", { remember: false });
@@ -111,6 +105,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
   const [resolvedStage, setStageState] = useState<Stage | null>(null);
   const stage: Stage = resolvedStage ?? "map";
+  // The camera pulling back from the present to the map gets a whoosh; arriving straight on the map doesn't.
+  const lastStage = useRef(stage);
+  useEffect(() => {
+    if (stage === "map" && lastStage.current !== "map") playWhoosh();
+    lastStage.current = stage;
+  }, [stage]);
   const firstStage = useRef(true);
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view");

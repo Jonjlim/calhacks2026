@@ -161,8 +161,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const own = row.voters.find((v) => v.participantId === me.id);
       if (own) mine[key] = own.value;
     }
+    for (const [id, vote] of Object.entries(data.votes)) tally[`gift:${id}`] = { up: vote.tally.up, down: vote.tally.down };
     return { clue, theme, tally, mine };
-  }, [signalRows, me.id]);
+  }, [signalRows, me.id, data.votes]);
 
   const sharpen = data.sharpen ?? null;
   const finalists = useMemo(() => new Set<string>(sharpen?.status === "open" ? sharpen.finalistIds : []), [sharpen]);
@@ -218,6 +219,12 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     });
   }, [data.trends?.samples, data.trends?.sample, clues, layout.clues, trendNet, usedTrends, now]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
+
+  const focusedGift = selectedKey?.startsWith("gift:") ? layout.gifts.find(g => `gift:${g.listingId}` === selectedKey) : undefined;
+  useEffect(() => {
+    if (focusedGift) mapView.trackGift(focusedGift.x, focusedGift.z);
+    else if (mapView.target.giftFocus === 1) mapView.returnFromGift();
+  }, [selectedKey, focusedGift?.x, focusedGift?.z]);
 
   const openBox = () => setSelectedKey("box");
   // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
@@ -360,7 +367,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const reasonActs = (key: string): RingAction[] => {
     const give = (reason?: PassReason) => {
       setPassing(null);
-      if (key.startsWith("gift:")) vote(key.slice(5), "down", reason);
+      if (key.startsWith("gift:")) {
+        if (!reason && data.votes[key.slice(5)]?.myVote === "down") return;
+        vote(key.slice(5), "down", reason);
+      }
       else if (key.startsWith("direction:")) signal("direction", key.slice(10), -1, reason);
     };
     return [
@@ -445,12 +455,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         actions: actions ? [
           { icon: "present", label: isOrganizer ? (inBox ? "In the box ✓" : !actions.addGiftToBox && selection ? "Backend update needed" : "Add to box") : "Vote for the box", tone: "gold", on: inBox, disabled: !!pending || (isOrganizer && !actions.addGiftToBox && !!selection && !inBox), run: () => inBox ? setSelectedKey("box") : choose(listingId) },
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
-          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: passFirst(key, mine === "down", () => vote(listingId, "down")) },
+          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
           { icon: "thread", label: "Why?", on: whyListing === listingId, run: () => setWhyListing((w) => (w === listingId ? null : listingId)) },
 
+          { icon: "drift", label: "Add a reason for passing", more: true, disabled: !!pending, run: () => setPassing(key) },
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "coins", label: "Too pricey for me", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
-          { icon: "thread", label: "How we got here", more: true, run: () => setStory({ listingId }) },
+          ...(data.trail ? [{ icon: "thread" as const, label: "How we got here", more: true, run: () => setStory({ listingId }) }] : []),
           { icon: "open", label: "Open the listing", more: true, run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
           ...(trendByListing.has(listingId) ? [{ icon: "trend" as const, label: "See the trend", more: true, run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
@@ -903,7 +914,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (key !== "box" && key !== `gift:${whyListing}`) setWhyListing(null);
       // Choosing a memory, theme, gift or direction glides the camera to it, keeping the viewer's angle.
       const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) ?? directionNodes.find((d) => d.key === key) : undefined;
-      if (at) mapView.focus(at.x, at.z);
+      if (at && key?.startsWith("gift:")) mapView.focusGift(at.x, at.z);
+      else if (at) mapView.focus(at.x, at.z);
+      else if (key === null && selectedKey?.startsWith("gift:")) mapView.returnFromGift();
     },
     onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);

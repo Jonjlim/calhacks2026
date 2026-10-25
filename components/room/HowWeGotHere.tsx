@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { MapIcon, type MapIconName } from "@/components/world/room/MapIcon";
 import s from "@/components/world/room/gift-rings.module.css";
@@ -31,6 +31,12 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
   giftTitle?: string;
   onClose(): void;
 }) {
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    closeButton.current?.focus({ preventScroll: true });
+    return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
+  }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", key);
@@ -50,7 +56,7 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
             <h2>{giftTitle ? <>Why “{giftTitle}”</> : "Every decision so far"}</h2>
             <p>{entries.length} steps · {people} {people === 1 ? "friend" : "friends"} · {thrownOut} ideas thrown out by checks · {passes} passes. Every line below is a recorded decision.</p>
           </div>
-          <button type="button" className={s.storyClose} onClick={onClose} aria-label="Close"><MapIcon name="drift" size={16} /></button>
+          <button ref={closeButton} type="button" className={s.storyClose} onClick={onClose} aria-label="Close"><MapIcon name="drift" size={16} /></button>
         </header>
 
         {chain && (
