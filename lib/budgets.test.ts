@@ -12,7 +12,7 @@ describe("group budget guidance", () => {
     expect(groupBudgetGuidance([{minMinor:0,maxMinor:0},{minMinor:10000,maxMinor:10000}],2)).toMatchObject({lowerMinor:5000,upperMinor:0,conflicting:true});
   });
   it("rejects invalid cents and inverted ranges", () => {
-    for (const [lo,hi] of [[-1,5],[4,3],[0,Infinity],[0,10000001],[1.1,10]]) expect(validBudgetRange(lo,hi)).toBe(false);
+    for (const [lo,hi] of [[-1,5],[4,3],[0,Infinity],[0,10000001],[1.1,10]] as [number, number][]) expect(validBudgetRange(lo,hi)).toBe(false);
     expect(validBudgetRange(0,10000000)).toBe(true);
   });
 });
