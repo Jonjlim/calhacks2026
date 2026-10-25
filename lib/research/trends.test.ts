@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discoverShoppingQueries, normalizeTrendDataset } from "./trends";
+import { discoverShoppingQueries, isGiftShapedQuery, normalizeTrendDataset } from "./trends";
 import type { TrendContext } from "../contracts";
 import recorded from "./fixtures/google-trends.json";
 
@@ -95,5 +95,27 @@ describe("category-conditioned shopping discovery", () => {
     expect(discoverShoppingQueries(rows)[0]?.evidence).toHaveLength(2);
     expect(discoverShoppingQueries(rows, 0)).toEqual([]);
     expect(discoverShoppingQueries(rows, -1)).toEqual([]);
+  });
+});
+
+describe("gift-shaped trend ideas", () => {
+  it.each([
+    "tennis tournament", "hiking deaths", "hiking accident 2025", "us open tennis results", "matcha recall",
+    "tennis players", "vinyl news", "how to make matcha", "tennis near me", "hiking trails", "matcha meaning",
+  ])("drops news, events and lookups: %s", (query) => {
+    expect(isGiftShapedQuery(query)).toBe(false);
+  });
+  it.each([
+    "tennis racket", "tennis skirt outfit", "tennis core aesthetic", "hiking boots", "hiking gear",
+    "matcha whisk set", "ceremonial matcha powder", "vinyl record player", "vinyl records", "tennis lessons",
+    "us open tennis tickets 2026", "matcha tasting class", "pottery glaze", "pottery wheel",
+  ])("keeps products, style and bookable experiences: %s", (query) => {
+    expect(isGiftShapedQuery(query)).toBe(true);
+  });
+  it("filters related searches before they become ideas", () => {
+    const rows = normalizeTrendDataset([{ searchTerm: "hiking", relatedQueries_top: [
+      { query: "hiking deaths", value: 90 }, { query: "hiking boots", value: 70 }, { query: "hiking trails near me", value: 100 },
+    ], relatedQueries_rising: [{ query: "hiking accident", value: 500, formattedValue: "+500%" }] }], { ...context, seedTerm: "hiking" });
+    expect(discoverShoppingQueries(rows).map(q => q.query)).toEqual(["hiking boots"]);
   });
 });

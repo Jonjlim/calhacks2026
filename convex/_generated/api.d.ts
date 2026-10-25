@@ -36,6 +36,7 @@ import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_evidence from "../lib/evidence.js";
+import type * as lib_giftBox from "../lib/giftBox.js";
 import type * as lib_input from "../lib/input.js";
 import type * as lib_knowledge from "../lib/knowledge.js";
 import type * as lib_proposalEngine from "../lib/proposalEngine.js";
@@ -115,6 +116,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;
   "lib/evidence": typeof lib_evidence;
+  "lib/giftBox": typeof lib_giftBox;
   "lib/input": typeof lib_input;
   "lib/knowledge": typeof lib_knowledge;
   "lib/proposalEngine": typeof lib_proposalEngine;

@@ -59,7 +59,21 @@ export function normalizeTrendDataset(raw: unknown, input: TrendContext): TrendO
   return [...observations.values()];
 }
 
-const NON_SHOPPING = /\b(near me|class(?:es)?|lessons?|studios?|museums?|hours|locations?|places?|jobs?|salary|definition|meaning|names|how to|tutorials?|history|tickets?|restaurants?|customer service|discount code)\b/i;
+// News, events coverage and lookups: these are things people read about, not things you can give.
+const NEWS_OR_INFO = /\b(deaths?|died|dies|dead|killed|kills?|fatal|accidents?|crash(?:es)?|injur(?:y|ies|ed)|missing|murder|shooting|attacks?|arrest(?:ed)?|lawsuit|recall(?:ed)?|scandal|news|today|tonight|yesterday|live|stream(?:ing)?|scores?|results?|schedule|standings|rankings?|bracket|draw|odds|predictions?|highlights|vs|weather|forecast|election|wiki(?:pedia)?|net worth|age|wife|husband|girlfriend|boyfriend|height|reddit|memes?|quiz|wordle|channel|tv|app|login|how to|what is|why|when|who|where|definition|meaning|history|jobs?|salary|hours|customer service|discount codes?|coupons?|promo codes?|near me|rules|winners?|names|types of|list of|facts|champions?|tournaments?|matches|season|draft|trade|injury report)\b/i;
+
+// Something you can buy, wear, or book. A related search must name one to become an idea.
+const PRODUCT = /\b(gifts?|ideas|kits?|sets?|tools?|gear|equipment|accessor(?:y|ies)|supplies|bags?|backpacks?|totes?|cases?|covers?|shoes|sneakers|boots|socks|shirts?|tees?|t shirts?|hoodies?|sweaters?|sweatshirts?|jackets?|coats?|dress(?:es)?|skirts?|shorts|pants|jeans|leggings|hats?|caps?|visors?|headbands?|wristbands?|jewelry|necklaces?|rings?|earrings|bracelets?|watch(?:es)?|sunglasses|glasses|bottles?|mugs?|cups?|tumblers?|bowls?|whisks?|powder|tea|blend|kettle|grinder|machine|maker|press|beans|books?|journals?|posters?|prints?|art|decor|lamps?|candles?|blankets?|pillows?|towels?|mats?|rackets?|racquets?|balls?|paddles?|grips?|strings?|nets?|clubs?|poles?|tents?|stoves?|records?|vinyls?|turntables?|speakers?|headphones?|cameras?|lens(?:es)?|film|puzzles?|games|cards|stickers?|pins?|patches?|figures?|plush(?:ies)?|toys?|bundle|box|subscription|merch|collection|edition|glazes?|clay|yarn|wool|fabric|beads|paints?|brush(?:es)?|pens?|markers?|ink|paper|wheel|kiln|seeds?|planters?|pots?)\b/i;
+const STYLE = /\b(outfits?|aesthetic|style|looks?|fits?|core|fashion|wear|apparel|clothing|clothes|vintage|retro|y2k|streetwear|preppy|minimalist?)\b/i;
+const EXPERIENCE = /\b(tickets?|class(?:es)?|lessons?|workshops?|camps?|clinics?|tours?|retreats?|experiences?|memberships?|passes|concerts?|festivals?|shows?|tastings?|ceremony|sessions?)\b/i;
+
+/** A related search is worth showing only if it names a product, a style, or a bookable experience, and is not news or a lookup. */
+export function isGiftShapedQuery(query: string): boolean {
+  if (NEWS_OR_INFO.test(query)) return false;
+  // Years usually mean news or schedules unless someone is buying a ticket.
+  if (/\b(?:19|20)\d{2}\b/.test(query) && !EXPERIENCE.test(query)) return false;
+  return PRODUCT.test(query) || STYLE.test(query) || EXPERIENCE.test(query);
+}
 // Same known category/brand collision as production ranking; no fuzzy brand guesses.
 const withoutCategoryBrand = (text: string) => text.replace(/\bpottery\s*barn\b/gi, " ");
 
@@ -74,7 +88,7 @@ export function discoverShoppingQueries(observations: TrendObservation[], limit 
     const seedTokens = tokens(observation.seedTerm);
     const queryTokens = new Set(tokens(withoutCategoryBrand(observation.query)));
     if (!seedTokens.length || !seedTokens.every(token => queryTokens.has(token))
-      || key(observation.query) === key(observation.seedTerm) || NON_SHOPPING.test(observation.query)) continue;
+      || key(observation.query) === key(observation.seedTerm) || !isGiftShapedQuery(observation.query)) continue;
     const id = key(observation.query);
     const candidate = candidates.get(id) ?? { query: observation.query, evidence: [] };
     candidate.evidence.push(observation);

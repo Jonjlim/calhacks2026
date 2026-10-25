@@ -2,7 +2,7 @@
 import { v } from "convex/values";
 import { signalLabel } from "../../lib/map/trendIdeas";
 import type { Result, TrendAgentContext, TrendDiscoveryView, TrendListingLink, TrendPassSummary, TrendSignal, TrendSuggestion } from "../../lib/contracts";
-import { discoverShoppingQueries, normalizeTrendDataset } from "../../lib/research/trends";
+import { discoverShoppingQueries, isGiftShapedQuery, normalizeTrendDataset } from "../../lib/research/trends";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, mutation, query } from "../_generated/server";
@@ -38,9 +38,10 @@ async function guard(ctx: MutationCtx, job: Doc<"trendJobs">): Promise<boolean> 
 
 export async function usableTrendJob(ctx: QueryCtx, roomId: Id<"rooms">, id: Id<"trendJobs">) {
   const job = await ctx.db.get(id);
-  return job && job.roomId === roomId && job.status === "succeeded" && job.sample
-    && isTrendSampleFresh(job.sample.context.retrievedAt, Date.now()) && await isTrendJobCurrent(ctx, job)
-    ? job : null;
+  if (!(job && job.roomId === roomId && job.status === "succeeded" && job.sample
+    && isTrendSampleFresh(job.sample.context.retrievedAt, Date.now()) && await isTrendJobCurrent(ctx, job))) return null;
+  // Samples stored before the gift-shaped filter tightened must not resurface news or lookups.
+  return { ...job, sample: { ...job.sample, suggestions: job.sample.suggestions.filter(s => isGiftShapedQuery(s.query)) } };
 }
 
 /** The trend job id a research fingerprint was bound to (see startResearch's inputHash), if any. */
@@ -148,7 +149,7 @@ export const setTrendPass = mutation({
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room before passing on ideas.");
     const job = await ctx.db.get(args.trendJobId);
-    if (!job || job.roomId !== args.roomId || !job.sample?.suggestions.some(s => s.query === args.query))
+    if (!job || job.roomId !== args.roomId || !job.sample?.suggestions.some(s => s.query === args.query && isGiftShapedQuery(s.query)))
       return err("validation_failed", "Pass on one of this trend search's sourced suggestions.");
     const existing = await ctx.db.query("trendPasses")
       .withIndex("by_job_query_participant", q => q.eq("trendJobId", args.trendJobId).eq("query", args.query).eq("participantId", member.me._id)).unique();
@@ -169,9 +170,10 @@ async function usableSamples(ctx: QueryCtx, roomId: Id<"rooms">) {
   const out: Doc<"trendJobs">[] = [];
   for (const job of succeeded) {
     if (seen.has(job.publishedClueId) || out.length >= 6) continue;
-    if (!await usableTrendJob(ctx, roomId, job._id)) continue;
+    const usable = await usableTrendJob(ctx, roomId, job._id);
+    if (!usable) continue;
     seen.add(job.publishedClueId);
-    out.push(job);
+    out.push(usable);
   }
   return out;
 }

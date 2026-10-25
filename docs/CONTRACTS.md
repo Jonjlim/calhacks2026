@@ -1610,6 +1610,14 @@ with key `auto:<clueId>` for a confirmed interest/wish with a safe seed. At most
 24 h samples and open jobs are reused and do not count. Clients cannot use `auto:` keys.
 Set Convex env `TREND_AUTO_DISCOVERY=off` to disable.
 
+**Gift-shaped filter.** `isGiftShapedQuery` (`lib/research/trends.ts`) keeps a related
+search only if it names a product, a style, or a bookable experience (tickets, classes,
+lessons, workshops, tours, tastings) and is not news, an event result, or a lookup
+(deaths, accidents, results, schedules, tournaments, how to, near me, names…). Years are
+dropped unless paired with an experience word. The filter also applies when reading
+stored samples, so older samples never resurface filtered queries, and
+`startResearch`/`setTrendPass` refuse them.
+
 **Buyer agent.** `BuyerSnapshot.trendDiscovery?: TrendAgentContext`
 (`{mode, label, ideas: {publishedClueId, query, signal, retrievedAt}[]}`) lists current
 ideas minus any with a pass; it participates in the buyer input version. The prompt lets

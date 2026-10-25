@@ -183,6 +183,18 @@ describe("persisted live Google Trends discovery", () => {
     expect(await s.t.run(ctx => ctx.db.query("trendJobs").collect())).toHaveLength(3);
     expect(await s.alex.mutation(f.startDiscovery, { ...s.args, idempotencyKey: "auto:spoofed" })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
   });
+  it("hides news-like suggestions stored before the filter tightened, and refuses to shop them", async () => {
+    const s = await completed();
+    await s.t.run(async ctx => {
+      const job = (await ctx.db.get(s.jobId))!;
+      await ctx.db.patch(s.jobId, { sample: { ...job.sample!, suggestions: [...job.sample!.suggestions, { query: "pottery tools accident", sourceUrl: job.sample!.suggestions[0]!.sourceUrl, signals: [{ kind: "breakout_search" }] }] } });
+    });
+    const view = value(await s.alex.query(f.getDiscovery, { roomId: s.roomId }));
+    expect(view.samples![0]!.suggestions.map(x => x.query)).not.toContain("pottery tools accident");
+    expect(await s.alex.mutation(api.research.research.startResearch, {
+      roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, discoveryQuery: "pottery tools accident", idempotencyKey: "news",
+    })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
+  });
   it("respects the automatic lookup kill switch", async () => {
     const s = await setup();
     vi.stubEnv("TREND_AUTO_DISCOVERY", "off");
