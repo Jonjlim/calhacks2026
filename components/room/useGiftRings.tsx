@@ -49,7 +49,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; tools: ReactNode } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -148,7 +148,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   const openBox = () => setSelectedKey("box");
-  if (!active) return { rings: null, notice, error, openBox, tools: null };
+  // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
+  const startAdd = (what: "memory" | "wish" | "idea") => {
+    if (!actions) return;
+    setSelectedKey(null);
+    const [x, z] = what === "idea" ? ringPoint(300, RING_RADII.gift - 0.4) : ringPoint(RING_THEMES[what === "wish" ? "wish" : "interest"].angle, RING_RADII.input);
+    setComposer({ x, z, zone: what === "idea" ? "gift" : "memory", kind: what === "wish" ? "explicit_wish" : "interest" });
+    mapView.focus(x * 0.6, z * 0.6, 0.8);
+  };
+  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -642,5 +650,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     },
     actionsFor,
   };
-  return { rings, notice, error, openBox, tools };
+  return { rings, notice, error, openBox, startAdd, tools };
 }

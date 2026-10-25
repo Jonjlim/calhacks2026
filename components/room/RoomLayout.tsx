@@ -367,11 +367,20 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click outside to add a memory · click near the present for a gift idea · drag to move" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Add a memory, a wish or a gift idea with the buttons · drag to look around" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
           {stage === "map" && selection && isOrganizer && !preview && !seen && (
             <button className="btn-primary h-11 px-5" onClick={() => startReveal(false)}>Reveal our gift</button>
+          )}
+          {stage === "map" && actions && !preview && (
+            <div className="flex items-center gap-1.5" role="group" aria-label="Add to the map">
+              {([["memory", "Memory", "Add a memory"], ["wish", "Wish", "Add a wish"], ["idea", "Gift idea", "Add a gift idea"]] as const).map(([what, label, title]) => (
+                <button key={what} type="button" className="btn-secondary h-11 whitespace-nowrap px-3.5 text-[13.5px]" title={title} aria-label={title} onClick={() => map.startAdd(what)}>
+                  <span aria-hidden className="mr-1.5 text-[15px] leading-none">+</span>{label}
+                </button>
+              ))}
+            </div>
           )}
           {primary}
           {stage !== "map" && (
