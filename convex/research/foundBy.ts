@@ -5,7 +5,7 @@
  * how a listing was found; it never cites a clue or changes a score.
  */
 import type { PublishedClue, SearchOrigin } from "../../lib/contracts";
-import { shoppingPhrases } from "./text";
+import { contentTokens, shoppingPhrases } from "./text";
 
 export function searchOrigin(input: {
   query: string | undefined;
@@ -19,9 +19,29 @@ export function searchOrigin(input: {
   if (input.trendClueId !== undefined && input.trendClueId !== null) {
     return { query, source: "trend", ...(active.has(input.trendClueId) ? { publishedClueId: input.trendClueId } : {}) };
   }
-  const pool = new Set(input.poolClueIds);
-  const from = input.clues.find((c) => active.has(c.id) && pool.has(c.id) && shoppingPhrases(c.text).includes(query));
+  const pool = input.clues.filter((c) => active.has(c.id) && input.poolClueIds.includes(c.id));
+  const from = pool.find((c) => shoppingPhrases(c.text).includes(query)) ?? containedIn(query, pool);
   return from ? { query, source: "memory", publishedClueId: from.id } : { query, source: "discovery" };
+}
+
+// Words a search adds around a memory ("hiking gifts", "matcha gift ideas") that say nothing about it.
+const GENERIC = new Set(["gift", "idea", "present", "birthday", "best", "unique", "cool", "fun", "cute"]);
+
+/**
+ * A query written around a memory (the buyer agent writes "hiking gifts") is
+ * credited to the memory whose every search word it contains; the most
+ * specific memory wins. Nothing is credited when no memory is fully inside.
+ */
+function containedIn<C extends Pick<PublishedClue, "text">>(query: string, clues: C[]): C | undefined {
+  const words = new Set(contentTokens(query).filter((w) => !GENERIC.has(w)));
+  let best: { clue: C; size: number } | undefined;
+  for (const clue of clues) {
+    for (const phrase of shoppingPhrases(clue.text)) {
+      const need = contentTokens(phrase).filter((w) => !GENERIC.has(w));
+      if (need.length && need.every((w) => words.has(w)) && need.length > (best?.size ?? 0)) best = { clue, size: need.length };
+    }
+  }
+  return best?.clue;
 }
 
 /**

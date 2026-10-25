@@ -105,7 +105,7 @@ export function shoppingPhrase(text: string): string {
   const verb = /^to ([a-z]+)$/.exec(phrase);
   if (verb) return activity(verb[1]!);
   phrase = phrase.replace(/^to\s+/, "");
-  return narrativeActivity(phrase) ?? phrase.replace(ENTHUSIAST_SUFFIX, "");
+  return narrativeActivity(phrase) ?? storyObject(phrase) ?? phrase.replace(ENTHUSIAST_SUFFIX, "");
 }
 
 // "Matcha drinker", "coffee lover": the thing, not the person. ("Fan" stays: ceiling fans are things.)
@@ -162,6 +162,15 @@ function narrativeActivity(phrase: string): string | undefined {
   // "Hiking in Yosemite", "skiing at Tahoe": keep the activity, drop where.
   if (isActivityIng(first) && WHERE_NEXT.test(rest.join(" "))) return first;
   return undefined;
+}
+
+// Plain story verbs whose object is the thing itself: "we got matcha", "we tried rock climbing".
+const STORY_OBJECT = /^(?:we|i|she|he|they)\s+(?:(?:all|both|once|often|always|first|recently|finally|together)\s+)?(?:got|had|drank|ate|tried|bought|made|watched|saw|played|shared|grabbed|loved|liked|enjoyed)\s+(?:(?:her|him|them|us|me)\s+)?(.+)$/;
+
+function storyObject(phrase: string): string | undefined {
+  const object = STORY_OBJECT.exec(phrase)?.[1]?.replace(LEADING_ARTICLE, "").trim();
+  if (!object) return undefined;
+  return narrativeActivity(object) ?? object;
 }
 
 function activityNoun(verb: string): string {

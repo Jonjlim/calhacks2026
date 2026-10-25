@@ -10,6 +10,14 @@ describe("which search found a listing", () => {
       .toEqual({ query: "hiking", source: "memory", publishedClueId: "c_hike" });
   });
 
+  it("credits the memory inside a query the buyer agent wrote around it", () => {
+    const tennis = { id: "c_tennis", text: "tennis", status: "active" as const };
+    expect(searchOrigin({ query: "hiking gifts", clues: [tennis, hiking], poolClueIds: ["c_tennis", "c_hike"] }))
+      .toEqual({ query: "hiking gifts", source: "memory", publishedClueId: "c_hike" });
+    expect(searchOrigin({ query: "trail gifts", clues: [tennis, hiking], poolClueIds: ["c_tennis", "c_hike"] }))
+      .toEqual({ query: "trail gifts", source: "discovery" });
+  });
+
   it("credits the trend's memory for a chosen trend search", () => {
     expect(searchOrigin({ query: "matcha whisk set", clues: [matcha], poolClueIds: ["c_matcha"], trendClueId: "c_matcha" }))
       .toEqual({ query: "matcha whisk set", source: "trend", publishedClueId: "c_matcha" });

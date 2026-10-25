@@ -45,6 +45,10 @@ describe("shopping phrases from everyday memories", () => {
     ["Coffee lover", "coffee"],
     ["lovees to bowl", "bowling"],
     ["obsesssed with matcha", "matcha"],
+    ["we got matcha", "matcha"],
+    ["We tried rock climbing", "rock climbing"],
+    ["She made the pottery mug", "pottery mug"],
+    ["I got her a necklace", "necklace"],
   ])("story or typo %s -> %s", (text, phrase) => {
     expect(shoppingPhrase(text)).toBe(phrase);
   });
