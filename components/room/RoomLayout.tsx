@@ -375,8 +375,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           )}
           {stage === "map" && actions && !preview && (
             <div className="flex items-center gap-1.5" role="group" aria-label="Add to the map">
-              {([["memory", "Memory", "Add a memory"], ["wish", "Wish", "Add a wish"], ["idea", "Gift idea", "Add a gift idea"]] as const).map(([what, label, title]) => (
-                <button key={what} type="button" className="btn-secondary h-11 whitespace-nowrap px-3.5 text-[13.5px]" title={title} aria-label={title} onClick={() => map.startAdd(what)}>
+              {([["memory", "Memory", "Add a memory", "#a9cde6", "solid"], ["wish", "Wish", "Add a wish", "#f2d27a", "solid"], ["idea", "Gift idea", "Add a gift idea", "#e2bd6b", "dashed"]] as const).map(([what, label, title, tint, line]) => (
+                <button key={what} type="button" className="btn-secondary h-11 whitespace-nowrap px-3.5 text-[13.5px]" style={{ background: `color-mix(in srgb, ${tint} ${what === "idea" ? 28 : 62}%, #fffaf0)`, borderColor: `color-mix(in srgb, ${tint} 85%, #413450)`, borderStyle: line }} title={title} aria-label={title} onClick={() => map.startAdd(what)}>
                   <span aria-hidden className="mr-1.5 text-[15px] leading-none">+</span>{label}
                 </button>
               ))}

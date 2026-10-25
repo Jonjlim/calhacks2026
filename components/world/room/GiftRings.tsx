@@ -194,7 +194,7 @@ function RingIsland({ at, kind, delay, animate, muted, arrive, shape, palette: p
 }
 
 /** One memory, drawn as what it is: a folded note, a wish star or a keepsake charm, floating on a wisp of cloud, tinted by its theme. */
-function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm"; color: string; animate: boolean }) {
+function MemoryNote({ shape, color, animate }: { shape: "heart" | "note" | "star" | "charm"; color: string; animate: boolean }) {
   const body = useMemo(() => buildBody(shape, color), [shape, color]);
   const spin = useRef<THREE.Group>(null);
   useFrame(({ clock }) => {

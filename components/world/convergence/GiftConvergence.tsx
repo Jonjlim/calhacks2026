@@ -84,6 +84,16 @@ export function buildBody(shape: ArtifactShape, color: string): THREE.Group {
     return m;
   };
   switch (shape) {
+    case "heart": {
+      const h = new THREE.Shape();
+      h.moveTo(0, -0.2);
+      h.bezierCurveTo(-0.34, 0.02, -0.26, 0.3, -0.1, 0.3);
+      h.bezierCurveTo(-0.04, 0.3, 0, 0.26, 0, 0.2);
+      h.bezierCurveTo(0, 0.26, 0.04, 0.3, 0.1, 0.3);
+      h.bezierCurveTo(0.26, 0.3, 0.34, 0.02, 0, -0.2);
+      add(geo("heart", () => new THREE.ExtrudeGeometry(h, { depth: 0.08, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 })), paint("conv-heart", { color: "#ec8a9c", emissive: "#e0607a", emissiveIntensity: 0.4 }), [0, 0, -0.04]);
+      break;
+    }
     case "note": {
       add(geo("note", () => new THREE.BoxGeometry(0.46, 0.035, 0.34)), paper);
       // A folded corner and a ribbon of the artifact's colour.

@@ -136,7 +136,7 @@ export function ThemeScenery({ look, animate }: { look: ThemeLook; animate: bool
 }
 
 /** A small floating object for one memory, shaped by the kind of thing it is. */
-export const NOTE_SHAPE: Record<"interest" | "wish" | "moment", "note" | "star" | "charm"> = { interest: "note", wish: "star", moment: "charm" };
+export const NOTE_SHAPE: Record<"interest" | "wish" | "moment", "heart" | "note" | "star" | "charm"> = { interest: "heart", wish: "star", moment: "charm" };
 
 /** A small drawn badge for each kind of branch, so branches differ by more than their words. */
 export function ThemeIcon({ look }: { look: ThemeLook }) {

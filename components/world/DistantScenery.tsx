@@ -249,14 +249,19 @@ export function MapSurround({ animate }: { animate: boolean }) {
       <group rotation={[0, Math.PI, 0]}>
         <Mountains />
         <HazeVeils />
-        <CloudCastle animate={animate} />
-        <WindmillVillage animate={animate} />
-        <HangingGardens animate={animate} />
-        <WatchtowerOutpost animate={animate} />
+        <group position={MAP_PUSH}>
+          <CloudCastle animate={animate} />
+          <WindmillVillage animate={animate} />
+          <HangingGardens animate={animate} />
+          <WatchtowerOutpost animate={animate} />
+        </group>
       </group>
     </group>
   );
 }
+
+/** On the gift map the decoration islands drift well back and up into the haze, clear of the rings of memories and gifts. */
+const MAP_PUSH: [number, number, number] = [0, 6, -34];
 
 export function DistantScenery({ animate, islets = true }: { animate: boolean; islets?: boolean }) {
   const end = useMemo(() => bridgeEnd(), []);
@@ -265,10 +270,12 @@ export function DistantScenery({ animate, islets = true }: { animate: boolean; i
       <Mountains />
       <HazeVeils />
 
-      <CloudCastle animate={animate} />
-      <WindmillVillage animate={animate} />
-      <HangingGardens animate={animate} />
-      <WatchtowerOutpost animate={animate} />
+      <group position={islets ? [0, 0, 0] : MAP_PUSH}>
+        <CloudCastle animate={animate} />
+        <WindmillVillage animate={animate} />
+        <HangingGardens animate={animate} />
+        <WatchtowerOutpost animate={animate} />
+      </group>
       {islets && <Islets animate={animate} />}
 
       {/* The islet the plank bridge reaches. */}

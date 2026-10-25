@@ -13,7 +13,7 @@ export const useScenePalette = () => useContext(ScenePaletteContext);
 // neither needs props threaded through the landing page.
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "unwrap:time";
+const STORAGE_KEY = "unwrap:sky";
 let current: TimeOfDay | null = null;
 const listeners = new Set<() => void>();
 

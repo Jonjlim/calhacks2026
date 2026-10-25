@@ -1,5 +1,5 @@
 /* The Book of Possibilities: parchment pages drawn in pencil, washed in watercolor, then read as a catalogue. */
-.stage { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgb(60 40 70 / 0.12), rgb(40 28 52 / 0.42)); animation: stageIn calc(0.45s * var(--k, 1)) ease-out both; }
+.stage { pointer-events: auto; position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgb(60 40 70 / 0.12), rgb(40 28 52 / 0.42)); animation: stageIn calc(0.45s * var(--k, 1)) ease-out both; }
 .stage.out { animation: stageOut 0.26s ease-in forwards; }
 @keyframes stageIn { from { opacity: 0; } }
 @keyframes stageOut { to { opacity: 0; } }

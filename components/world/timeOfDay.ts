@@ -127,13 +127,13 @@ export const NIGHT: ScenePalette = {
 export const SUNRISE: ScenePalette = {
   ...DAY,
   time: "sunrise",
-  clearColor: "#f0cfd4",
-  fog: { color: "#f2d2d4", near: 30, far: 180 },
-  sky: { zenith: "#93a9e0", mid: "#f0c8d6", horizon: "#ffdcbc", below: "#e3b6c6", glow: "#ffc79a", glowStrength: 1.35, orbDirection: new THREE.Vector3(0.38, 0.14, -0.91).normalize(), disc: 0, stars: 0 },
-  light: { hemiSky: "#ffdad2", hemiGround: "#b69bc4", hemiIntensity: 0.92, key: "#ffc58f", keyIntensity: 3.1, bounce: "#f4b9b8", bounceIntensity: 1.0, rim: "#ffb7c9", rimIntensity: 0.75 },
-  cloudTint: "#ffe6e2",
-  deckTint: "#f7dce1",
-  distant: { mountainTint: "#e9c6d8", hazeTint: "#f3d5d8", hazeOpacity: 1 },
+  clearColor: "#f2d9cf",
+  fog: { color: "#f3dccf", near: 30, far: 180 },
+  sky: { zenith: "#8fb0e2", mid: "#f2d2cc", horizon: "#ffe0b4", below: "#e8c2c0", glow: "#ffca94", glowStrength: 1.3, orbDirection: new THREE.Vector3(0.38, 0.14, -0.91).normalize(), disc: 0, stars: 0 },
+  light: { hemiSky: "#ffe3d2", hemiGround: "#b9a0c0", hemiIntensity: 0.92, key: "#ffcc92", keyIntensity: 3.1, bounce: "#f6c4b4", bounceIntensity: 1.0, rim: "#ffbfcb", rimIntensity: 0.7 },
+  cloudTint: "#fff0e6",
+  deckTint: "#f8e6e0",
+  distant: { mountainTint: "#ecd0d6", hazeTint: "#f4dcd4", hazeOpacity: 1 },
 };
 
 /** Lavender sunset: for gift discovery. Dusty violet shadows, coral highlights, amber sun, deeper cloud valleys. */
