@@ -9,6 +9,66 @@ import { toToon } from "@/components/characters/StorybookAvatar";
 import { COUNCIL_MODELS, COUNCIL_TINT, poseFor, type CouncilClip } from "@/lib/council/animation";
 import type { CouncilMemberState } from "@/lib/council/contracts";
 
+/**
+ * Rounds the capsule's boxy corners. The body is a squarish rounded block; every
+ * vertex (shell, face, trim) is pulled in by how far its corner sticks out past
+ * a circle, in height against distance from the axis, so the silhouette becomes
+ * a soft egg while the face and the shell still line up. Geometry is cloned first
+ * (the loaded model is shared), and only the bind pose is changed.
+ */
+function roundCorners(root: THREE.Object3D) {
+  const body = (root.getObjectByName("Shell") ?? root.getObjectByName("Body")) as THREE.Mesh | undefined;
+  if (!body?.geometry) return;
+  body.geometry.computeBoundingBox();
+  const bb = body.geometry.boundingBox!;
+  const a = Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x), Math.abs(bb.min.z), Math.abs(bb.max.z));
+  const b = (bb.max.y - bb.min.y) / 2;
+  const yc = (bb.max.y + bb.min.y) / 2;
+  const P = 4.2;
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry || /Flipper|Antenna|RoleAccessory|SecondaryAccessory|Backpack/.test(m.name)) return;
+    m.geometry = m.geometry.clone();
+    const pos = m.geometry.getAttribute("position") as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const y = pos.getY(i) - yc;
+      const hu = Math.hypot(x, z) / a;
+      const vu = Math.abs(y) / b;
+      // Only the body proper: leave anything far outside it (arms, props) alone.
+      if (hu > 1.12 || vu > 1.12) continue;
+      const rp = Math.pow(Math.pow(hu, P) + Math.pow(vu, P), 1 / P);
+      const r2 = Math.hypot(hu, vu);
+      if (rp < 0.01) continue;
+      const k = THREE.MathUtils.lerp(1, Math.min(1, rp / r2), 0.9);
+      // Keep the face on the front: pull in sideways and in height, never push the front back.
+      pos.setXYZ(i, x * k, yc + y * (0.5 + 0.5 * k), z * (0.55 + 0.45 * k));
+    }
+    pos.needsUpdate = true;
+    m.geometry.computeBoundingSphere();
+  });
+}
+
+const blackEye = new THREE.MeshStandardMaterial({ color: "#16111a", roughness: 0.18, metalness: 0, envMapIntensity: 1.2 });
+
+/** Skinned meshes ignore their own scale, so an eye is enlarged in its geometry, about its own centre. */
+function enlargeEye(mesh: THREE.Mesh, k: number) {
+  mesh.geometry = mesh.geometry.clone();
+  const pos = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pos.count; i++) {
+    cx += pos.getX(i);
+    cy += pos.getY(i);
+  }
+  cx /= pos.count;
+  cy /= pos.count;
+  for (let i = 0; i < pos.count; i++) pos.setXY(i, cx + (pos.getX(i) - cx) * k, cy + (pos.getY(i) - cy) * k);
+  pos.needsUpdate = true;
+  mesh.geometry.computeBoundingSphere();
+}
+
 /** A private skeleton/mixer per instance; shared immutable geometry and painterly materials. */
 export function CouncilMember({ state, position, rotationY = 0, scale = 1, animate = true, onReady, clipOverride }: {
   state: CouncilMemberState; position: [number, number, number]; rotationY?: number; scale?: number; animate?: boolean; onReady?: () => void; clipOverride?: CouncilClip;
@@ -38,7 +98,11 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
           soft.emissive.set("#70cfea");
           soft.emissiveIntensity = 0.65;
         }
-        else if (m.name === "Ivory" || m.name === "Accent") soft.roughness = 0.64;
+        else if (m.name === "Ivory" || m.name === "Accent") {
+          soft.roughness = 0.64;
+          // More of the role colour on the front: the cream belly is washed with it.
+          if (m.name === "Ivory") soft.color.lerp(tint, 0.3);
+        }
         capsuleMaterials.set(m.uuid, soft);
         return soft;
       }
@@ -63,13 +127,26 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(role) : role(mesh.material);
-      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) { mesh.scale.x *= 1.12; mesh.scale.y *= 1.12; }
+      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) {
+        // Plain, glossy black eyes straight on the shell: no screen behind them.
+        mesh.material = blackEye;
+        enlargeEye(mesh, 1.9);
+      }
+      if (capsule && /^Face(Screen|Bezel|Recess)$/.test(mesh.name)) mesh.visible = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
     });
+    // Slimmer and cuter: a narrower, rounder body (its flippers and face come with it), set on the clone only.
+    if (capsule) {
+      c.scale.set(c.scale.x * 0.84, c.scale.y * 0.95, c.scale.z * 0.84);
+      roundCorners(c);
+      // The arms follow the narrower body in.
+      for (const n of ["LeftFlipper", "RightFlipper"]) c.getObjectsByProperty("name", n).forEach((o) => { if (!(o as THREE.Mesh).isMesh) o.position.x *= 0.9; });
+    }
     return c;
   }, [scene, state.actor]);
+  const antenna = useMemo(() => instance.getObjectByName("Antenna") ?? null, [instance]);
   const { actions, mixer } = useAnimations(animations, instance);
   const capsuleParts = useMemo(() => {
     const eyes: THREE.Mesh[] = [];
@@ -115,14 +192,17 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
   }, [mixer, pose.then, play]);
   useEffect(() => { onReady?.(); }, [onReady]);
   useFrame(({ clock }) => {
+    // Big, bouncy antennas: set after the animation has posed the bone, so the clip cannot shrink them back.
+    if (antenna) {
+      const sway = animate ? Math.sin(clock.elapsedTime * 2.2 + state.actor.length) * 0.08 : 0;
+      antenna.scale.setScalar(1.95);
+      antenna.rotation.z = sway;
+    }
     if (!root.current) return;
     const phase = Object.keys(COUNCIL_MODELS).indexOf(state.actor) * 1.2;
     root.current.position.y = position[1] + 0.42 + (animate ? Math.sin(clock.elapsedTime * 1.3 + phase) * 0.025 : 0);
     const resting = ["idle", "walk", "wave", "happy", "celebrate"].includes(current.current?.getClip().name ?? "idle");
     capsuleParts.props.forEach(p => p?.scale.setScalar(resting ? 0.001 : 1));
-    if (current.current?.getClip().name === "idle" && (state.actor === "muse" || state.actor === "keeper")) {
-      for (const eye of capsuleParts.eyes) if (eye.morphTargetInfluences && eye.morphTargetDictionary) eye.morphTargetInfluences[eye.morphTargetDictionary.happy!] = 0.85;
-    }
   });
   return (
     <group ref={root} position={[position[0], position[1] + 0.42, position[2]]} rotation={[0, rotationY, 0]} scale={scale * 0.67}>
