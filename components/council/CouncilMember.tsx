@@ -50,6 +50,25 @@ function roundCorners(root: THREE.Object3D) {
   });
 }
 
+const blackEye = new THREE.MeshStandardMaterial({ color: "#16111a", roughness: 0.18, metalness: 0, envMapIntensity: 1.2 });
+
+/** Skinned meshes ignore their own scale, so an eye is enlarged in its geometry, about its own centre. */
+function enlargeEye(mesh: THREE.Mesh, k: number) {
+  mesh.geometry = mesh.geometry.clone();
+  const pos = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pos.count; i++) {
+    cx += pos.getX(i);
+    cy += pos.getY(i);
+  }
+  cx /= pos.count;
+  cy /= pos.count;
+  for (let i = 0; i < pos.count; i++) pos.setXY(i, cx + (pos.getX(i) - cx) * k, cy + (pos.getY(i) - cy) * k);
+  pos.needsUpdate = true;
+  mesh.geometry.computeBoundingSphere();
+}
+
 /** A private skeleton/mixer per instance; shared immutable geometry and painterly materials. */
 export function CouncilMember({ state, position, rotationY = 0, scale = 1, animate = true, onReady, clipOverride }: {
   state: CouncilMemberState; position: [number, number, number]; rotationY?: number; scale?: number; animate?: boolean; onReady?: () => void; clipOverride?: CouncilClip;
@@ -108,7 +127,12 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(role) : role(mesh.material);
-      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) { mesh.scale.x *= 1.3; mesh.scale.y *= 1.3; }
+      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) {
+        // Plain, glossy black eyes straight on the shell: no screen behind them.
+        mesh.material = blackEye;
+        enlargeEye(mesh, 1.9);
+      }
+      if (capsule && /^Face(Screen|Bezel|Recess)$/.test(mesh.name)) mesh.visible = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
@@ -179,9 +203,6 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
     root.current.position.y = position[1] + 0.42 + (animate ? Math.sin(clock.elapsedTime * 1.3 + phase) * 0.025 : 0);
     const resting = ["idle", "walk", "wave", "happy", "celebrate"].includes(current.current?.getClip().name ?? "idle");
     capsuleParts.props.forEach(p => p?.scale.setScalar(resting ? 0.001 : 1));
-    if (current.current?.getClip().name === "idle" && (state.actor === "muse" || state.actor === "keeper")) {
-      for (const eye of capsuleParts.eyes) if (eye.morphTargetInfluences && eye.morphTargetDictionary) eye.morphTargetInfluences[eye.morphTargetDictionary.happy!] = 0.85;
-    }
   });
   return (
     <group ref={root} position={[position[0], position[1] + 0.42, position[2]]} rotation={[0, rotationY, 0]} scale={scale * 0.67}>
