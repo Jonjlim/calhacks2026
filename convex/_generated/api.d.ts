@@ -55,6 +55,7 @@ import type * as payments_stateMachine from "../payments/stateMachine.js";
 import type * as payments_stripe from "../payments/stripe.js";
 import type * as payments_sync from "../payments/sync.js";
 import type * as payments_webhook from "../payments/webhook.js";
+import type * as photos from "../photos.js";
 import type * as proposals from "../proposals.js";
 import type * as research_apifyRun from "../research/apifyRun.js";
 import type * as research_brief from "../research/brief.js";
@@ -133,6 +134,7 @@ declare const fullApi: ApiFromModules<{
   "payments/stripe": typeof payments_stripe;
   "payments/sync": typeof payments_sync;
   "payments/webhook": typeof payments_webhook;
+  photos: typeof photos;
   proposals: typeof proposals;
   "research/apifyRun": typeof research_apifyRun;
   "research/brief": typeof research_brief;

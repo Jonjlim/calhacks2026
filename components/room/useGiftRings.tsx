@@ -47,9 +47,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
   const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean } | null>(null);
-  // Photos picked in the add box, and this browser's own thumbnails of photos it sent (never shared with the room).
+  // Photos picked in the add box before they're sent.
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
-  const [previews, setPreviews] = useState<Record<string, string[]>>({});
   const [why, setWhy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -227,22 +226,38 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       };
     }
     if (key.startsWith("photo:")) {
-      const sourceId = key.slice(6);
-      const found = data.myProposedClues.filter((c) => c.sourceId === sourceId && c.status === "proposed");
+      const group = groups.find((g) => g.key === key);
+      if (!group) return null;
+      const mine = group.uploaderId === me.id;
+      const found = mine ? foundFor(group.sourceId) : [];
       return {
-        caption: (
+        caption: mine ? (
           <span className={s.found}>
-            <b>Only you see this</b>
-            {found.length === 0 ? <span>Reading privately… what it finds appears here.</span> : found.map((c) => (
-              <span key={c.id} className={s.foundRow}>
-                <em>{c.text}{c.confidence < 0.6 ? " · maybe" : ""}</em>
-                {actions && <button type="button" onClick={() => void run(() => actions.publishClue(c.id), "Shared with the room.")}>Share</button>}
-                {actions && <button type="button" className={s.foundNo} onClick={() => void run(() => actions.rejectClue(c.id), "Discarded. Nobody else saw it.")}>✕</button>}
-              </span>
-            ))}
+            <b>Your photo · everyone sees it</b>
+            {found.length === 0 ? <span>{group.clueIds.length ? `${group.clueIds.length} shared from it. Nothing left to review.` : "Reading it… what Unwrap guesses appears here, only for you."}</span> : (
+              <>
+                <span>Only you see these guesses until you share them:</span>
+                {found.map((c) => (
+                  <span key={c.id} className={s.foundRow}>
+                    <em>{c.text}{c.confidence < 0.6 ? " · maybe" : ""}</em>
+                    {actions && <button type="button" onClick={() => void run(() => actions.publishClue(c.id), "Shared with the room.")}>Share</button>}
+                    {actions && <button type="button" className={s.foundNo} onClick={() => void run(() => actions.rejectClue(c.id), "Discarded. Nobody else saw it.")}>✕</button>}
+                  </span>
+                ))}
+              </>
+            )}
           </span>
-        ),
-        actions: actions ? [{ icon: "🗑", label: "Delete these photos", disabled: !!pending, run: () => void run(() => actions.deleteEvidence(sourceId), "Deleted, along with anything not yet shared.").then((ok) => ok && setSelectedKey(null)) }] : [],
+        ) : <><b>{name(group.uploaderId)}’s photo{group.urls.length > 1 ? "s" : ""}</b>{group.clueIds.length ? ` · ${group.clueIds.length} ${group.clueIds.length === 1 ? "memory" : "memories"} from it` : ""}</>,
+        actions: actions && mine ? [{
+          icon: "🗑", label: "Delete for everyone", disabled: !!pending,
+          run: () => void run(async () => {
+            for (const id of group.photoIds) {
+              const gone = await actions.deletePhoto(id);
+              if (!gone.ok) return gone;
+            }
+            return group.sourceId ? actions.deleteEvidence(group.sourceId) : { ok: true as const, value: null };
+          }, "Deleted for everyone, along with anything not yet shared.").then((ok) => ok && setSelectedKey(null)),
+        }] : [],
       };
     }
     const idea = ideas.find((c) => `idea:${c.id}` === key);
@@ -332,14 +347,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const readPhotos = () => {
     if (!actions || !photoPick.length) return;
     const picked = photoPick;
-    void run(async () => {
-      const result = await actions.importPhotos(picked.map(({ blob, marker }) => ({ blob, marker })));
-      if (result.ok) {
-        const sourceId = (result.value as { sourceId: string }).sourceId;
-        setPreviews((p) => ({ ...p, [sourceId]: picked.map((x) => x.preview) }));
-      }
-      return result;
-    }, "Reading your photos privately. Only you see what it finds until you share it.", "photos").then((ok) => {
+    void run(() => actions.importPhotos(picked.map(({ blob, marker }) => ({ blob, marker }))), "Shared with the room. Unwrap is reading them; only you see what it guesses until you share it.", "photos").then((ok) => {
       if (ok) {
         setComposer(null);
         setPhotoPick([]);
@@ -369,26 +377,33 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
           ))}
         </div>
       )}
-      <p>{photoPick.length ? "Tap her in each photo. It’s your mark, not face recognition." : "Read once, then deleted. Only you see what it finds."}</p>
+      <p>{photoPick.length ? "Tap her in each photo. It’s your mark, not face recognition, and only you see it." : "Everyone in the room will see these photos. Location data is removed."}</p>
       {photoPick.length > 0 && (
-        <button type="button" className={s.readBtn} disabled={pending === "photos"} onClick={readPhotos}>{pending === "photos" ? "Sending privately…" : `Read ${photoPick.length === 1 ? "it" : "them"} privately`}</button>
+        <button type="button" className={s.readBtn} disabled={pending === "photos"} onClick={readPhotos}>{pending === "photos" ? "Sharing…" : `Share ${photoPick.length === 1 ? "it" : "them"} with the room`}</button>
       )}
     </div>
   ) : null;
 
-  // This member's own photos on the map, marked "only you": what the private read found, waiting for review.
-  const myPhotos = data.evidence
-    .filter((e) => e.kind === "photo")
-    .map((e) => ({ source: e, found: data.myProposedClues.filter((c) => c.sourceId === e.id && c.status === "proposed") }))
-    .filter(({ source, found }) => found.length > 0 || source.media?.status === "uploaded");
-  const photoNodes = myPhotos.map(({ source, found }, i) => {
+  // Room photos (D20): everyone sees them. Their uploader also sees what the private read guessed, to review.
+  const photoGroups = new Map<string, { key: string; uploaderId: string; sourceId?: string; photoIds: string[]; urls: string[]; clueIds: string[] }>();
+  for (const photo of data.roomPhotos ?? []) {
+    const groupKey = photo.sourceId ?? photo.id;
+    const group = photoGroups.get(groupKey) ?? { key: `photo:${groupKey}`, uploaderId: photo.uploaderId, sourceId: photo.sourceId, photoIds: [], urls: [], clueIds: [] };
+    group.photoIds.push(photo.id);
+    group.urls.push(photo.url);
+    for (const id of photo.clueIds) if (!group.clueIds.includes(id)) group.clueIds.push(id);
+    photoGroups.set(groupKey, group);
+  }
+  const groups = [...photoGroups.values()];
+  const foundFor = (sourceId?: string) => (sourceId ? data.myProposedClues.filter((c) => c.sourceId === sourceId && c.status === "proposed") : []);
+  const photoNodes = groups.map((g, i) => {
     const [x, z] = ringPoint(205 - i * 24, RING_RADII.input + 1.2);
-    return { key: `photo:${source.id}`, sourceId: source.id, images: previews[source.id] ?? [], found: found.length, reading: source.media?.status === "uploaded" && !found.length, x, z };
+    const mine = g.uploaderId === me.id;
+    const source = mine && g.sourceId ? data.evidence.find((e) => e.id === g.sourceId) : undefined;
+    const found = mine ? foundFor(g.sourceId).length : 0;
+    return { key: g.key, images: g.urls, author: name(g.uploaderId), mine, found, reading: mine && source?.media?.status === "uploaded" && !found, x, z };
   });
-  const thumbFor = (clue: { proposedClueId?: string }) => {
-    const proposed = clue.proposedClueId ? data.myProposedClues.find((c) => c.id === clue.proposedClueId) : undefined;
-    return proposed ? previews[proposed.sourceId]?.[0] : undefined;
-  };
+  const thumbFor = (clueId: string) => groups.find((g) => g.clueIds.includes(clueId))?.urls[0];
 
   // The shared yes at the present.
   const live = revision && revision.status !== "infeasible" && revision.status !== "superseded" && revision.payableTotalMinor > 0;
@@ -465,7 +480,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const rings: RingsWorld = {
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
-      return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue) };
+      return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue.id) };
     }),
     ideas: ideas.map((idea, i) => {
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.

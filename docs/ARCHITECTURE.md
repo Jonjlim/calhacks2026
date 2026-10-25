@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D20 — Room photos are shared with the room (2026-10-24)
+
+Photos added on the gift map are visible to every room member. This changes the P0 rule that uploaded photos were owner-only and deleted after reading, for photos added on the map only. The private read is unchanged: each photo is uploaded twice, a shared copy in `roomPhotos` (`convex/photos.ts`) and a private copy that the extractor reads once and deletes. AI guesses from the photo stay private until published. Shared copies use the same upload grants, type and size checks as evidence uploads, are kept by the stale-upload sweep, cannot be claimed by the read-once pipeline, can be deleted only by their uploader, and are purged with the room. Safeguards and wording: [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Decided by the team lead on request; owners: Dev 3 (map, photos), Dev 2 (media hardening, review requested).
+
 ### D19 — Map-first room (2026-10-24)
 
 The gift map becomes the room. The app opens in a lobby in front of the present (the garden view); when the organizer starts the room, the camera zooms out and the map opens around the present, which becomes the box at its center. The tower step, the Backstage drawer, the Gifts drawer, the separate `/room/[id]/map` page, and the React Flow arrange view leave the main path. Imports, photos, research, votes, selection, and approvals all happen on the map.

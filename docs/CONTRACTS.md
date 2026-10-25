@@ -17,6 +17,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 - Sharpen: `agents/themes.sharpen({ roomId })` picks the two leading gifts from `readCatalog`, `getSharpen({ roomId })`, `answerSharpen({ sharpenId, option })` (publishes the option's clue as the answering member and bumps knowledge), `dismissSharpen({ sharpenId })`. Options carry `listingIds` instead of theme ids. Uses `AskedSlot`: no.
 - Cursors: `map.moveCursor` accepts `space: "rings"` for map-plane coordinates (x, z stored as x, y).
 - Room deletion purges all map tables, including the earlier cursor, sprout, feedback, position and idea-call tables.
+- Room photos (D20): `photos.sharePhotos({ roomId, files: { storageId }[], sourceId? })` claims 1–3 fresh uploads against the caller's upload grants; `photos.listRoomPhotos({ roomId })` → `{ id, uploaderId, url, sourceId?, clueIds, createdAt }[]` for members, where `clueIds` are published clues read from the same pictures; `photos.deletePhoto({ photoId })` is uploader-only. The client uploads a second, private copy through `importMediaEvidence` for the read-once extractor.
 
 Still proposed: theme rename/merge/dismiss, `getMapState` consolidation, and `themeIds` on recommendations (the client derives theme placement from cited clue ids).
 

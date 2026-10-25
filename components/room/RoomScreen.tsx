@@ -104,6 +104,8 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const extractClues = useMutation(api.agents.extract.extractClues);
   const genUploadUrl = useMutation(api.media.generateEvidenceUploadUrl);
   const importMedia = useMutation(api.media.importMediaEvidence);
+  const sharePhotos = useMutation(api.photos.sharePhotos);
+  const deletePhoto = useMutation(api.photos.deletePhoto);
   const deleteEvidence = useMutation(api.clues.deleteEvidence);
   const publishClue = useMutation(api.clues.publishClue);
   const rejectClue = useMutation(api.clues.rejectProposedClue);
@@ -162,28 +164,44 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
       moveCursor: (x, z) => moveCursor({ roomId, x, y: z, space: "rings" }),
-      // Same private pipeline as the photo panel: upload, import as the member's evidence, read once, then the file is deleted.
+      // Two uploads per photo (D20): one shared with the room, one private copy that the extractor reads once and deletes.
       importPhotos: async (items) => {
-        const files: { storageId: Id<"_storage">; marker?: { x: number; y: number } }[] = [];
-        for (const item of items) {
+        const send = async (blob: Blob) => {
           const url = await genUploadUrl({ roomId });
           if (!url.ok) return url;
-          const res = await fetch(url.value.uploadUrl, { method: "POST", headers: { "Content-Type": item.blob.type }, body: item.blob });
+          const res = await fetch(url.value.uploadUrl, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
           if (!res.ok) return { ok: false as const, error: { code: "provider_timeout" as const, message: `The photo didn’t upload (${res.status}). Try again.` } };
           const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
-          files.push({ storageId, ...(item.marker ? { marker: item.marker } : {}) });
+          return { ok: true as const, value: storageId };
+        };
+        // Order matters: each claim binds to the caller's oldest unused upload grant, so the private
+        // copies are uploaded and imported before the shared copies are uploaded and shared.
+        const privateFiles: { storageId: Id<"_storage">; marker?: { x: number; y: number } }[] = [];
+        for (const item of items) {
+          const reading = await send(item.blob);
+          if (!reading.ok) return reading;
+          privateFiles.push({ storageId: reading.value, ...(item.marker ? { marker: item.marker } : {}) });
         }
-        const imported = await importMedia({ roomId, kind: "photo", label: "Photos from the map", files });
+        const imported = await importMedia({ roomId, kind: "photo", label: "Photos from the map", files: privateFiles });
         if (!imported.ok) return imported;
+        const sharedFiles: { storageId: Id<"_storage"> }[] = [];
+        for (const item of items) {
+          const shared = await send(item.blob);
+          if (!shared.ok) return shared;
+          sharedFiles.push({ storageId: shared.value });
+        }
+        const posted = await sharePhotos({ roomId, files: sharedFiles, sourceId: imported.value.source._id });
+        if (!posted.ok) return posted;
         const started = await extractClues({ sourceId: imported.value.source._id });
         if (!started.ok) return started;
         return { ok: true as const, value: { sourceId: imported.value.source._id as string } };
       },
+      deletePhoto: (photoId) => deletePhoto({ photoId: photoId as Id<"roomPhotos"> }),
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia,
+      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto,
     ],
   );
 
@@ -235,12 +253,14 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
   const themes = useQuery(api.agents.themes.listThemes, args);
   const sharpen = useQuery(api.agents.themes.getSharpen, args);
   const cursors = useQuery(api.map.listCursors, args);
+  const photos = useQuery(api.photos.listRoomPhotos, args);
   const extras: RoomData = {
     ...data,
     mapSignals: signals?.ok ? signals.value : undefined,
     mapThemes: themes?.ok ? themes.value : undefined,
     sharpen: sharpen?.ok ? sharpen.value : undefined,
     cursors: cursors?.ok ? cursors.value : undefined,
+    roomPhotos: photos?.ok ? photos.value : undefined,
   };
   return <RoomSurfaceView surface={surface} data={extras} actions={actions} />;
 }

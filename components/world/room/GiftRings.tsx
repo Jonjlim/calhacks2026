@@ -38,8 +38,8 @@ export interface RingAction {
 
 export interface RingsWorld {
   clues: { key: string; text: string; author: string; avatar: AvatarId; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
-  /** This viewer's own photos, read privately: shown only to them until they share what was found. */
-  photos?: { key: string; sourceId: string; images: string[]; found: number; reading: boolean; x: number; z: number }[];
+  /** Photos members added, shared with the whole room (D20). The uploader also sees what the private read found. */
+  photos?: { key: string; images: string[]; author: string; mine: boolean; found: number; reading: boolean; x: number; z: number }[];
   /** Council themes, or the three clue groups until the council has grouped them. */
   themes: { key: string; theme: string; label: string; count: number; x: number; z: number; tint: string; jar: RingTheme }[];
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
@@ -453,8 +453,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
 
       {(rings.photos ?? []).map((ph, i) => (
         <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate}>
-          <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label="Your photos, read privately"
-            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden>📷</i>}<em>{ph.reading ? "reading…" : `${ph.found} to review`}</em><b>only you</b></span>} />
+          <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label={`${ph.author}'s photo`}
+            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden>📷</i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
         </RingIsland>
       ))}
 

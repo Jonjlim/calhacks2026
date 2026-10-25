@@ -48,6 +48,8 @@ export interface RoomData {
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
   sharpen?: OkValue<FunctionReturnType<typeof api.agents.themes.getSharpen>>;
   cursors?: OkValue<FunctionReturnType<typeof api.map.listCursors>>;
+  /** Photos members added on the map, shared with the whole room (D20). */
+  roomPhotos?: OkValue<FunctionReturnType<typeof api.photos.listRoomPhotos>>;
 }
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
@@ -82,8 +84,9 @@ export interface RoomActions {
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
   dismissSharpen: Run<[sharpenId: string]>;
-  /** Uploads 1–3 photos privately (each with the uploader's tap on the recipient), then starts the private read. */
+  /** Adds 1–3 photos: a copy shared with the room, and a private copy read once for clues (with the uploader's tap on the recipient). */
   importPhotos: Run<[items: { blob: Blob; marker?: { x: number; y: number } }[]]>;
+  deletePhoto: Run<[photoId: string]>;
   /** Shares this viewer's pointer on the map plane; fire and forget. */
   moveCursor: Run<[x: number, z: number]>;
 }

@@ -400,6 +400,17 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_room", ["roomId", "createdAt"]),
 
+  /** Photos a member added on the gift map, shared with the whole room (D20). Separate from private evidence media. */
+  roomPhotos: defineTable({
+    roomId: v.id("rooms"),
+    uploaderId: v.id("participants"),
+    storageId: v.id("_storage"),
+    sourceId: v.optional(v.id("evidenceSources")),
+    createdAt: v.number(),
+  })
+    .index("by_room", ["roomId", "createdAt"])
+    .index("by_storage", ["storageId"]),
+
   /** Pull toward the present (+1) or push away (−1) on a memory or theme (D19). One per member per target; advisory only. */
   mapSignals: defineTable({
     roomId: v.id("rooms"),

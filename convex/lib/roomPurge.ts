@@ -187,6 +187,11 @@ const mapSignals: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapSignals").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 const mapThemes: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const roomPhotos: Purger = async (ctx, roomId, limit) => {
+  const rows = await ctx.db.query("roomPhotos").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit);
+  for (const row of rows) if (await ctx.db.system.get(row.storageId)) await ctx.storage.delete(row.storageId);
+  return deleteAll(ctx, rows);
+};
 const mapSharpens: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
@@ -225,6 +230,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["mapSignals", mapSignals],
   ["mapThemes", mapThemes],
   ["mapSharpens", mapSharpens],
+  ["roomPhotos", roomPhotos],
   ["participants", participants],
 ];
 
