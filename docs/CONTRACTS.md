@@ -1976,6 +1976,8 @@ money, or changes the explicit listing votes table. Organizer-only
 ties remain open or can be skipped through the existing dismissal operation.
 Existing answerSharpen remains for compatibility; the live map uses poll votes.
 
+Gift selection UI: Pass records the gift's downvote on the first click; a reason can be added separately. Gift vote counts and own-vote state are visible alongside the selected product. Votes remain advisory: they do not publish facts, select products or approve payments. One net vote moves the gift 2.2 world units along its ring radius (bounded by the existing ring limits), making human steering more visible without changing source relevance. Selecting a gift focuses its island and opens four main orbit actions: add to box, support, pass, and its recorded journey. Ownership/price feedback and the source link remain secondary actions.
+
 Research ordering applies direct gift votes, then question support, then existing
 relevance/deterministic tie order BEFORE truncating a pool. Question support is
 an advisory signal from explicitly linked product IDs or literal product-title

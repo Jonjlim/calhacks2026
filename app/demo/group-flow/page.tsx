@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence } from "@/components/convergence/convergenceClock";
+import { GiftOrbitMenu } from "@/components/room/GiftOrbitMenu";
+import { HowWeGotHere } from "@/components/room/HowWeGotHere";
 import { BoxPanel } from "@/components/room/BoxPanel";
 import { QuestionPoll } from "@/components/room/QuestionPoll";
 import type { GiftSelection, ProposalView, QuestionPollView } from "@/lib/contracts";
@@ -13,6 +15,8 @@ import { allocate } from "@/convex/allocations";
 
 /** Offline UI rehearsal using the same components as the room. No backend/provider writes. */
 export default function GroupFlowPreview() {
+  const [inspecting, setInspecting] = useState<string | null>(null);
+  const [showJourney, setShowJourney] = useState(false);
   const [person, setPerson] = useState(0);
   const [ballots, setBallots] = useState<Record<string, number>>({});
   const [closed, setClosed] = useState(false);
@@ -59,6 +63,8 @@ export default function GroupFlowPreview() {
     ...items.map((it, i): TrailEntry => ({ _id: `sample-choice-${i}` as TrailEntry["_id"], stage: "choice", actor: "person", outcome: "kept", who: "Alex", listingId: it.listingId as NonNullable<TrailEntry["listingId"]>, text: `Added ${it.listingSnapshot.title} to the local demo box.`, at: sampleAt + i })),
   ];
   const reveal = () => { if (selection) { convergence.abort(); convergence.start({ selectionId: selection.id, inputs: [], total: 0, instant: true }); } };
+  const inspected = gifts.find(g => g.id === inspecting);
+  const cast = (id: string, value: number) => setGiftVotes(all => ({ ...all, [id]: { ...all[id], [me.id]: all[id]?.[me.id] === value ? 0 : value } }));
   const resetDeal = () => { setRevision(r => r + 1); setApproved([]); };
   return <main className="min-h-screen bg-ivory p-5 text-dusk md:p-10">
     <div className="mx-auto max-w-[1100px]">
@@ -74,6 +80,7 @@ export default function GroupFlowPreview() {
           <div className="flex flex-col gap-4" aria-label="Ranked sample gifts">{order.map((gift, rank) => <article key={gift.id} className="rounded-2xl border border-dusk/15 bg-white/50 p-4">
             <small>#{rank + 1} · sample · {net(gift.id)} net gift votes</small><h2 className="font-display text-2xl">{gift.title}</h2><p>{formatMinor(gift.priceMinor!)} · illustrative fixture price</p>
             <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="btn-secondary px-4 py-2" onClick={() => setInspecting(gift.id)}>Explore gift</button>
               <button type="button" className="btn-primary px-4 py-2" disabled={person !== 0 || selected.includes(gift.id)} onClick={() => { setSelected(ids => [...ids, gift.id]); resetDeal(); setBoxOpen(true); }}>{selected.includes(gift.id) ? "In the box ✓" : "Add to box"}</button>
               {[1, -1].map(v => <button key={v} type="button" className="btn-secondary px-3 py-2" aria-pressed={giftVotes[gift.id]?.[me.id] === v} onClick={() => setGiftVotes(all => ({ ...all, [gift.id]: { ...all[gift.id], [me.id]: all[gift.id]?.[me.id] === v ? 0 : v } }))}>{v > 0 ? "Feels right" : "Pass"}</button>)}
             </div>
@@ -89,6 +96,15 @@ export default function GroupFlowPreview() {
           }} />}
       </div>
     </div>
+    {inspected && <GiftOrbitMenu gift={{ key: `gift:${inspected.id}`, listingId: inspected.id, title: inspected.title, price: formatMinor(inspected.priceMinor!), imageUrl: inspected.imageUrl,
+      themes: [], x: 0, z: 0, rank: order.findIndex(g => g.id === inspected.id) + 1, up: Object.values(giftVotes[inspected.id] ?? {}).filter(v => v > 0).length, down: Object.values(giftVotes[inspected.id] ?? {}).filter(v => v < 0).length, fixture: true }}
+      onClose={() => setInspecting(null)} detail={{ caption: inspected.title, actions: [
+        { icon: "present", label: selected.includes(inspected.id) ? "In the box ✓" : "Add to box", tone: "gold", disabled: person !== 0 || selected.includes(inspected.id), run: () => { setSelected(ids => [...ids, inspected.id]); resetDeal(); setInspecting(null); setBoxOpen(true); } },
+        { icon: "heart", label: "Feels right", tone: "yes", on: giftVotes[inspected.id]?.[me.id] === 1, run: () => cast(inspected.id, 1) },
+        { icon: "drift", label: "Pass", tone: "pass", on: giftVotes[inspected.id]?.[me.id] === -1, run: () => cast(inspected.id, -1) },
+        { icon: "thread", label: "How we got here", run: () => setShowJourney(true) },
+      ] }} />}
+    {showJourney && inspected && <HowWeGotHere entries={sampleTrail} giftTitle={inspected.title} onClose={() => setShowJourney(false)} />}
     {selection && <ConvergenceOverlay gift={{ selection, listings: gifts, clues: mockPublishedClues, recommendations: mockRecommendations, trail: sampleTrail }} isOrganizer={person === 0} onPlan={() => setBoxOpen(true)} onReplay={reveal} />}
   </main>;
 }
