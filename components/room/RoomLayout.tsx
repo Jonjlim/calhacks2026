@@ -11,6 +11,7 @@ import { QrModulesSvg } from "@/components/unwrap/UnwrapInvitation";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { mapView } from "@/components/world/room/mapView";
+import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, reduceCouncil } from "@/lib/council/contracts";
@@ -95,9 +96,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       // Ids and kinds only; clue text stays in the DOM overlays.
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
-      rings: map.rings,
     });
-  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick, map.rings]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  // The map's data goes straight to the rings, so updates don't re-render the rest of the world.
+  useEffect(() => ringsStore.set(map.rings), [map.rings]);
+  useEffect(() => () => ringsStore.set(null), []);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {

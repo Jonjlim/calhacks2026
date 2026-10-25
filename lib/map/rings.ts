@@ -27,6 +27,8 @@ export const GIFT_MIN_RADIUS = 7.6;
 export const BOX_DROP_RADIUS = 6;
 /** How far a drag must move toward or away from the present to count as a vote. */
 export const VOTE_DRAG_DISTANCE = 1.6;
+/** Degrees between neighbouring clues around a theme. Fixed, so a new clue never moves the others. */
+export const CLUE_STEP = 13;
 
 export const themeForKind = (kind: string): RingTheme =>
   kind === "explicit_wish" ? "wish" : kind === "interest" ? "interest" : "moment";
@@ -88,10 +90,12 @@ export function layoutRings(clues: readonly RingClueInput[], gifts: readonly Rin
   const outThemes: RingLayout["themes"] = [];
   for (const [theme, list] of byTheme) {
     const n = list.length;
-    // Spread a theme's clues in an arc around it; long lists also alternate between two radii.
-    const step = Math.min(15, 100 / Math.max(1, n));
+    // Each clue keeps its seat as more arrive: 0, +1, −1, +2, −2… steps around its theme,
+    // and later ones step outward a row instead of squeezing the arc.
     list.forEach((clue, i) => {
-      const [x, z] = ringPoint(RING_THEMES[theme].angle + (i - (n - 1) / 2) * step, RING_RADII.input + (n > 6 ? (i % 2) * 1.8 : 0));
+      const slot = Math.ceil(i / 2) * (i % 2 ? 1 : -1);
+      const row = Math.floor(Math.abs(slot) / 4);
+      const [x, z] = ringPoint(RING_THEMES[theme].angle + slot * CLUE_STEP - Math.sign(slot) * row * 4 * CLUE_STEP + (row ? Math.sign(slot) * CLUE_STEP / 2 : 0), RING_RADII.input + row * 2.2);
       outClues.push({ id: clue.id, theme, x, z });
     });
     const [x, z] = ringPoint(RING_THEMES[theme].angle, RING_RADII.theme);
@@ -103,7 +107,7 @@ export function layoutRings(clues: readonly RingClueInput[], gifts: readonly Rin
   const outGifts = gifts.map((gift, index) => {
     const themes = [...new Set(gift.clueIds.filter((id) => kindById.has(id)).map((id) => themeForKind(kindById.get(id)!)))];
     // Gifts that cite no visible clue have no direction yet, so they share the ring evenly.
-    let angle = themes.length ? circularMean(themes.map((t) => RING_THEMES[t].angle)) : 300 + (index * 360) / gifts.length;
+    let angle = themes.length ? circularMean(themes.map((t) => RING_THEMES[t].angle)) : 300 + index * 47;
     // Gifts that share a direction fan out instead of stacking.
     const key = Math.round(angle / 10);
     const seen = usedAngles.get(key) ?? 0;

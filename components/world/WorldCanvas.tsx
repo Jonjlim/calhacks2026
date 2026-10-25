@@ -103,7 +103,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <IslandEnvironment animate={animate} quality={quality} showPlayers={!council} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
-      {council?.rings && stage.shown === "map" && <GiftRings rings={council.rings} animate={animate} />}
+      {council && stage.shown === "map" && <GiftRings animate={animate} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />
 
       {night ? (

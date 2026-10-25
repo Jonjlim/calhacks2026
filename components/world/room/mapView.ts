@@ -21,6 +21,8 @@ export interface MapViewState {
 class MapView {
   target: MapViewState = { x: 0, z: 0, zoom: 1 };
   current: MapViewState = { x: 0, z: 0, zoom: 1 };
+  /** While a finger or mouse is dragging the sky, the view follows it exactly instead of easing. */
+  dragging = false;
 
   pan(dx: number, dz: number) {
     this.target.x = clamp(this.target.x + dx, -PAN_X, PAN_X);
@@ -39,9 +41,10 @@ class MapView {
 
   /** Eases the current view toward the target; returns it. */
   step(dt: number, reducedMotion: boolean): MapViewState {
-    const k = reducedMotion ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 7);
-    this.current.x += (this.target.x - this.current.x) * k;
-    this.current.z += (this.target.z - this.current.z) * k;
+    const k = reducedMotion ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 9);
+    const pan = this.dragging ? 1 : k;
+    this.current.x += (this.target.x - this.current.x) * pan;
+    this.current.z += (this.target.z - this.current.z) * pan;
     this.current.zoom += (this.target.zoom - this.current.zoom) * k;
     return this.current;
   }
