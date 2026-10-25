@@ -2,9 +2,7 @@
 
 **Thoughtful gifts, together.** An interactive storybook world where friends turn shared memories into evidence-backed gift recommendations, agree on a present, and complete a clearly labeled demo gift-wrapping experience.
 
-**Cal Hacks 13.0 · October 2026** · [Devpost]([https://devpost.com/software/unwrap-y7w16s?ref_content=my-projects-tab&ref_feature=my_projects])
-
-> **Codebase snapshot:** This README documents the GitHub **`refactor`** branch (not `refractor`), inspected October 25, 2026. It distinguishes implemented code from optional features and integrations that still require live configuration or validation. **Simulated payments do not charge money, place merchant orders, or buy gifts.**
+**Cal Hacks 13.0 · October 2026** · [![Devpost](https://img.shields.io/badge/Devpost-View%20Submission-003E54?logo=devpost&logoColor=white)](https://devpost.com/software/unwrap-y7w16s?ref_content=my-projects-tab&ref_feature=my_projects)
 
 ## What is Unwrap?
 
@@ -19,7 +17,7 @@ The product has **two complementary interfaces**: a rich **desktop 3D world** wh
 | **Living storybook world** | Painterly floating islands, a central floral gift, shifting sky palettes, avatars, camera movement, and cinematic gift transitions. | `components/world/`, `components/intro/`, `components/convergence/` |
 | **Real-time collaborative rooms** | Create a room, invite friends with a link or QR code, and synchronize confirmed contributions and decisions through Convex. | `convex/rooms.ts`, `components/room/`, `app/join/` |
 | **Memories and clue review** | Contribute memories, messages, ideas, and optional selected media; AI-extracted clues stay private until the contributor reviews and publishes them. | `convex/clues.ts`, `convex/media.ts`, `components/clues/` |
-| **Gift Twin — opt-in iMessage insight agent** | With the recipient's explicit permission, a local Mac companion reads a bounded sample of **messages that recipient sent**, extracts gift-relevant interests/wishes/ownership/dislikes, and submits screened insights and advisory votes to the shared gifting process. Not unrestricted scraping. | `gift-twin/`, `convex/giftTwin/` |
+| **Gift Twin: opt-in iMessage insight agent** | With the recipient's explicit permission, a local Mac companion reads a bounded sample of **messages that recipient sent**, extracts gift-relevant interests/wishes/ownership/dislikes, and submits screened insights and advisory votes to the shared gifting process. Not unrestricted scraping. | `gift-twin/`, `convex/giftTwin/` |
 | **Five-agent AI Gift Council** | Courier coordinates Archivist, Muse, Scout, and Keeper for clue interpretation, symbolic memory charms, real product research, and budget/constraint checks. Progress events support animated robot statuses. | `fetch-agent/`, `convex/council.ts`, `components/council/` |
 | **Evidence-backed gift research** | Associates recommendations with published memories and sourced product listings, including observed prices and product URLs; unknown data stays unknown. | `convex/research/`, `convex/agents/`, `lib/map/` |
 | **Interactive gift map** | Visualizes themes, memory connections, gift directions, and selected product candidates in a shared world. | `components/map/`, `components/world/room/GiftRings.tsx` |
