@@ -3,6 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RoomAgentTools } from "./RoomAgentTools";
+import { GiftTwinInviteButton } from "@/components/giftTwin/GiftTwinInviteButton";
 import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
@@ -343,6 +344,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           )}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
+        {actions && !preview && <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
+          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
+          className={chip} />}
       </div>
 
       {/* The shares board (components/room/BudgetBoard) is built but switched off for now. To bring it back, render <BudgetBoard data={data} actions={actions} /> here on the map stage. */}

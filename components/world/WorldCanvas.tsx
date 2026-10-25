@@ -6,6 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRoomStage } from "@/components/room/roomStage";
 import type { RoomWorld } from "./IslandWorldProvider";
 import { GardenDecorating } from "./room/GardenDecorating";
+import { IslandWalkers } from "./room/IslandWalkers";
 import { EnchantedBook } from "./book/EnchantedBook";
 import { CouncilFamiliars } from "./room/CouncilFamiliars";
 import { GiftRings } from "./room/GiftRings";
@@ -103,11 +104,12 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
 
       <FloatingIsland />
       {/* The landing page shows only players who have really joined (unwrap/LobbySpirits). */}
-      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} />
+      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} calm={!!council && stage.shown === "map"} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
       {council && stage.shown === "map" && <MapSurround animate={animate} />}
       {council && stage.shown === "map" && <SurroundClouds animate={animate} />}
+      {council && stage.shown === "map" && <IslandWalkers world={council} animate={animate} />}
       {council && stage.shown === "map" && <EnchantedBook animate={animate} />}
       {council && stage.shown === "map" && <GiftRings animate={animate} />}
       {council && stage.shown === "map" && <CouncilFamiliars world={council} animate={animate} />}

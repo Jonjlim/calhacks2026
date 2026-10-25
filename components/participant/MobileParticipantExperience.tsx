@@ -4,6 +4,7 @@ import { useConvexConnectionState } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AgentCollaboratorFeed } from "@/components/giftTwin/AgentCollaboratorFeed";
+import { GiftTwinInviteButton } from "@/components/giftTwin/GiftTwinInviteButton";
 import { RoomCouncilPanel } from "@/components/council/RoomCouncilPanel";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
@@ -92,6 +93,9 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
           </motion.section>
         </AnimatePresence>
 
+        {actions && <div className="mt-5 flex justify-end"><GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
+          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
+          className="btn-secondary" /></div>}
         {!!data.agentCollaborators?.posts.length && <section className="mt-5 space-y-3" aria-label="AI collaborator insights and evaluations">
           <h2 className="font-display text-xl">Your Gift Twin collaborator</h2>
           <AgentCollaboratorFeed feed={data.agentCollaborators} />

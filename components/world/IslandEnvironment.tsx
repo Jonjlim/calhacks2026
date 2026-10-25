@@ -70,11 +70,12 @@ const MUSHROOMS: [number, number][] = [
   [-6.1, -2.6],
 ];
 
-export function IslandEnvironment({ animate, quality, showPlayers = true }: { animate: boolean; quality: WorldQuality; showPlayers?: boolean }) {
+/** `calm` (the gift map): the island keeps its tower, cottage, a few trees and lamps, and drops most of the small scatter, so the things on top of it read clearly. */
+export function IslandEnvironment({ animate, quality, showPlayers = true, calm = false }: { animate: boolean; quality: WorldQuality; showPlayers?: boolean; calm?: boolean }) {
   return (
     <group>
       <GiftPlatform />
-      <GiftSurround animate={animate} />
+      {!calm && <GiftSurround animate={animate} />}
       <PathStones />
       {GARDEN_PATHS.map((p, i) => (
         <SteppingStones key={i} points={p} seed={60 + i} />
@@ -87,21 +88,21 @@ export function IslandEnvironment({ animate, quality, showPlayers = true }: { an
       <StorybookTower x={-3.7} z={-2.7} rotationY={0.35} />
       <Cottage x={4.7} z={-2.6} rotationY={-0.5} animate={animate} />
 
-      {TREES.map((t) => (
+      {TREES.filter((_, i) => !calm || i % 2 === 0).map((t) => (
         <StylizedTree key={t.seed} {...t} />
       ))}
-      {SHRUBS.map(([x, z, s, flowers], i) => (
+      {!calm && SHRUBS.map(([x, z, s, flowers], i) => (
         <Shrub key={i} x={x} z={z} scale={s} seed={100 + i} flowers={flowers} />
       ))}
-      <Mushrooms spots={MUSHROOMS} seed={9} />
+      {!calm && <Mushrooms spots={MUSHROOMS} seed={9} />}
 
       {/* Beside the pedestal rather than in front of it, so it never stands between the camera and the present. */}
       <Lantern x={3.2} z={0.25} rotationY={-1.1} light animate={animate} />
       <Lantern x={3.6} z={4.25} rotationY={2.6} animate={animate} />
-      <Lantern x={-1.7} z={1.35} rotationY={0.4} animate={animate} />
+      {!calm && <Lantern x={-1.7} z={1.35} rotationY={0.4} animate={animate} />}
 
-      <FlowerMeadow count={quality === "high" ? 420 : 220} />
-      <MeadowGrass count={quality === "high" ? 460 : 220} />
+      <FlowerMeadow count={calm ? 70 : quality === "high" ? 420 : 220} />
+      <MeadowGrass count={calm ? 110 : quality === "high" ? 460 : 220} />
 
       <AvatarCast animate={animate} cast={showPlayers} />
     </group>

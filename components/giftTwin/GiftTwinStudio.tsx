@@ -9,7 +9,9 @@ import { useSession } from "@/components/providers/ConvexClientProvider";
 import { ErrorText } from "@/components/ui/ErrorText";
 import type { AgentCollaboratorView } from "@/lib/agentCollaborators/contracts";
 import { useResultAction } from "@/lib/useResultAction";
+import { appOrigin, inviteUrl } from "@/lib/invite";
 import { AgentCollaboratorFeed } from "./AgentCollaboratorFeed";
+import { RecipientInvitationLink } from "./GiftTwinInviteButton";
 
 export function GiftTwinStudio({ roomId }: { roomId: string }) {
   const convex = useConvex();
@@ -119,15 +121,13 @@ function ConnectCard({
   const revoke = useResultAction(useMutation(api.giftTwin.room.revokeCollaborator));
   const [code, setCode] = useState<{ value: string; expiresAt: number } | null>(null);
   const [link, setLink] = useState("");
-  const [copyMessage, setCopyMessage] = useState("");
   const countdown = useCountdown(twin?.status === "pending_pairing" ? (code?.expiresAt ?? twin.pairingExpiresAt) : undefined);
 
   async function issue() {
     const res = await createPairing.run({ roomId });
     if (res.ok) {
       setCode({ value: res.value.pairingCode, expiresAt: res.value.expiresAt });
-      setLink(`${window.location.origin}/twin#invite=${encodeURIComponent(res.value.pairingCode)}`);
-      setCopyMessage("");
+      setLink(inviteUrl(`/twin#invite=${encodeURIComponent(res.value.pairingCode)}`, appOrigin(window.location.origin)));
     }
   }
 
@@ -153,12 +153,7 @@ function ConnectCard({
           {code ? (
             <div className="rounded-xl bg-white/70 p-3">
               <p className="text-[12.5px] font-semibold uppercase tracking-wide text-dusk/60">Recipient link · expires in {countdown}</p>
-              <input aria-label="Recipient invitation link" readOnly value={link} onFocus={(event) => event.target.select()} className="mt-2 w-full rounded-lg border border-dusk/15 bg-white p-2 text-sm" />
-              <button type="button" className="btn-secondary mt-3" onClick={async () => {
-                try { await navigator.clipboard.writeText(link); setCopyMessage("Link copied"); }
-                catch { setCopyMessage("Select the link above and copy it manually."); }
-              }}>Copy recipient link</button>
-              <p role="status" className="mt-2 text-sm">{copyMessage}</p>
+              <RecipientInvitationLink url={link} expiresAt={code.expiresAt} recipientName={recipientName} />
               <p className="mt-2 text-[12.5px] text-dusk/70">One use only. Only send it to the recipient. Opening it does not join the room or read Messages.</p>
             </div>
           ) : (
