@@ -1641,6 +1641,12 @@ ideas minus any with a pass; it participates in the buyer input version. The pro
 the agent put one supplied query first in a search or mention one idea as a related
 search, never as a preference, popularity claim or invented query.
 
+`emptyTrendNote(sample)` in `lib/map/trendIdeas.ts` returns a plain sentence when a
+finished sample has no suggestions: "no related US searches" when Google returned no
+observations, or "none for something to buy or book" when every related search was
+news or a lookup. Null when ideas exist. The map shows it in the memory's caption.
+Pure; reads only fields already in `TrendDiscoverySample`.
+
 ### Shared contribution simulation (Dev 4, demo only)
 
 Alex selected a visibly labelled simulation instead of expanding live payment

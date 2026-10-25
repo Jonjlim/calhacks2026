@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D22 — Model screen for Google Trends ideas (2026-10-24)
+
+Related Google searches include news, scores and lookups ("hiking deaths", "tennis results"). After a trend run succeeds, `convex/research/trendScreen.ts` sends up to 40 candidate phrases and the seed term to the **existing** configurable model adapter (Dev 3's `LLM_*` settings, `extractor` role, Zod-validated). The model only labels each phrase `product`, `style`, `experience` or `not_gift`. It cannot add or reword searches: only exact phrases from the scraped data are kept, and the deterministic news/lookup floor still applies on top. If the model is unset, fails or returns invalid JSON, the word filter is used instead; each stored sample records which (`screen: "model" | "words"`). `TREND_AI_SCREEN=off` disables the call. Cost: one model call per completed trend lookup. No new provider, SDK, table or service; Dev 3 owns the adapter and should review the prompt. When a check yields nothing, the map says why (`emptyTrendNote`) instead of staying silent.
+
 ### D20 — Room photos are shared with the room (2026-10-24)
 
 Photos added on the gift map are visible to every room member. This changes the P0 rule that uploaded photos were owner-only and deleted after reading, for photos added on the map only. The private read is unchanged: each photo is uploaded twice, a shared copy in `roomPhotos` (`convex/photos.ts`) and a private copy that the extractor reads once and deletes. AI guesses from the photo stay private until published. Shared copies use the same upload grants, type and size checks as evidence uploads, are kept by the stale-upload sweep, cannot be claimed by the read-once pipeline, can be deleted only by their uploader, and are purged with the room. Safeguards and wording: [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Decided by the team lead on request; owners: Dev 3 (map, photos), Dev 2 (media hardening, review requested).

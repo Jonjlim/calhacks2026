@@ -9,7 +9,7 @@ import s from "@/components/world/room/gift-rings.module.css";
 import type { PledgeWorld } from "@/components/world/room/PledgeRing";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
-import { isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
+import { emptyTrendNote, isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { BoxPanel } from "./BoxPanel";
@@ -302,8 +302,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
     }
     const clue = clues.find((c) => `clue:${c.id}` === key);
     if (!clue) return null;
+    const trendSample = (data.trends?.samples ?? []).find((sample) => sample.publishedClueId === clue.id);
+    const trendNote = trendSample ? emptyTrendNote(trendSample) : null;
     return {
-      caption: <>{name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory · in {themeLabel(themeOfClue.get(clue.id) ?? "")}</>,
+      caption: <>{name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory · in {themeLabel(themeOfClue.get(clue.id) ?? "")}{trendNote && <><br />{trendNote}</>}</>,
       actions: [
         ...voteActs("clue", clue.id),
         ...(findGifts ? [findGifts] : []),
