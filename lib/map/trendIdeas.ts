@@ -3,7 +3,7 @@
  * Trends suggestion floats between the memory it came from and the gift ring.
  * It is a search direction, never a recipient clue or a claim that a product trends.
  */
-import type { TrendSignal, TrendSuggestion } from "@/lib/contracts";
+import type { TrendDiscoverySample, TrendSignal, TrendSuggestion } from "@/lib/contracts";
 import { RING_RADII, ringPoint } from "./rings";
 
 export const TREND_KEY_PREFIX = "trend:";
@@ -48,4 +48,16 @@ export function layoutTrendIdeas(
     const [x, z] = ringPoint(angle + offset, radius + step);
     return { key: trendKey(trendJobId, s.query), trendJobId, query: s.query, sourceUrl: s.sourceUrl, signal: signalLabel(s.signals), x, z };
   });
+}
+
+/**
+ * Why a finished trend check sprouted nothing, in plain words, so an empty
+ * memory never looks like a broken button. Null when there are ideas to show.
+ */
+export function emptyTrendNote(sample: Pick<TrendDiscoverySample, "suggestions" | "evidenceSummary" | "context">): string | null {
+  if (sample.suggestions.length) return null;
+  const seed = `“${sample.context.seedTerm}”`;
+  return sample.evidenceSummary.observations === 0
+    ? `Google Trends had no related US searches for ${seed} in the past 3 months.`
+    : `Google Trends found searches related to ${seed}, but none for something to buy or book.`;
 }

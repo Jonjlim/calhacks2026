@@ -13,6 +13,7 @@
  */
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { GIFT_TWIN_PURGE_PHASES } from "../giftTwin/purge";
 
 type Purger = (ctx: MutationCtx, roomId: Id<"rooms">, limit: number) => Promise<number>;
 
@@ -199,12 +200,17 @@ const roomPhotos: Purger = async (ctx, roomId, limit) => {
 };
 const mapSharpens: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapDirections: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapDirections").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const roomTrail: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("roomTrail").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
 const participants: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
 /** Order matters: jobs first (see file comment), private data next, membership last. */
 export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
+  ...GIFT_TWIN_PURGE_PHASES,
   ["fashionJobs", fashionJobs],
   ["trendPasses", trendPasses],
   ["trendJobs", trendJobs],
@@ -237,6 +243,8 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["mapSignals", mapSignals],
   ["mapThemes", mapThemes],
   ["mapSharpens", mapSharpens],
+  ["mapDirections", mapDirections],
+  ["roomTrail", roomTrail],
   ["roomPhotos", roomPhotos],
   ["participants", participants],
 ];

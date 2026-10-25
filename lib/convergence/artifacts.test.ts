@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildArtifacts, filledAt, MAX_ARTIFACTS, symbolFor, type ArtifactInput } from "./artifacts";
-import { CONVERGENCE_TIMES, giftChoreography, stateAt } from "./timeline";
+import { boomAmount, cameraShake, CONVERGENCE_TIMES, giftChoreography, stateAt } from "./timeline";
 
 const input = (n: number, source: ArtifactInput["source"] = "memory", text = "likes things"): ArtifactInput[] =>
   Array.from({ length: n }, (_, i) => ({ key: `clue:${i}`, source, text, x: 6 + i, z: -4 - i }));
@@ -89,8 +89,29 @@ describe("giftChoreography", () => {
     expect(giftChoreography(CONVERGENCE_TIMES.burst[0] + 0.1, 1).presence).toBeGreaterThanOrEqual(1);
   });
 
+  it("takes the ribbon off before the box bursts, and the box bursts whole", () => {
+    const before = giftChoreography(CONVERGENCE_TIMES.burst[0] - 0.01, 1);
+    expect(before.ribbon).toEqual({ bandX: 0, bandZ: 0, tails: 0, bow: 0 });
+    expect(before.wall.every((w) => w === 0)).toBe(true);
+    expect(before.lid).toBe(0);
+    expect(giftChoreography(CONVERGENCE_TIMES.ribbonOff[0] - 0.01, 1).ribbon.bandX).toBe(1);
+    // Everything that flies is gone by the end of the burst, with no flat piece left behind.
+    const after = giftChoreography(CONVERGENCE_TIMES.burst[1], 1);
+    expect(after.burst).toBe(1);
+    expect(after.presence).toBe(0);
+  });
+
+  it("shakes the camera harder at the hit than during the charge, then settles", () => {
+    const peak = (a: number, b: number) => Math.max(...Array.from({ length: 80 }, (_, i) => Math.abs(cameraShake(a + ((b - a) * i) / 80).x)));
+    expect(peak(CONVERGENCE_TIMES.burst[0], CONVERGENCE_TIMES.burst[0] + 0.2)).toBeGreaterThan(peak(7.5, 8.5) * 5);
+    expect(peak(CONVERGENCE_TIMES.reveal[1], CONVERGENCE_TIMES.end)).toBeLessThan(0.02);
+    expect(boomAmount(0)).toBe(0);
+    expect(boomAmount(CONVERGENCE_TIMES.burst[0])).toBeCloseTo(1, 1);
+    expect(boomAmount(CONVERGENCE_TIMES.end)).toBe(0);
+  });
+
   it("walks through the story in order", () => {
-    const order = [0.1, 1, 3.2, 3.6, 4.4, 5.5, 6.6, 8, 9.1, 10, 11].map(stateAt);
+    const order = [0.1, 1, 3.2, 3.6, 4.4, 5.5, 6.6, 8, 9.5, 10.3, 12].map(stateAt);
     expect(order[0]).toBe("anticipation");
     expect(order.at(-1)).toBe("complete");
     expect(new Set(order).size).toBeGreaterThanOrEqual(8);

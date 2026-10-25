@@ -8,6 +8,7 @@ import type { AppError, GiftSelection, Participant, ProductListing, ProposalView
 import { formatMinor, parseMajorToMinor } from "@/lib/money";
 import { portraitUrl } from "@/lib/room/avatars";
 import { useResultAction } from "@/lib/useResultAction";
+import { GiftIcon } from "@/components/ui/Icons";
 import type { RoomActions } from "./types";
 
 /**
@@ -23,7 +24,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
   participants: Participant[];
   me: Participant;
   isOrganizer: boolean;
-  actions?: Pick<RoomActions, "setLimit" | "approve" | "withdrawApproval" | "clearSelection">;
+  actions?: Pick<RoomActions, "setLimit" | "approve" | "withdrawApproval" | "clearSelection" | "removeGiftFromBox">;
   avatarOf(id: string): AvatarId;
   colorOf(id: string): string;
   why: boolean;
@@ -40,6 +41,8 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
   const approve = useResultAction(actions?.approve);
   const withdraw = useResultAction(actions?.withdrawApproval);
   const clear = useResultAction(actions?.clearSelection);
+  const remove = useResultAction(actions?.removeGiftFromBox);
+  const items = revision?.items ?? selection?.items ?? (selection ? [{ listingId: selection.listingId, quantity: 1 as const, listingSnapshot: { ...selection.listingSnapshot, imageUrl: listing?.imageUrl } }] : []);
 
   // A new revision after approvals were given means the deal changed: say so instead of silently resetting.
   const lastRevision = useRef<{ id?: string; approved: number }>({ id: revision?.id, approved: 0 });
@@ -74,7 +77,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
   return (
     <section className={`${s.boxPanel} ${everyone ? s.boxDone : ""}`} data-map-token aria-label="Our gift">
       <header>
-        <span>{revision ? (revision.status === "approved_pledged" ? "Our gift · everyone approved" : "Our gift · waiting for approvals") : "Our gift box"}</span>
+        <span>{revision ? (revision.status === "approved_pledged" ? "Our gift box · everyone approved" : revision.status === "infeasible" ? "Our gift box · review prices and limits" : "Our gift box · waiting for approvals") : "Our gift box"}</span>
         <button type="button" onClick={onClose} aria-label="Close">×</button>
       </header>
 
@@ -83,15 +86,23 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
       )}
 
       {selection ? (
-        <div className={s.boxGift}>
-          {listing?.imageUrl ? <img src={listing.imageUrl} alt="" /> : <i aria-hidden><MapIcon name="present" size={30} /></i>}
-          <div>
-            <b>{selection.listingSnapshot.title}</b>
-            <a href={selection.listingSnapshot.sourceUrl} target="_blank" rel="noreferrer">{revision ? formatMinor(revision.payableTotalMinor, revision.currency) : selection.listingSnapshot.priceMinor !== undefined ? formatMinor(selection.listingSnapshot.priceMinor) : "Price unknown"} · see listing ↗</a>
-          </div>
+        <div aria-label="Gifts in the box">
+          <p className={s.boxMine}>{items.length} {items.length === 1 ? "gift" : "gifts"} in your box</p>
+          {items.map(item => <div className={s.boxGift} key={item.listingId}>
+            {item.listingSnapshot.imageUrl ? <img src={item.listingSnapshot.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={30} /></i>}
+            <div>
+              <b>{item.listingSnapshot.title}</b>
+              <a href={item.listingSnapshot.sourceUrl} target="_blank" rel="noopener noreferrer">
+                {item.listingSnapshot.priceStatus === "observed" && item.listingSnapshot.priceMinor !== undefined ? formatMinor(item.listingSnapshot.priceMinor) : "Price unknown"} · view product ↗
+              </a>
+              {isOrganizer && actions?.removeGiftFromBox && <button type="button" className={s.boxGhost} disabled={remove.pending} onClick={() => remove.run(item.listingId)} aria-label={`Remove ${item.listingSnapshot.title} from box`}>Remove</button>}
+            </div>
+          </div>)}
+          <p className={s.boxMine}>Combined estimate: <b>{revision && revision.status !== "infeasible" ? formatMinor(revision.payableTotalMinor) : "Not ready — review prices and limits"}</b></p>
+          <small className={s.boxFine}>Includes separately observed shipping. Unknown shipping and tax are excluded.</small>
         </div>
       ) : (
-        <p className={s.boxEmpty}>{isOrganizer ? "Drag a gift onto the present to choose it." : "The organizer puts one gift here. Pull the ones you like closer."}</p>
+        <p className={s.boxEmpty}>{isOrganizer ? "Choose Add to box on any gift. You can add several." : "The organizer can collect several gifts here. Vote for the ones you like."}</p>
       )}
 
       {revision && revision.status === "infeasible" && (
@@ -127,7 +138,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
             <button type="button" className={s.boxGhost} disabled={withdraw.pending} onClick={() => withdraw.run(revision.id)}>Take back my yes</button>
           </div>
         ) : (
-          <button type="button" className={s.boxApprove} disabled={approve.pending || !myShare} onClick={() => approve.run(revision.id)}>
+          <button type="button" data-sfx="coin" className={s.boxApprove} disabled={approve.pending || !myShare} onClick={() => approve.run(revision.id)}>
             {approve.pending ? "Saving…" : myShare ? `Approve my ${formatMinor(myShare.amountMinor)} share` : "You have no share in this version"}
           </button>
         )
@@ -143,15 +154,15 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
         </form>
       )}
 
-      {(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error) && (
-        <p className={s.boxWarn} role="alert">{(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error)!.message}</p>
+      {(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error ?? remove.error) && (
+        <p className={s.boxWarn} role="alert">{(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error ?? remove.error)!.message}</p>
       )}
 
-      {selection && onReveal && <button type="button" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
+      {selection && onReveal && <button type="button" data-sfx="reveal" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
 
       <footer>
         {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "Why this gift?"}</button>}
-        {actions && isOrganizer && selection && <button type="button" className={s.boxGhost} disabled={clear.pending} onClick={() => clear.run()}>Change gift</button>}
+        {actions && isOrganizer && selection && <button type="button" className={s.boxGhost} disabled={clear.pending} onClick={() => clear.run()}>Empty the box</button>}
       </footer>
       <small className={s.boxFine}>Approving is a pledge. No card is charged and no order is placed.</small>
     </section>

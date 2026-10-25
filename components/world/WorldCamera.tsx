@@ -6,8 +6,8 @@ import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
 import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { convergence } from "@/components/convergence/convergenceClock";
-import { cameraPush as pushProgress, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
-import { CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
+import { boomAmount, cameraPush as pushProgress, cameraShake, CONVERGENCE_TIMES, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
+import { boomPose, CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
 import { giftTag } from "./giftTag/giftTagStore";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
 import { lobbyPose, topPose } from "./unwrap/invitationLayout";
@@ -133,26 +133,21 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       const view = mapView.step(dt, reducedMotion);
       const poseOf = (stage: typeof shown): CameraPose => {
         if (stage !== "map") return stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : p.landing;
-        // The map can be turned, tilted, moved and zoomed: orbit the camera around its target, pull it
-        // along its line of sight, then slide both ends of the view.
-        const base = pullBack(mapPose(w, size.height), view.zoom);
+        // The camera orbits a focus point: pan moves the point, zoom scales the distance to it, yaw swings round it and pitch tilts the view.
+        const base = mapPose(w, size.height);
         const [px, py, pz] = base.position;
         const [tx, ty, tz] = base.target;
-        const ox = px - tx;
-        const oy = py - ty;
-        const oz = pz - tz;
-        const flat = Math.hypot(ox, oz);
-        const dist = Math.hypot(flat, oy);
-        // Tilt changes the angle from straight down; keep it between nearly overhead and well above the horizon.
-        const polar = Math.min(1.25, Math.max(0.08, Math.atan2(flat, oy) - view.tilt));
-        const heading = Math.atan2(ox, oz) + view.yaw;
-        const ring = Math.sin(polar) * dist;
-        return {
-          ...base,
-          shiftX: mapView.framing.shiftX,
-          position: [tx + view.x + Math.sin(heading) * ring, ty + mapView.framing.lift + Math.cos(polar) * dist, tz + view.z + Math.cos(heading) * ring],
-          target: [tx + view.x, ty + mapView.framing.lift, tz + view.z],
-        };
+        const dx = px - tx;
+        const dy = py - ty;
+        const dz = pz - tz;
+        const dist = Math.hypot(dx, dy, dz) * view.zoom;
+        const yaw = Math.atan2(dx, dz) + view.yaw;
+        // Never lower than a scenic low angle (so the view stays above the islands' undersides) nor straight overhead.
+        const el = THREE.MathUtils.clamp(Math.asin(dy / Math.hypot(dx, dy, dz)) + view.pitch, 0.2, 1.42);
+        const fx = tx + view.x;
+        const fz = tz + view.z;
+        // On wide screens the world sits a little right of centre, leaving a clear gutter on the left for the council dock.
+        return { ...base, shiftX: w > 900 ? 0.055 : 0, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
       };
       const scenePose = poseOf(shown);
       if (convergence.active) {
@@ -170,7 +165,19 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         }
         if (convergence.instant && !convergence.leaving) applyPose(end, end, 1);
         else if (convergence.leaving) applyPose(end, scenePose, smoother(tspan(convergence.exit, 0, EXIT_TIME)));
-        else applyPose(convergence.startPose ?? scenePose, end, pushProgress(convergence.t));
+        else {
+          const t = convergence.t;
+          const boom = boomAmount(t);
+          if (t < CONVERGENCE_TIMES.boom[0]) applyPose(convergence.startPose ?? scenePose, end, pushProgress(t));
+          else applyPose(end, boomPose(w, size.height), boom);
+          // The charge and the explosion shake the whole screen.
+          if (!convergence.instant && !reducedMotion && !convergence.leaving) {
+            const sh = cameraShake(t);
+            camera.translateX(sh.x);
+            camera.translateY(sh.y);
+            camera.rotateZ(sh.roll);
+          }
+        }
         return;
       }
       if (roomStage.glide && !reducedMotion) {

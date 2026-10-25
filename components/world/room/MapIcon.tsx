@@ -8,9 +8,11 @@ import type { ReactNode } from "react";
 
 export type MapIconName =
   | "heart" | "drift" | "thread" | "present" | "home" | "coins" | "open" | "sprout" | "gather" | "scales"
-  | "cloud" | "camera" | "spark" | "trash" | "undo" | "memory" | "wish" | "check" | "wait" | "redo" | "trend";
+  | "twin" | "cloud" | "camera" | "spark" | "trash" | "undo" | "memory" | "wish" | "check" | "wait" | "redo" | "trend";
 
 const PATHS: Record<MapIconName, ReactNode> = {
+  // The recipient's twin: paired stars, distinct from people and the trend scout.
+  twin: <><path d="M8 3l1.5 4.5L14 9l-4.5 1.5L8 15l-1.5-4.5L2 9l4.5-1.5zM18 11l1.2 3.8L23 16l-3.8 1.2L18 21l-1.2-3.8L13 16l3.8-1.2z" /></>,
   // Feels like her: a heart with a small spark beside it.
   heart: <><path d="M12 20s-7-4.4-7-9.6A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.4C19 15.6 12 20 12 20z" /><path d="M19.5 3.5v3M18 5h3" /></>,
   // Not really: a feather drifting away.

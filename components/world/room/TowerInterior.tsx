@@ -12,6 +12,7 @@ import { COUNCIL_MODELS } from "@/lib/council/animation";
 import { Environment, Lightformer, useGLTF } from "@react-three/drei";
 import { KitBuilder } from "../kit";
 import { KitParts } from "../islands/shared";
+import { playSfx } from "../sounds";
 import { InkOutline } from "../painterly/InkOutline";
 import { mulberry32 } from "../painterly/noise";
 import { flat, paint } from "../painterly/materials";
@@ -278,6 +279,7 @@ export function Jar({ kind, count, onPick, scale = 1, position }: { kind: keyof 
       scale={scale * (hover ? 1.08 : 1)}
       onClick={(e) => {
         e.stopPropagation();
+        playSfx(kind === "wish" ? "wish" : "tap");
         onPick?.();
       }}
       onPointerOver={(e) => {
@@ -316,6 +318,7 @@ function ScoutCards({ count, onPick }: { count: number; onPick?: () => void }) {
       rotation={[0, s.faceY + Math.PI, 0]}
       onClick={(e) => {
         e.stopPropagation();
+        playSfx("tap");
         onPick?.();
       }}
       onPointerOver={(e) => {
@@ -425,7 +428,7 @@ function Agent({ actor, events, animate, onStatus, onPick }: { actor: CouncilAct
   });
   return (
     <group ref={root} position={[initial.x, 0, initial.z]} userData={{ councilActor: actor, roaming: true }}
-      onClick={(e) => { e.stopPropagation(); onPick?.(); }}
+      onClick={(e) => { e.stopPropagation(); playSfx("tap"); onPick?.(); }}
       onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = "pointer"; }}
       onPointerOut={() => (document.body.style.cursor = "")}
     >

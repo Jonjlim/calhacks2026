@@ -3,6 +3,7 @@
 import { useConvexConnectionState } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { AgentCollaboratorFeed } from "@/components/giftTwin/AgentCollaboratorFeed";
 import { RoomCouncilPanel } from "@/components/council/RoomCouncilPanel";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
@@ -51,7 +52,8 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
   useEffect(() => setScreen(phase), [phase]);
 
   const avatar = avatarFor(participants, me.id);
-  const mine = useMemo(() => data.publishedClues.filter((c) => c.publisherId === me.id && c.status === "active").sort((a, b) => b.publishedAt - a.publishedAt), [data.publishedClues, me.id]);
+  const twinClues = useMemo(() => new Set(data.agentCollaborators?.posts.filter((post) => post.publishedClueId).map((post) => post.publishedClueId)), [data.agentCollaborators]);
+  const mine = useMemo(() => data.publishedClues.filter((c) => !twinClues.has(c.id) && c.publisherId === me.id && c.status === "active").sort((a, b) => b.publishedAt - a.publishedAt), [data.publishedClues, me.id, twinClues]);
   const allActive = data.publishedClues.filter((c) => c.status === "active").length;
 
   return (
@@ -90,6 +92,10 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
           </motion.section>
         </AnimatePresence>
 
+        {!!data.agentCollaborators?.posts.length && <section className="mt-5 space-y-3" aria-label="AI collaborator insights and evaluations">
+          <h2 className="font-display text-xl">Your Gift Twin collaborator</h2>
+          <AgentCollaboratorFeed feed={data.agentCollaborators} />
+        </section>}
         <details className="paper-card mt-5 rounded-[22px] p-4">
           <summary className="cursor-pointer font-display text-xl">Clue review and room chat</summary>
           <div className="mt-4 flex flex-col gap-4"><RoomAgentTools data={data} actions={actions} /></div>

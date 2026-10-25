@@ -64,12 +64,11 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     map.beginMemory(mode, prompt);
     setHelped(help);
     setStep(help ? "help" : "compose");
-    if (help) mapView.focus(0, 0, 1.1, -0.28);
+    if (help) mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 });
     else approachSeed();
   }
   function approachSeed() {
-    mapView.focus(latest.current.map.rings?.composer?.x ?? 12, latest.current.map.rings?.composer?.z ?? 11, 0.24, -0.55,
-      { tilt: -0.48, lift: 3.1, shiftX: window.innerWidth >= 900 ? -0.17 : 0 });
+    mapView.focus(latest.current.map.rings?.composer?.x ?? 12, latest.current.map.rings?.composer?.z ?? 11, 0.3, { yaw: -0.55, pitch: -0.5 });
   }
   /** Frame both memories (and their theme, when the council has formed one) in one shot. */
   function frameConnection() {
@@ -81,7 +80,7 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     const x = points.reduce((n, p) => n + p[0], 0) / points.length, z = points.reduce((n, p) => n + p[1], 0) / points.length;
     const span = Math.max(...points.map((p) => Math.hypot(p[0] - x, p[1] - z)));
     if (shared) latest.current.map.showConnection(shared.id);
-    mapView.focus(x, z, Math.min(1.1, 0.75 + span * 0.04), 0.12, { shiftX: window.innerWidth >= 900 ? -0.12 : 0 });
+    mapView.focus(x, z, Math.min(1.1, 0.75 + span * 0.04), { yaw: 0.12, pitch: -0.1 });
   }
 
   useEffect(() => {
@@ -120,9 +119,9 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     if (!ready || !enabled || paused || step !== "arrival") return;
     if (reduced) { setStep("welcome"); approachSeed(); return; }
     const interaction = mapView.interaction;
-    mapView.focus(0, 0, 0.33, 0.5, { tilt: -0.42, lift: 3 });
+    mapView.focus(0, 0, 0.33, { yaw: 0.5, pitch: -0.45 });
     const wide = setTimeout(() => {
-      if (mapView.interaction === interaction && !mapView.locked) mapView.focus(0, 0, 1.17, -0.28);
+      if (mapView.interaction === interaction && !mapView.locked) mapView.focus(0, 0, 1.17, { yaw: -0.28, pitch: 0.1 });
     }, 650);
     const approach = setTimeout(() => {
       if (mapView.interaction === interaction && !mapView.locked && !mapView.dragging) approachSeed();
@@ -135,7 +134,7 @@ export function useRoomGuide({ data, map, enabled, paused }: {
   useEffect(() => {
     if (step !== "saved" || composing || paused || !ownKey) return;
     const seat = seatOf(ownKey);
-    if (seat && canMoveCamera()) mapView.focus(seat[0], seat[1], 0.55, 0.18);
+    if (seat && canMoveCamera()) mapView.focus(seat[0], seat[1], 0.55, { yaw: 0.18 });
     const interaction = mapView.interaction;
     const timer = setTimeout(() => {
       if (interaction === mapView.interaction && !mapView.locked && !mapView.dragging) mapView.reset(reduced);
@@ -200,7 +199,7 @@ export function useRoomGuide({ data, map, enabled, paused }: {
   } else if (step === "compose") {
     title = helped ? currentQuestion.title : "What comes to mind?";
     text = map.rings?.composer?.photo ? "A photo can hold a little story. You’ll review its clues before publishing them." : mossWritingCue(map.draftLength, helped);
-    controls = composing ? <button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, -0.28); }}>Moss, I’m a little stuck</button> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
+    controls = composing ? <button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 }); }}>Moss, I’m a little stuck</button> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
   } else if (step === "saved") {
     title = "A little memory. A new possibility.";
     text = "There it is. Your memory has a place in this world.";

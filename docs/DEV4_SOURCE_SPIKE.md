@@ -1,6 +1,6 @@
 # Dev 4 source spike (RC-002)
 
-Status: **conditional go for discovery** — two authenticated live searches succeeded. Direct merchant URLs and final checkout prices remain unverified.
+Current status: **conditional go with Scrapewise build 0.1.46**. One 2026-10-25 synthetic hiking-backpack search returned 20 usable listings with product links, observed USD prices and images. Links go to Google product pages; retailer checkout remains unverified. See D25 in [ARCHITECTURE.md](ARCHITECTURE.md). The historical johnvc spike below is retained; its allowance ran out. The intervening automation-lab replacement failed because every product link was empty.
 
 Candidate: [johnvc Google Shopping API](https://apify.com/johnvc/google-shopping-api-google-shopping-products-prices-deals).
 Chosen for documented keyword search, US targeting, one-page limit, and nested shopping_results with product_link/extracted_price/source. This is a community Actor; documentation is not evidence of live reliability.

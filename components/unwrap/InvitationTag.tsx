@@ -8,7 +8,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useLandingActions } from "@/components/landing/useLandingActions";
 import { useSession } from "@/components/providers/ConvexClientProvider";
-import { playChime } from "@/components/world/chime";
+import { playSfx } from "@/components/world/sounds";
 import { appOrigin, inviteUrl } from "@/lib/invite";
 import { inviteQrModules } from "@/lib/invitation/realQr";
 import { avatarForIndex, inJoinOrder, portraitUrl } from "@/lib/room/avatars";
@@ -81,7 +81,7 @@ function LiveMembers({ roomId, soundEnabled, onStatus }: { roomId: string; sound
     lobby.set(members);
     if (arrived.length) {
       onStatus(`${arrived.map((m) => m.displayName).join(", ")} joined`);
-      if (soundEnabled) playChime(members.length);
+      if (soundEnabled) playSfx("coin");
     }
   }, [res, soundEnabled, onStatus]);
   return null;
@@ -193,6 +193,12 @@ export function InvitationTag({ soundEnabled, onStartOver, inlineQr = false }: {
   const invite = clock.invite;
   const modules = useMemo(() => (invite ? inviteQrModules(invite.inviteUrl) : null), [invite]);
   const ready = clock.phase === "lobbyReady";
+  const revealHeard = useRef<number | null>(null);
+  useEffect(() => {
+    if (clock.staticPreview || clock.phase !== "boxOpening" || revealHeard.current === clock.run) return;
+    revealHeard.current = clock.run;
+    if (soundEnabled) playSfx("reveal");
+  }, [clock.phase, clock.run, clock.staticPreview, soundEnabled]);
 
   // One loop drives the clock and keeps the card on its pixels.
   useEffect(() => {

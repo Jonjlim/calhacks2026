@@ -47,9 +47,9 @@ export function ContributionSimulation({ view, giftTitle, onSimulate, onWrap }: 
       {unavailable && <p className={styles.note}>{view.status === "no_proposal" ? "Choose a gift and approve a proposal first." : "This proposal is not available for the contribution simulation."}</p>}
       {!unavailable && !waiting && !wrapped && <>
         {view.myShareMinor === 0 ? <p className={styles.note}>You have no share to simulate.</p> : view.myCompleted ? <p className={styles.done}>✓ Your simulated contribution is complete.</p> :
-          <button className={styles.primary} disabled={!view.canSimulate || !onSimulate || pending} onClick={() => simulate.run()}>{simulate.pending ? "Simulating…" : `Simulate payment · ${formatMinor(view.myShareMinor)}`}</button>}
+          <button type="button" data-sfx="coin" className={styles.primary} disabled={!view.canSimulate || !onSimulate || pending} onClick={() => simulate.run()}>{simulate.pending ? "Simulating…" : `Simulate payment · ${formatMinor(view.myShareMinor)}`}</button>}
         {view.status === "complete" ? <p className={styles.note}>Everyone is ready. The organizer can wrap the demo gift.</p> : <p className={styles.note}>The ribbon waits for every contributor.</p>}
-        <button className={styles.wrap} disabled={!view.canWrap || !onWrap || pending} onClick={() => wrap.run()}>{wrap.pending ? "Wrapping…" : "Wrap the demo gift ↗"}</button>
+        <button type="button" data-sfx="coin" className={styles.wrap} disabled={!view.canWrap || !onWrap || pending} onClick={() => wrap.run()}>{wrap.pending ? "Wrapping…" : "Wrap the demo gift ↗"}</button>
       </>}
       <ErrorText error={simulate.error ?? wrap.error} />
       <p className={styles.disclaimer}><strong>No money charged or gift purchased.</strong><br/>This is a simulation, not a Stripe checkout or merchant order.</p>

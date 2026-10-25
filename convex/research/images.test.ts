@@ -4,8 +4,9 @@ import { hasProductImageUrl } from "../../lib/research/images";
 import { clueLikesPottery, fixtureListings } from "./fixtures/maya";
 import { rankListings } from "./score";
 
+// Two different kits with the same words, so relevance ties without one hiding the other as a duplicate.
 const item = (id: string, imageUrl?: string): ProductListing => ({
-  ...fixtureListings[0]!, id, title: "Pottery Tool Kit", priceMinor: 3000,
+  ...fixtureListings[0]!, id, title: id === "z" ? "Tool Kit for Pottery" : "Pottery Tool Kit", priceMinor: 3000,
   priceStatus: "observed", availability: "unknown", imageUrl,
 });
 const rank = (listings: ProductListing[], limit?: number) => rankListings({

@@ -193,3 +193,26 @@ unknown/invalid prices, separately observed shipping, same-total item changes,
 second-item price changes at approve/contribute/wrap, caps, authorization,
 idempotency, empty-box clearing, invalidation, frozen payment state, legacy rows
 and the 12-item bound. No paid provider calls or live deployment tests.
+
+
+## Live group polls and map multi-gift integration
+
+On `dev4/directions-trial`, the map's primary Add to box action now calls atomic
+`proposals.addGiftToBox` and each box row calls `removeGiftFromBox`. The box shows
+all items with individual observed prices/source links and the combined proposal
+estimate. Selected gifts retain map links; the reveal offers every box item.
+Approval reset and payment locks continue to use the existing proposal engine.
+
+`questionPolls.state`, `vote` and `finish` provide live per-member question votes,
+change/withdraw, counts, ties, stale checks and organizer-only explicit finishing.
+Question votes never publish memories or alter explicit gift votes. Closing the
+finished poll panel is local so saved votes continue steering the shortlist.
+Both gift votes and applicable question support are applied before candidate
+limits. Question support is a linked-ID/literal-title signal, not LLM semantic
+inference or an evidence citation. Negated answer text supplies no positive title
+support. The latest 20 current-knowledge question rounds contribute signals.
+
+`/demo/group-flow` is an offline two-role UI rehearsal using the real QuestionPoll
+and BoxPanel components with labelled sample products. It does not establish
+live Convex/browser integration. Deploy through the team's normal workflow before
+calling the new endpoints from a real room; no deployment was performed here.

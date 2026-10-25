@@ -6,7 +6,7 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { SparkleBurst, type SparkleHandle } from "./AmbientEffects";
-import { playChime } from "./chime";
+import { playSfx } from "./sounds";
 import { wobble } from "./geometry";
 import { paint } from "./painterly/materials";
 import { giftPaperTexture, ribbonTexture } from "./painterly/textures";
@@ -17,7 +17,7 @@ import { BASE_TOP, BOX_SHELL, GIFT_BOX } from "./unwrap/invitationLayout";
 import { FlyingTag } from "./unwrap/FlyingTag";
 import { GiftUnwrap, LID_OPEN_ANGLE } from "./unwrap/GiftUnwrap";
 import { LobbySpirits } from "./unwrap/LobbySpirits";
-import { RIBBON_SWAP, RibbonUnravel } from "./unwrap/RibbonUnravel";
+import { convergenceUnravel, RIBBON_SWAP, RibbonUnravel } from "./unwrap/RibbonUnravel";
 import { progress, span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { convergence } from "@/components/convergence/convergenceClock";
 import { type Artifact, buildArtifacts, filledAt } from "@/lib/convergence/artifacts";
@@ -52,6 +52,13 @@ const WALLS: { pivot: V3; offset: V3; size: V3; liner: V3; linerYaw: number; lin
   { pivot: [-W / 2, 0, 0], offset: [SHELL / 2, BASE_TOP / 2, 0], size: [SHELL, BASE_TOP, W - 2 * SHELL], liner: [SHELL + 0.002, (BASE_TOP + SHELL) / 2, 0], linerYaw: Math.PI / 2, linerW: W - 2 * SHELL, axis: "z", dir: 1 },
 ];
 const BACK_WALL = 1;
+/** How each wall flies at the burst: how far, how high, sideways drift, and its tumble. */
+const SHATTER: { dist: number; rise: number; drift: [number, number]; spin: V3 }[] = [
+  { dist: 9, rise: 3.2, drift: [0, 1.2], spin: [2.6, 0.9, 1.1] },
+  { dist: 8, rise: 4.0, drift: [1.4, 0], spin: [-3.1, 1.2, -0.8] },
+  { dist: 9.5, rise: 2.6, drift: [0.8, -1.4], spin: [0.9, 2.2, -3.0] },
+  { dist: 8.5, rise: 3.6, drift: [-1.2, 1.0], spin: [1.4, -2.4, 2.8] },
+];
 /** A wall falling open: gathers speed like it's tipping over, then a small bounce as it lands. */
 const flop = (k: number) => (k <= 0 ? 0 : k < 0.8 ? (k / 0.8) ** 2 : 1 - 0.07 * Math.sin(((k - 0.8) / 0.2) * Math.PI));
 /** The open lid, in the hinge's frame: a top and four skirts, open underneath. */
@@ -308,7 +315,6 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     if (tug.sparkle && tagTug.current !== giftTag.tugCount) {
       tagTug.current = giftTag.tugCount;
       if (animate) sparkles.current?.burst(new THREE.Vector3(GIFT_SPOT.x, baseY + (H + 0.3) * GIFT_SCALE, GIFT_SPOT.z), giftTag.tugCount);
-      if (soundEnabled) playChime(giftTag.tugCount);
       emitGiftPop();
     }
     ribbonMat.emissiveIntensity = tug.glow * 0.2;
@@ -412,33 +418,49 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
         fold = flop(k);
       }
       const a = WALL_FOLD * fold * w.dir;
-      pivot.rotation.set(w.axis === "x" ? a : 0, 0, w.axis === "z" ? a : 0);
-      // At the burst each wall (and the lid riding the back one) is flung outward from the centre.
-      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
-      const len = Math.hypot(w.pivot[0], w.pivot[2]) || 1;
-      pivot.position.set(w.pivot[0] + (w.pivot[0] / len) * out * 3.2, w.pivot[1] + Math.sin(out * Math.PI) * 0.5 + out * 0.3, w.pivot[2] + (w.pivot[2] / len) * out * 3.2);
+      // At the burst the box shatters from whole: each wall is flung outward and tumbles, fast, and is gone.
+      const b = cv ? cv.burst : 0;
+      if (b > 0) {
+        const sh = SHATTER[i]!;
+        const e = 1 - Math.pow(1 - b, 2.4);
+        const len = Math.hypot(w.pivot[0], w.pivot[2]) || 1;
+        const dist = e * sh.dist;
+        pivot.position.set(w.pivot[0] + (w.pivot[0] / len) * dist + sh.drift[0] * e, w.pivot[1] + e * sh.rise - e * e * 1.5, w.pivot[2] + (w.pivot[2] / len) * dist + sh.drift[1] * e);
+        pivot.rotation.set(sh.spin[0] * e, sh.spin[1] * e, sh.spin[2] * e);
+        pivot.scale.setScalar(1 + e * 0.35);
+        pivot.visible = b < 0.97;
+      } else {
+        pivot.position.set(...w.pivot);
+        pivot.rotation.set(w.axis === "x" ? a : 0, 0, w.axis === "z" ? a : 0);
+        pivot.scale.setScalar(1);
+        pivot.visible = true;
+      }
     });
     const lidAngle = LID_OPEN_ANGLE * (cv ? cv.lid : 1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2));
-    if (lidPivot.current) lidPivot.current.rotation.x = -THREE.MathUtils.lerp(lidAngle, Math.PI / 2, backFold);
-
-    if (hollowBox.current) {
-      // The floor rises and swells away, and the ribbon is carried up and out with the burst.
-      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
-      hollowBox.current.position.y = out * 1.2;
-      hollowBox.current.scale.setScalar(1 + out * 0.6);
-      if (cv && cv.burst > 0) {
-        if (bands.current) bands.current.visible = cv.burst < 0.5;
-        if (tails.current) tails.current.visible = cv.burst < 0.5;
-        if (bands.current) bands.current.scale.setScalar(1 + out * 0.7);
-        if (tails.current) tails.current.position.y = ribbons.top + out * 0.6;
-      } else if (bands.current) {
-        bands.current.scale.setScalar(1);
-        if (tails.current) tails.current.position.y = ribbons.top;
-      }
+    if (lidPivot.current) {
+      lidPivot.current.rotation.x = -THREE.MathUtils.lerp(lidAngle, Math.PI / 2, backFold);
+      // At the burst the lid also springs off the top and spins away.
+      const e = cv ? 1 - Math.pow(1 - cv.burst, 2.2) : 0;
+      lidPivot.current.position.y = BASE_TOP + e * 5;
+      lidPivot.current.rotation.z = e * 5;
     }
 
+    if (hollowBox.current) {
+      // The floor is flung up and out like the walls, rather than lingering as a flat plate.
+      const b = cv ? cv.burst : 0;
+      const e = 1 - Math.pow(1 - b, 2.4);
+      hollowBox.current.position.set(e * 1.4, e * 7, e * 2.2);
+      hollowBox.current.rotation.set(e * 4.2, e * 1.5, e * 3);
+      hollowBox.current.visible = hollow && b < 0.8;
+    }
+    // Just before the burst the bow collapses into the knot and the ribbon peels off as one strip (RibbonUnravel).
+    const knot = cv ? cv.ribbonKnot : 0;
+    if (cv && knot > 0) {
+      if (tails.current) tails.current.scale.set(1, Math.max(0.01, 1 - knot * 0.85), 1);
+      if (sideTail.current) sideTail.current.rotation.z += knot * 1.1;
+    }
     const sway = animate ? Math.sin(t * 2.1) * 0.03 : 0;
-    const unfurl = rb ? (1 - Math.min(1, rb.bow)) * 0.9 + (cv && convergence.t >= 9 ? cv.sweep * 0.8 : 0) : collapse * 0.9;
+    const unfurl = rb ? (1 - Math.min(1, rb.bow)) * 0.9 : collapse * 0.9;
     if (loopL.current) loopL.current.rotation.z = -sway - flap - s.hover * 0.08 - unfurl;
     if (loopR.current) loopR.current.rotation.z = sway + flap + s.hover * 0.08 + unfurl;
     if (bow.current) {
@@ -446,11 +468,8 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       // Loops fold down into the knot as the ribbon is pulled through it.
       bow.current.scale.setScalar(Math.max(0.0001, (1 + s.hover * 0.04 + Math.abs(flap) * 0.15) * (rb ? Math.max(0, rb.bow) : 1 - collapse * 0.92)));
       bow.current.position.set(0, ribbons.top + 0.02 + Math.sin(collapse * Math.PI) * 0.06, 0);
-      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + (cv ? cv.burst * 3 : 0), 0);
-      if (cv && cv.burst > 0) {
-        bow.current.position.y += (1 - Math.pow(1 - cv.burst, 3)) * 2.2;
-        bow.current.visible = cv.burst < 0.8;
-      }
+      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + knot * 0.8, 0);
+      if (knot > 0) bow.current.position.y += Math.sin(knot * Math.PI) * 0.06;
     }
   });
 
@@ -474,7 +493,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     s.popCount++;
     s.spin = s.popCount % 2 ? 1 : -1;
     s.sparkled = false;
-    if (soundEnabled) playChime(s.popCount);
+    if (soundEnabled) playSfx("wish");
     emitGiftPop();
     if (!animate) {
       // Render-on-demand mode: keep frames coming just long enough for the pop.
@@ -587,6 +606,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       <FlyingTag />
       <GiftUnwrap bodyRef={body} />
       <LobbySpirits animate={animate} />
+      <RibbonUnravel driver={convergenceUnravel} />
       <GiftConvergence />
     </>
   );

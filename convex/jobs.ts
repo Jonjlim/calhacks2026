@@ -87,6 +87,7 @@ export async function insertResearchJob(
     brief?: Doc<"researchJobs">["brief"];
     inputHash: string;
     idempotencyKey: string;
+    directionId?: Id<"mapDirections">;
   },
 ): Promise<{ jobId: Id<"researchJobs">; created: boolean }> {
   const existing = await ctx.db
@@ -107,6 +108,7 @@ export async function insertResearchJob(
     idempotencyKey: args.idempotencyKey,
     attempt: 0,
     createdAt: Date.now(),
+    ...(args.directionId ? { directionId: args.directionId } : {}),
   });
   return { jobId, created: true };
 }

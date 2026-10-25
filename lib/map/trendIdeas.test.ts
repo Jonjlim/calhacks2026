@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RING_RADII, ringDistance, ringPoint } from "./rings";
-import { isTrendKey, layoutTrendIdeas, signalLabel } from "./trendIdeas";
+import { emptyTrendNote, isTrendKey, layoutTrendIdeas, signalLabel } from "./trendIdeas";
 
 const s = (query: string, signals = [{ kind: "top_search" as const, popularityIndex: 50 }]) => ({ query, sourceUrl: `https://trends.google.com/?q=${query}`, signals });
 
@@ -30,5 +30,24 @@ describe("trend sprouts", () => {
     const nodes = layoutTrendIdeas("job1", ["a", "b", "c", "d", "e", "f", "g"].map((q) => s(q)), null);
     expect(nodes.map((n) => n.query)).toEqual(["a", "b", "c", "d", "e"]);
     expect(layoutTrendIdeas("job2", [s("a")], null)[0]!.key).not.toBe(nodes[0]!.key);
+  });
+});
+
+describe("an empty trend check", () => {
+  const sample = (observations: number, suggestions: ReturnType<typeof s>[] = []) => ({
+    suggestions, evidenceSummary: { returnedRows: 1, observations },
+    context: { seedTerm: "lovees to bowl", geo: "US" as const, timeRange: "today 3-m" as const, retrievedAt: 1 },
+  });
+
+  it("says Google had nothing, rather than showing nothing", () => {
+    expect(emptyTrendNote(sample(0))).toBe("Google Trends had no related US searches for “lovees to bowl” in the past 3 months.");
+  });
+
+  it("says when the searches were all news or lookups", () => {
+    expect(emptyTrendNote(sample(40))).toMatch(/none for something to buy or book/);
+  });
+
+  it("stays quiet when there are ideas", () => {
+    expect(emptyTrendNote(sample(40, [s("bowling ball")]))).toBeNull();
   });
 });

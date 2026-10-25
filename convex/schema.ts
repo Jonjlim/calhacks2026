@@ -24,12 +24,14 @@ import { v } from "convex/values";
 import * as V from "./validators";
 import { fashionTables } from "./research/fashionSchema";
 import { trendTables } from "./research/trendSchema";
+import { giftTwinTables } from "./giftTwin/schema";
 import { simulationTables } from "./payments/simulationSchema";
 
 export default defineSchema({
   ...authTables,
   ...fashionTables,
   ...trendTables,
+  ...giftTwinTables,
   ...simulationTables,
 
   rooms: defineTable({
@@ -221,6 +223,8 @@ export default defineSchema({
     participantId: v.id("participants"),
     value: V.voteValue,
     updatedAt: v.number(),
+    /** Why a pass was cast (D23 trial); only on "down". */
+    reason: v.optional(V.passReason),
   })
     .index("by_room", ["roomId"])
     .index("by_listing_participant", ["listingId", "participantId"]),
@@ -419,10 +423,13 @@ export default defineSchema({
   mapSignals: defineTable({
     roomId: v.id("rooms"),
     participantId: v.id("participants"),
-    targetKind: v.union(v.literal("clue"), v.literal("theme")),
+    // "direction" and "trend" (D23 trial): pass or pull a direction; catch (+1) or let drift (−1) a trend cloud.
+    targetKind: v.union(v.literal("clue"), v.literal("theme"), v.literal("direction"), v.literal("trend")),
     targetId: v.string(),
     value: v.number(),
     updatedAt: v.number(),
+    /** Why a pass was cast (D23 trial); only on −1. */
+    reason: v.optional(V.passReason),
   })
     .index("by_room", ["roomId"])
     .index("by_member_target", ["roomId", "participantId", "targetKind", "targetId"]),
@@ -439,6 +446,7 @@ export default defineSchema({
 
   /** One sharpen round: a single question that splits the finalists (D19). Answering publishes the chosen clue as the answering member. */
   mapSharpens: defineTable({
+    ballots: v.optional(v.array(v.object({ participantId: v.id("participants"), option: v.number(), updatedAt: v.number() }))),
     roomId: v.id("rooms"),
     question: v.string(),
     options: v.array(v.object({ label: v.string(), clue: v.string(), listingIds: v.array(v.id("productListings")) })),
@@ -450,7 +458,45 @@ export default defineSchema({
     answeredBy: v.optional(v.id("participants")),
     knowledgeRevision: v.number(),
     createdAt: v.number(),
+    /** A probe question about one broad direction (D23 trial); its options carry no listings. */
+    directionId: v.optional(v.id("mapDirections")),
   }).index("by_room", ["roomId", "createdAt"]),
+
+  /**
+   * The room's decision log (D23 trial): one plain line per step the council, the checks or a friend took.
+   * Append-only and room-visible, so it holds only room-visible facts: never private imports, unpublished clues or caps.
+   */
+  roomTrail: defineTable({
+    roomId: v.id("rooms"),
+    at: v.number(),
+    stage: v.union(v.literal("memories"), v.literal("council"), v.literal("steering"), v.literal("search"), v.literal("choice"), v.literal("money")),
+    actor: v.union(v.literal("council"), v.literal("checks"), v.literal("trends"), v.literal("search"), v.literal("person")),
+    participantId: v.optional(v.id("participants")),
+    /** The decision, kept or thrown out. "rejected" lines show what a check refused. */
+    outcome: v.union(v.literal("kept"), v.literal("rejected"), v.literal("info")),
+    text: v.string(),
+    directionId: v.optional(v.id("mapDirections")),
+    listingId: v.optional(v.id("productListings")),
+    clueIds: v.optional(v.array(v.id("publishedClues"))),
+  }).index("by_room", ["roomId", "at"]),
+
+  /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
+  mapDirections: defineTable({
+    roomId: v.id("rooms"),
+    label: v.string(),
+    query: v.string(),
+    why: v.string(),
+    clueIds: v.array(v.id("publishedClues")),
+    trend: v.optional(v.object({ trendJobId: v.id("trendJobs"), query: v.string() })),
+    broad: v.boolean(),
+    source: v.union(v.literal("agent"), v.literal("preset")),
+    knowledgeRevision: v.number(),
+    createdAt: v.number(),
+    /** Set when the room's passes retired it; it leaves the map and the council suggests a replacement. */
+    retiredAt: v.optional(v.number()),
+    /** The direction this one replaced, so "How we got here" can join them. */
+    replaces: v.optional(v.id("mapDirections")),
+  }).index("by_room", ["roomId"]),
 
   recipientProfiles: defineTable({
     roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
@@ -560,7 +606,10 @@ export default defineSchema({
     attempt: v.number(),
     lastError: v.optional(v.string()),
     createdAt: v.number(),
+    /** The direction this search shops (D23 trial). Jobs in different directions run side by side. */
+    directionId: v.optional(v.id("mapDirections")),
   })
     .index("by_room", ["roomId"])
-    .index("by_room_idempotency", ["roomId", "idempotencyKey"]),
+    .index("by_room_idempotency", ["roomId", "idempotencyKey"])
+    .index("by_room_direction", ["roomId", "directionId"]),
 });

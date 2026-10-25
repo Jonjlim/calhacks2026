@@ -408,6 +408,148 @@ interface AgentReply {
 
 Errors: `refused` for policy, `validation_failed` for bad bodies. Never throw raw preference text.
 
+### Agent collaborators and the Gift Twin (demo, D20, 2026-10-24)
+
+Latency update (Dev 3, 2026-10-25; consumers Dev 1/Dev 2): the first pass records
+screened deterministic insights/votes immediately and marks the vault ready.
+`internal.giftTwin.agent.enrichVault` adds model-only insights and unresolved votes
+independently in the background, with the same upload/expiry fences and dedupe.
+`recordFindings` and `reviewPosts` accept optional `deterministicReview: boolean`;
+only server-pattern findings use it to run the existing deterministic review
+without a second model round-trip. That review is restricted to the exact inserted
+`postIds`; it cannot pick up unrelated pending model posts. Model-generated
+insights retain model review.
+New-idea evaluation similarly records pattern votes first and sends only unresolved
+refs to Moss/model. Existing votes remain immutable advisory posts.
+
+`internal.giftTwin.agent.checkIdeas` accepts `{ collaboratorId, uploadId }`, claims
+unchecked current idea refs transactionally, and schedules their evaluation without
+starting another polling loop. Published room knowledge, new sprouts and completed
+listings wake it after 200 ms. The 30-second watch is a recovery fallback. Bursts
+dedupe at the transactional claim. No raw private data reaches the shared agent.
+
+Moss indexes at most 256 distinct messages per evaluation: gift/preference-bearing
+messages first, retaining both recent and older evidence; remaining space samples
+the rest. Keyword evidence still searches the entire authorized vault. This bounds
+embedding latency but semantic-only matches outside that working set may be missed.
+No private cross-action cache, disk index, new table or provider is introduced.
+
+Moss memory (2026-10-25): Owner Dev 3; consumers Dev 1 (existing screened feed),
+Dev 2 (authorization/purge review). `internal.giftTwin.memory.vote` accepts only
+`{ collaboratorId, uploadId, refs?: string[] }` and returns `TwinVoteCast[]`.
+It reuses the twin's authorized snapshot/chunk queries, builds an ephemeral local
+Moss session, and retrieves up to eight semantic/keyword matches per current
+room idea. Returned IDs must resolve to that invocation's authorized messages;
+SDK-returned text is never trusted. The recipient model gets those messages plus
+bounded keyword evidence (at most 12 excerpts and 3,600 message characters per
+idea). Only screened votes reach the existing `recordFindings`
+and review path. Buyer/council agents never receive raw recall results.
+
+Opt in with Convex server variables `GIFT_TWIN_MOSS_ENABLED=true`,
+`MOSS_PROJECT_ID`, and `MOSS_PROJECT_KEY`. Missing configuration or SDK failure
+uses existing keyword evidence. Local sessions are closed after each evaluation;
+no cloud index, disk snapshot, cross-upload cache, new table, public endpoint, or
+data migration. Setup/indexing and query timings are separate, numeric-only server
+diagnostics; no sub-10ms application latency claim. Moss sends usage telemetry
+(including opaque random session names, counts and timings), never message or
+query text. Vault expiry is checked on every read and before findings are saved,
+including when the scheduled deletion has not run yet. Existing insight extraction
+still scans the authorized vault; Moss supplies evidence for idea evaluation.
+`internal.giftTwin.memory.smoke` takes `{}` and returns `{ ok: true, passed,
+setupMs, indexingMs, queryMs }` from a fixed synthetic paraphrase check, or
+`{ ok: false, reason, stage?, category? }` with fixed diagnostic strings. It reads no room or
+vault data, creates no cloud index, and supports validating the native Convex
+runtime before enabling memory retrieval.
+
+**Status: demo, behind `GIFT_TWIN_DEMO_ENABLED=true`.** Owner: Dev 3 (agents). Consumers: Dev 1 (room UI), Dev 2 (schema review, purge). Full design: [GIFT_TWIN.md](GIFT_TWIN.md).
+
+An **agent collaborator** is an AI agent that joins a room next to people and posts notes the way a friend would ("I learned that Maya has been playing tennis"). It is not a `Participant`: it has no share, cap, selection, or approval, and its up/down votes are advisory posts, separate from participant `votes`. The first kind is `gift_twin`: the recipient pairs their Mac, grants **one-time permission** to upload the messages they sent into a temporary server-only vault, and a cloud twin agent acting for the recipient posts insights and votes on the room's ideas (existing and new) until the vault expires. `trend_scout` is reserved for the planned trend agent and uses the same tables and feed.
+
+Shared types and Zod schemas live in `lib/agentCollaborators/contracts.ts` (used by Convex, the Mac companion, and the UI).
+
+Map attribution: `getFeed` returns all room-indexed non-dismissed posts with optional `ideaRef` and `authorName`, so older published notes retain their AI origin even after disconnect. Dev 3 owns this additive view change; Dev 1 consumes it via optional `RoomData.agentCollaborators`. No table migration. The map uses `publishedClueId` to label twin-authored knowledge with the twin name, dedicated icon and violet styling; the inviting member remains the permission owner. `listing:<id>` evaluations attach to `gift:<id>`, and evaluations of gift-idea clues attach to `idea:<id>`. Reviewed evaluations (`added` or `noted`) show Supports / Doesn’t fit badges and screened rationale, separate from participant vote totals and revision approvals. Suggested/dismissed posts do not create evaluation badges. No private vault text or device credentials are exposed.
+
+Recipient web onboarding (D20): members create the twin only at `/room/[roomId]/twin`. `createPairing` still returns the existing single-use code; the UI builds `/twin#invite=<pairingCode>` (fragment, never sent in HTTP requests). Opening the link does not consume it. Only an explicit recipient acceptance pairs it. The recipient page uses the same device operations without room membership and never receives room content. The device token is generated with Web Crypto and kept in this tab's session storage; closing the tab loses management access, but server expiry still applies. No raw messages are stored in browser storage.
+
+After accepting the terms, the recipient explicitly selects `chat.db`; selection immediately reads and uploads through the CLI-equivalent pipeline: scan the newest 1 MiB of message content (incoming content counts toward that budget), then use the existing companion `planUpload` to send `VaultMessage` text/time. There is no extra content screening, preference extraction, message review/removal, or second confirmation before uploading. The CLI's existing sent-only selection, tapback exclusion, and 2,000-character text limit remain unchanged. The read limit and server vault text limit are now 1 MiB. `uploadMessages` strips emoji sequences server-side before storage and skips messages left empty; its returned count includes only stored messages. A batch containing only emojis succeeds without creating an empty chunk. Plain digits and ordinary text are preserved. The recipient uses a visible file-picker button; selecting the database after consent starts upload. The database itself, incoming messages, handles, and attachments never leave the browser. File selection is required: a website cannot obtain automatic macOS Messages access. Unsupported databases and file permissions are visible errors. The browser offers status, delete now, disconnect, and explicitly labelled sample data. Failed uploads can be deleted or replaced; no automatic upload retry can duplicate batches. Owner: Dev 3; consumers: Dev 1 and Dev 2. Migration: no table or endpoint shape change; pairing creation broadens from organizer to room member. CLI remains compatible.
+
+
+```ts
+type AgentCollaboratorKind = "gift_twin" | "trend_scout";
+type AgentCollaboratorStatus = "pending_pairing" | "active" | "revoked";
+type TwinInsightCategory = "interest" | "wish" | "dislike" | "owns" | "style";
+type TwinVaultStatus = "uploading" | "processing" | "ready" | "expired";
+
+interface VaultMessage {           // one message the recipient sent; never other people's
+  text: string;                    // ≤2,000 chars
+  sentAt: number;
+}
+
+interface TwinInsight {            // a gift idea found in the messages; strict, screened
+  category: TwinInsightCategory;
+  text: string;                    // ≤160 chars, third person, no quotes/links/contact details/sensitive topics
+  confidence: "low" | "medium" | "high";  // low is dropped; one clear mention of a giftable thing is medium
+  evidenceCount: number;
+}
+
+interface TwinVoteCast {           // the twin's vote on one room idea
+  ideaRef: string;                 // server-issued ("clue:<id>", "idea:<id>", "listing:<id>")
+  vote: "up" | "down";
+  text: string;                    // same screening as insights
+  category?: TwinInsightCategory;  // downvotes: "dislike" | "owns"
+  confidence: "low" | "medium" | "high";
+  evidenceCount: number;
+}
+
+interface TwinVaultView { status: TwinVaultStatus; messageCount: number; expiresAt?: number }
+
+interface AgentCollaboratorView {
+  id: string; roomId: string; kind: AgentCollaboratorKind; displayName: string; status: AgentCollaboratorStatus;
+  deviceLabel?: string; pairingExpiresAt?: number;
+  consentedAt?: number; reportedAt?: number; vault?: TwinVaultView; createdAt: number;
+}
+
+interface AgentCollaboratorPostView {
+  id: string; collaboratorId: string;
+  kind: "insight" | "vote";
+  category?: TwinInsightCategory; text: string; confidence: "low" | "medium" | "high";
+  evidenceCount?: number;
+  ideaRef?: string;                    // server-validated room target, never private evidence
+  authorName?: string;                 // collaborator display name, including historical posts
+  ideaText?: string; vote?: "up" | "down";   // votes
+  status: "suggested" | "added" | "noted" | "dismissed";
+  publishedClueId?: string; createdAt: number;
+}
+```
+
+| Operation | Kind | Input | Output | Access |
+| --- | --- | --- | --- | --- |
+| `giftTwin/room.createPairing` | action | `{ roomId, recipientLabel? }` | `Result<{ collaboratorId, pairingCode, expiresAt }>` | Member; flag on; one connected twin per room; code single-use, 15 min, stored hashed |
+| `giftTwin/room.getFeed` | query | `{ roomId }` | `Result<{ collaborators, posts }>` | Member; never returns hashes, upload ids, or message text; dismissed posts hidden |
+| `giftTwin/room.revokeCollaborator` | mutation | `{ collaboratorId }` | `Result<null>` | Organizer; the token stops working and the vault is deleted |
+| `giftTwin/device.pair` | mutation | `{ pairingCode, deviceToken, deviceLabel? }` | `Result<DeviceSession>` | Anyone with a valid code; flag on |
+| `giftTwin/device.session` | query | `{ deviceToken }` | `Result<DeviceSession>` | Device; includes `vault` status, never message text |
+| `giftTwin/device.startUpload` | mutation | `{ deviceToken, consent: true }` | `Result<{ uploadId, expiresAt }>` | Device; flag on; `consent` must be true; deletes any earlier upload; schedules deletion at `expiresAt` (24 h) |
+| `giftTwin/device.uploadMessages` | mutation | `{ deviceToken, uploadId, messages: VaultMessage[] }` | `Result<{ messageCount }>` | Device; ≤1,000 messages and ≤250,000 chars per call; ≤1 MiB of UTF-8 message text and 40 batches per upload |
+| `giftTwin/device.finishUpload` | mutation | `{ deviceToken, uploadId }` | `Result<{ messageCount, expiresAt }>` | Device; schedules the twin agent |
+| `giftTwin/device.forget` | mutation | `{ deviceToken }` | `Result<null>` | Device; deletes the vault now; posts stay |
+| `giftTwin/device.disconnect` | mutation | `{ deviceToken }` | `Result<null>` | Device; same as revoke |
+| `internal.giftTwin.agent.processVault` | internal action | `{ collaboratorId, uploadId }` | — | First pass: insights + votes on current room ideas (model role `recipient`) |
+| `internal.giftTwin.agent.watchTick` | internal mutation | `{ collaboratorId, uploadId }` | — | Every 30 s while the vault is `ready`: claims new room ideas and schedules `voteOnNewIdeas` |
+| `internal.giftTwin.agent.expireVault` | internal mutation | `{ collaboratorId, uploadId }` | — | Deletes the vault at `expiresAt` |
+| `internal.giftTwin.review.reviewPosts` | internal action | `{ collaboratorId }` | — | Publishes insights (LLM may veto) and downvotes; notes upvotes; hides the rest |
+
+Rules:
+
+- Vaulted messages (`twinVaultChunks`) are server-only. No public or device query returns them; only `internal.giftTwin.agent.*` reads them. They are deleted at expiry, on `forget`, on disconnect/revoke, on a new upload, and on room purge.
+- Agent output is untrusted: `recordFindings` re-validates every insight and vote with the Zod schemas before insert. Vote refs must name a current room idea; the stored `ideaText` is the server's copy.
+- The gift agent, not a person, decides what becomes room knowledge. Insights and downvotes become `manual` `PublishedClue`s attributed to the member who invited the twin. Post `status`: `suggested` = awaiting review, `added` = published, `noted` = shown with no new clue (upvotes), `dismissed` = skipped and hidden.
+- Category to clue kind: interest/style → `interest`, wish → `explicit_wish`, dislike → `exclusion`, owns → `ownership`.
+- One vote per room idea per twin (`dedupeKey = vote:<ideaRef>`).
+- Errors: `unauthorized`, `not_found`, `validation_failed`, `refused`, `stale_job` (upload no longer open).
+
+Migration: additive tables `agentCollaborators`, `agentCollaboratorPosts`, and `twinVaultChunks` (`convex/giftTwin/schema.ts`), all included in room purge. Replaces the demo's earlier `device.roomContext` / `device.submitReport` (on-device extraction) and renames evaluation posts (`kind: "evaluation"`, `verdict`) to votes (`kind: "vote"`, `vote: "up" | "down"`). Existing demo rows in `agentCollaboratorPosts` must be cleared before pushing. No non-twin table, endpoint, or contract changes. Production promotion: see [GIFT_TWIN.md](GIFT_TWIN.md) § Production path.
+
 ### Product listing
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 2 (selection snapshot), Dev 3 (explain).
@@ -497,6 +639,13 @@ interface Recommendation {
   trendSignal: number; // 0 unless sourced
   explanation: string;
   createdAt: number;
+  foundBy?: SearchOrigin; // provenance only; see "Search provenance and variety" below
+}
+
+interface SearchOrigin {
+  query: string;
+  source: "memory" | "trend" | "discovery";
+  publishedClueId?: string;
 }
 ```
 
@@ -1634,6 +1783,12 @@ ideas minus any with a pass; it participates in the buyer input version. The pro
 the agent put one supplied query first in a search or mention one idea as a related
 search, never as a preference, popularity claim or invented query.
 
+`emptyTrendNote(sample)` in `lib/map/trendIdeas.ts` returns a plain sentence when a
+finished sample has no suggestions: "no related US searches" when Google returned no
+observations, or "none for something to buy or book" when every related search was
+news or a lookup. Null when ideas exist. The map shows it in the memory's caption.
+Pure; reads only fields already in `TrendDiscoverySample`.
+
 ### Shared contribution simulation (Dev 4, demo only)
 
 Alex selected a visibly labelled simulation instead of expanding live payment
@@ -1731,6 +1886,111 @@ reselect the remaining valid items. Simulation follows the combined revision and
 therefore resets with it; a real charge/order is never created. Each item keeps
 its own source link. Dev 1 must render `revision.items` for approval and
 `selection.items` for the current box, with the one-item fallback for old rows.
+
+
+### Search provenance and variety (Dev 4, Phase 2)
+
+Owner: Dev 4. Consumers: Dev 1 (gift captions, "Why this?" MAP-016), Dev 3 (catalog reads). Additive: one optional `Recommendation.foundBy` field; no schema, endpoint or validator change. Migration: none.
+
+- **`foundBy`.** Each research pool comes from exactly one provider search (the first query term), so every recommendation in it carries that `query`. `source: "memory"` names the active published clue whose search phrase it was, or, for a query written around a memory (the buyer agent writes "hiking gifts"), the most specific clue whose every search word the query contains, ignoring generic words like "gifts" or "ideas"; `"trend"` names the chosen Google Trends suggestion and its clue; `"discovery"` is any other sourced direction, or a memory since withdrawn (no `publishedClueId` then). It says how a listing was **found**. It is never a clue citation: `publishedClueIds`, scores and exclusions are unchanged, and the buyer agent's citation rules still read only `publishedClueIds`.
+- **Explanation.** A listing that no clue matches, found by a memory search, now reads `Found by searching "hiking" from "we hiked mt hood". No published clue matches this directly`. Matched listings and trend finds keep their existing wording (the map already captions trend finds).
+- **Variety.** `rankListings` keeps the best-ranked listing of each product and at most `MAX_PER_SELLER` (3) per seller before other sellers' products. A product is its title before any `|`, without size, fit, colour, pure-number or catalog-code words; titles match when equal or when one extends the other by at least three leading words. Men's and women's versions stay separate. A seller's further distinct products fill only slots nobody else can. This changes which rows are shown and their order, never a score or citation. It applies everywhere ranking runs (room catalog, council, agents).
+- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`), drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.
+
+
+### Directions flow — trial (D23, `dev4/directions-trial`)
+
+Owner: Dev 4 for the trial, touching Dev 3 (agents), Dev 2 (schema/signals) and Dev 1 (map). **Trial branch only** until the team reviews it. Every field below is additive and optional for old clients.
+
+Memories → directions → gifts. A direction is the council's suggestion of one gift direction that combines memories. It is an interpretation, never room knowledge: it publishes nothing, and it never changes budgets, caps, selection or approvals.
+
+```ts
+interface MapDirection {
+  id: string;
+  label: string;            // 2–6 words, e.g. "Vintage-pattern trail jacket"
+  query: string;            // the one shopping search for it, ≤ 60 chars
+  why: string;              // one sentence grounded in the cited memories
+  clueIds: string[];        // ≥ 2 active published clues, unless one is an explicit wish
+  trend?: { trendJobId: string; query: string }; // a caught trend cloud it weaves in
+  broad: boolean;           // rests on one broad memory → the council asks one question
+  source: "agent" | "preset";
+  stale: boolean;           // memories changed since it was proposed
+  researched: boolean;      // a research job exists for it
+}
+```
+
+- `agents.directions.propose({ roomId })` (action, any member, explicit tap). Model output is Zod-validated: cited memory numbers must exist and be active; a direction citing one memory must cite an explicit wish; no links, prices or sensitive traits. Without a model it builds presets by pairing published interest/wish phrases. It keeps researched directions, replaces unresearched ones (max 4 shown), starts **one** room-level Google Trends lookup for a memory without a recent sample, and, for a new broad direction, opens one probe question.
+- `agents.directions.list({ roomId })` → `Result<MapDirection[]>`, membership-checked.
+- **Probe questions** reuse `mapSharpens` with optional `directionId` and empty `listingIds`/`finalistIds`. Answering publishes the chosen sentence as the answering member's memory, as Sharpen does. A preset Sharpen option (no model) now has an empty `clue`; answering it casts that member's up vote on its listing instead of publishing product text as a memory.
+- **Signals.** `mapSignals.targetKind` adds `"direction"` (target: direction ID) and `"trend"` (target: `trendJobId:query` from a usable sample). On a trend, +1 = caught, −1 = let it drift. A direction or gift fades once passed and leaves the map when at least half the room has passed and nobody pulled it in. Nothing is deleted.
+- **Research per direction.** `research.startResearch` accepts optional `directionId`. The direction's `query` becomes the one search; its clues must be included. The job stores `directionId`; jobs in different directions run side by side, and only a newer job **in the same direction** makes one stale. `listRecommendations` merges the newest succeeded pool per visible direction (top 2 each, after variety) with the general pool (top 2 when directions exist, otherwise the usual 12).
+- `SearchOrigin.source` adds `"direction"` with optional `directionId`. `RecommendationsView` adds optional `searchPools: { jobId, directionId?, query, found, removedByClues, foldedDuplicates, shown }[]`, so "Why this gift?" can show what each search did.
+- **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
+- **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.
+
+#### Passes the council reacts to (D23 trial)
+
+- **Reasons.** `votes.castVote` and `mapSignals.setDirection` accept optional `reason: "style" | "price" | "has_similar" | "vibe"` on a pass ("not her style", "too pricey", "she has something like it", "wrong vibe"). Stored on the vote/signal row; ignored on pulls. Skipping the reason is still a pass.
+- **Retiring.** A direction is retired (`mapDirections.retiredAt`, never deleted) when the room has let the direction go (`fadeOf` = gone) or let `GIFT_PASSES_TO_RETIRE` (2) of the gifts its newest search found go. Retired directions leave `agents.directions.list` and the catalog; their search, reasons and history stay in the decision log.
+- **Replacement.** Retiring schedules `internal.agents.directions.replace`: one new direction beside the others (`replaces` links them), drafted with the same model/preset path and checks, told which directions the room passed on and why ("too pricey" asks for a simpler or smaller gift). It never deletes or resets other directions and starts no trend lookup.
+- **Pulls.** A direction pulled in (more pulls than passes) shows 3 gifts instead of 2. `listRecommendations` is ordered by the room's net gift votes, then score: pulled gifts lead and passed ones trail. Scores and citations are unchanged; the map keeps this server order.
+- The retirement and the replacement each write one council line to the decision log, which also reaches every member's status line for 15 seconds.
+
+#### Decision log — "How we got here" (D23 trial)
+
+```ts
+interface TrailEntry {
+  _id: string;
+  at: number;
+  stage: "memories" | "council" | "steering" | "search" | "choice" | "money";
+  actor: "council" | "checks" | "trends" | "search" | "person";
+  participantId?: string; who?: string;     // set for "person"
+  outcome: "kept" | "rejected" | "info";    // "rejected": a check threw it out, or a friend passed
+  text: string;                             // one plain sentence, ≤ 280 chars
+  directionId?: string; listingId?: string; clueIds?: string[];
+}
+```
+
+- `trail.list({ roomId })` → `Result<TrailEntry[]>`, membership-checked, oldest first, last 300.
+- Append-only `roomTrail` table, written inside the steps themselves: how memories were read as search words; each direction the council kept (with its why and search) and each one the checks threw out (with the reason); the probe question; each Google Trends screen result (seen vs kept); each search's outcome (results, kept, dropped, failures); pulls/passes on directions and gifts, caught/dropped trend clouds, question answers, "she already has it"; who put what in the box; approvals with the **room-visible share** and total, and the "everyone approved — simulated" line.
+- **Privacy:** only room-visible facts. Never raw imports, unpublished guesses, recipient-private data or anyone's contribution maximum. Logging never blocks or changes a decision. Purged with the room.
+- The map opens it from the box's "Why this gift?", a gift's ⋯ menu, and the council menu; lines on the chosen gift's path (same listing, direction or cited memories) are highlighted.
+
+
+### Live group question votes and additive gift-box actions
+
+Alex requested changeable group question votes, vote-driven ranking and multiple
+selected gifts in the map UI. Owners: Dev 4 implementation; Dev 1 consumes the
+map controls, Dev 2 reviews membership/selection and Dev 3 consumes questions.
+
+`mapSharpens.ballots?` is an additive array of `{participantId, option, updatedAt}`
+with at most one ballot per member and 2,000 ballots per question. Old rows remain
+valid and room purge already deletes the parent. `questionPolls.state({roomId})`
+returns the latest non-dismissed question's ID, live option counts, own option,
+member/voter counts, leader (null on tie), open/closed/stale status and canFinish.
+`questionPolls.vote({questionId, option: number | null})` records, changes or
+withdraws the caller's own vote; it rejects nonmembers, stale, superseded or
+closed questions and invalid options. Voting never publishes a clue, changes
+money, or changes the explicit listing votes table. Organizer-only
+`questionPolls.finish({questionId})` closes a current poll with a unique leader;
+ties remain open or can be skipped through the existing dismissal operation.
+Existing answerSharpen remains for compatibility; the live map uses poll votes.
+
+Research ordering applies direct gift votes, then question support, then existing
+relevance/deterministic tie order BEFORE truncating a pool. Question support is
+an advisory signal from explicitly linked product IDs or literal product-title
+matches to an option; it is not a recipient fact or a new evidence citation.
+Ownership, exclusion, invalid-listing and availability filters remain authoritative.
+A question's signals apply only at its current knowledge revision. Existing
+selected products remain available in the room projection across searches.
+
+`proposals.addGiftToBox({roomId, listingId})` atomically appends one distinct gift
+and is idempotent. `removeGiftFromBox` removes only that gift, clearing when empty.
+Both are organizer-only, preserve the 12-item bound and payment locks, and use
+existing proposal recomputation/approval invalidation. `setGiftBox` remains full
+replacement; `selectGift` remains legacy replace-with-one. The live map now uses
+add/remove, presents Add to box as a primary action and renders every item and
+the combined proposal estimate. Votes never select gifts or approve a proposal.
 
 ### Room guidance (Dev 1 presentation contract)
 

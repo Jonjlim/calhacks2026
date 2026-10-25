@@ -5,12 +5,13 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { AVATAR_WORLD_SCALE, type AvatarId, StorybookAvatar } from "@/components/characters/StorybookAvatar";
-import { BOX_DROP_RADIUS, dragResult, RING_RADII, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
+import { BOX_DROP_RADIUS, dragResult, RING_RADII, ringPoint, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
+import type { TwinEvaluation } from "@/lib/map/giftTwin";
 import { portraitUrl } from "@/lib/room/avatars";
 import { IslandMesh } from "../FloatingIsland";
 import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
 import { GIFT_SPOT } from "../sceneConfig";
-import type { IslandShape } from "../terrain";
+import type { IslandPalette, IslandShape } from "../terrain";
 import { Jar } from "./TowerInterior";
 import { MapIcon, type MapIconName } from "./MapIcon";
 import { mapCursor, type MapCursorMode } from "./mapCursor";
@@ -22,6 +23,12 @@ import { useRings } from "./ringsStore";
 import { PledgeRing, type PledgeWorld } from "./PledgeRing";
 import { StylizedTree } from "../props/Flora";
 import { platformTop } from "../props/Stonework";
+import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
+import { MagicTrail } from "./MagicTrail";
+import { WeaveThread, type WeaveMode } from "./WeaveThread";
+import { buildBody } from "../convergence/GiftConvergence";
+import { paint } from "../painterly/materials";
+import { LOOKS, lookFor, NOTE_SHAPE, ThemeIcon, ThemeScenery } from "./ThemeScenery";
 import s from "./gift-rings.module.css";
 
 /**
@@ -59,7 +66,7 @@ export interface RingGuideScene {
 
 export interface RingsWorld {
   guideScene?: RingGuideScene | null;
-  clues: { key: string; text: string; author: string; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
+  clues: { key: string; text: string; author: string; agent?: boolean; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
   /** Photos members added, shared with the whole room (D20). The uploader also sees what the private read found. */
   photos?: { key: string; images: string[]; author: string; mine: boolean; found: number; reading: boolean; x: number; z: number }[];
   /** Council themes, or the three clue groups until the council has grouped them. */
@@ -68,7 +75,13 @@ export interface RingsWorld {
   openTheme?: string | null;
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
   /** Friends' gift ideas and sourced trend suggestions. `tag` replaces the "gift idea" caption; `faded` after someone passed. */
-  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean }[];
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean; direction?: boolean; agent?: boolean }[];
+  /**
+   * The council's weave (D23 trial), by node key: links it is weighing ("reach"), links each new
+   * direction combines ("kept"), and links a refused idea cited ("frayed", with the checks' reason).
+   * `id` changes for each weave so every thread grows again from the start.
+   */
+  weave?: { id: number; threads: { from: string; to: string; mode: WeaveMode; targets?: string[]; label?: string; delay?: number }[] } | null;
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -78,6 +91,8 @@ export interface RingsWorld {
   nextStep?: { icon: MapIconName; label: string; disabled?: boolean; run?(): void } | null;
   /** Votes on memories and themes, by node key. */
   votes?: Readonly<Record<string, { up: number; down: number }>>;
+  /** AI evaluations never enter participant vote totals or approval counts. */
+  evaluations?: Readonly<Record<string, TwinEvaluation[]>>;
   /** Another member just voted on this node: a short bubble with their name. */
   pulses?: Readonly<Record<string, { name: string; value: number; color: string }>>;
   /** Other members' pointers on the map plane. */
@@ -87,11 +102,14 @@ export interface RingsWorld {
   /** The viewer's pointer on the map plane, for their own live cursor. */
   onPointer?(x: number, z: number): void;
   selectedListingId?: string;
+  selectedListingIds?: string[];
   boxLabel: string;
   /** Everyone's share of the current revision, drawn above the present. */
   pledge?: PledgeWorld | null;
   /** Shares, limits and approvals, opened beside the present when the box is selected. */
   boxPanel?: ReactNode | null;
+  /** Opens the Book of Possibilities (every researched gift), optionally at one gift. */
+  onOpenBook?(listingId?: string): void;
   selectedKey: string | null;
   /** “Why this?”: keys on the path to the chosen gift. Everything else dims. */
   highlight?: ReadonlySet<string> | null;
@@ -189,13 +207,13 @@ function revealScale(arrive: number | undefined): number {
   return convergence.leaving ? gone + (1 - gone) * smooth(span(convergence.exit, 0.2, 1.2)) : gone;
 }
 
-function RingIsland({ at, kind, delay, animate, muted, size = 1, arrive, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; size?: number; arrive?: () => number | undefined; children?: ReactNode }) {
+function RingIsland({ at, kind, delay, animate, muted, size = 1, arrive, shape, palette: paletteOverride, body, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; size?: number; arrive?: () => number | undefined; shape?: IslandShape; palette?: IslandPalette; /** Replaces the island itself (a memory is a small floating object, not a rock). */ body?: ReactNode; children?: ReactNode }) {
   const group = useRef<THREE.Group>(null);
   // Set once: passing a fresh position on every render would snap the island back to its entrance spot each time.
   const start = useMemo(() => at.clone().setY(at.y - 3), []); // eslint-disable-line react-hooks/exhaustive-deps
   const born = useRef(-1);
   const scale = useRef(size);
-  const palette = kind === "theme" ? MID_PALETTE : FAR_PALETTE;
+  const palette = paletteOverride ?? (kind === "theme" ? MID_PALETTE : FAR_PALETTE);
   useFrame(({ clock }, dt) => {
     const g = group.current;
     if (!g) return;
@@ -212,7 +230,7 @@ function RingIsland({ at, kind, delay, animate, muted, size = 1, arrive, childre
   });
   return (
     <group ref={group} position={start}>
-      <IslandMesh shape={SHAPES[kind]} palette={palette} detail={DETAIL} />
+      {body ?? <IslandMesh shape={shape ?? SHAPES[kind]} palette={palette} detail={DETAIL} />}
       {children}
     </group>
   );
@@ -243,71 +261,132 @@ function MossCompanion({ scene, animate, center }: { scene: RingGuideScene; anim
  */
 const LAYER = { back: [12, 0], front: [30, 13], lift: [48, 41], hover: [56, 49], open: [64, 57] } as const;
 
-function Token({ k, rings, from, drag, face, peek, label, offset, dim, recede, lift, back, above }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; peek?: ReactNode; label: string; offset: [number, number, number]; dim: boolean; recede?: boolean; lift?: boolean; back?: boolean; above?: ReactNode }) {
+/** One memory, drawn as what it is: a folded note, a wish star or a keepsake charm, floating on a wisp of cloud, tinted by its theme. */
+function MemoryNote({ shape, color, animate }: { shape: "heart" | "note" | "star" | "charm"; color: string; animate: boolean }) {
+  const body = useMemo(() => buildBody(shape, color), [shape, color]);
+  const spin = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const g = spin.current;
+    if (!g || !animate) return;
+    g.rotation.y = clock.elapsedTime * 0.45 + color.length;
+    g.rotation.z = Math.sin(clock.elapsedTime * 0.8 + color.charCodeAt(1)) * 0.14;
+    g.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.1 + color.charCodeAt(2)) * 0.12;
+  });
+  return (
+    <group>
+      <group ref={spin} position={[0, 1.0, 0]} scale={4.4}>
+        <primitive object={body} />
+      </group>
+    </group>
+  );
+}
+
+function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; label: string; offset: [number, number, number]; dim: boolean; /** Sits on top of its island and grows and shrinks with the zoom. */ onTop?: boolean;
+  /** Quiet-map props from older callers; Ally's parchment menu doesn't use them. */ peek?: ReactNode; recede?: boolean; lift?: boolean; back?: boolean; above?: ReactNode }) {
   const selected = rings.selectedKey === k;
   const info = selected ? rings.actionsFor(k) : null;
+  // Three layers of floating content (memories, themes, gifts): only one is emphasized at a time. In the overview it is the themes; in a branch
+  // the focus itself decides, so the layers that are not in play step back.
+  const layer = k === "box" ? "box" : k.startsWith("theme:") ? "theme" : k.startsWith("gift:") || k.startsWith("idea:") ? "gift" : "memory";
+  const emphasized = rings.selectedKey ? (rings.selectedKey.startsWith("gift:") ? "gift" : "memory") : "theme";
+  const recede = !rings.highlight && layer !== "box" && layer !== emphasized;
   const votes = rings.votes?.[k];
   const pulse = rings.pulses?.[k];
-  const [hover, setHover] = useState(false);
-  const [more, setMore] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!selected) setMore(false);
-    setHover(false);
-  }, [selected]);
-  // A node that moves or re-renders under a still pointer can miss its leave event; any move elsewhere clears the preview.
-  useEffect(() => {
-    if (!hover) return;
-    const away = (e: PointerEvent) => { if (!root.current?.contains(e.target as Node)) setHover(false); };
-    window.addEventListener("pointermove", away);
-    return () => window.removeEventListener("pointermove", away);
-  }, [hover]);
-  const main = info?.actions.filter((a) => !a.more) ?? [];
-  const extra = info?.actions.filter((a) => a.more) ?? [];
+  const cls = `${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`;
+  const enter = () => mapCursor.set("node");
+  const leave = () => mapCursor.set("memory");
+  if (onTop) {
+    // The icon rides on the island and scales with the camera (small when zoomed out, large up close); its menu stays one readable size.
+    return (
+      <>
+        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={24} zIndexRange={selected ? [60, 50] : [20, 0]}>
+          <div data-map-token className={cls} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
+          <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
+            onPointerDown={(e) => drag.begin(k, from, e)}
+            onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
+            {face}
+          </button>
+          {votes && (votes.up > 0 || votes.down > 0) && (
+            <span className={s.voteChips} aria-label={`${votes.up} feel it, ${votes.down} not really`}>
+              {votes.up > 0 && <i className={s.yes}>♥ {votes.up}</i>}
+              {votes.down > 0 && <i className={s.pass}>✕ {votes.down}</i>}
+            </span>
+          )}
+          {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
+          </div>
+        </Html>
+        {info && (
+          <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>
+            <div data-map-token className={cls} style={{ marginTop: 470 }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
+        {info && (
+          <div className={s.menu} role="dialog" aria-label={label}>
+            <button type="button" className={s.menuClose} onClick={() => rings.onSelect(null)} aria-label="Close">×</button>
+            <div className={s.caption}>{info.caption}</div>
+            {rings.evaluations?.[k]?.map((evaluation) => <div key={evaluation.id} className={`${s.agentRationale} ${evaluation.vote === "up" ? s.agentSupport : s.agentPass}`}>
+              <strong><MapIcon name="twin" size={14} />{evaluation.author} · AI evaluation · {evaluation.vote === "up" ? "Supports" : "Doesn’t fit"}</strong>
+              <span>{evaluation.text}</span>
+              <small>Advisory · separate from your votes and approvals</small>
+            </div>)}
+            {info.note && <div className={s.note}><MapIcon name="thread" size={14} />{info.note}</div>}
+            {info.actions.length > 0 && (
+              <div className={s.actions}>
+                {info.actions.map((a, i) => (
+                  <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.act} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
+                    <span aria-hidden className={s.actIcon}><MapIcon name={a.icon} size={18} /></span>
+                    <small>{a.label}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+            </div>
+          </Html>
+        )}
+      </>
+    );
+  }
   return (
-    <Html position={offset} center zIndexRange={[...(selected ? LAYER.open : hover ? LAYER.hover : lift ? LAYER.lift : back ? LAYER.back : LAYER.front)]}>
-      <div ref={root} data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${recede && !hover ? s.recede : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
-        onPointerEnter={() => { mapCursor.set("node"); setHover(true); }} onPointerLeave={() => { mapCursor.set("memory"); setHover(false); }}>
-        {!selected && hover && peek && <span className={`${s.peek} ${s.cloud}`} role="tooltip">{peek}<i className={s.trailDown} aria-hidden /></span>}
-        {above}
+    <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
+      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+        onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
         <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
           onPointerDown={(e) => drag.begin(k, from, e)}
           onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
           {face}
         </button>
+        {rings.evaluations?.[k]?.length ? <span className={s.agentVotes}>
+          {rings.evaluations[k].map((evaluation) => <button key={evaluation.id} type="button" className={`${s.agentVote} ${evaluation.vote === "up" ? s.agentSupport : s.agentPass}`} title={`${evaluation.author}: ${evaluation.text}`} onClick={() => rings.onSelect(selected ? null : k)}>
+            <MapIcon name="twin" size={12} /><MapIcon name={evaluation.vote === "up" ? "check" : "drift"} size={12} />{evaluation.author} · {evaluation.vote === "up" ? "Supports" : "Doesn’t fit"}
+          </button>)}
+        </span> : null}
         {votes && (votes.up > 0 || votes.down > 0) && (
           <span className={s.voteChips} aria-label={`${votes.up} feel it, ${votes.down} not really`}>
             {votes.up > 0 && <i className={s.yes}><MapIcon name="heart" size={10} />{votes.up}</i>}
             {votes.down > 0 && <i className={s.pass}><MapIcon name="drift" size={10} />{votes.down}</i>}
           </span>
         )}
-        {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}><MapIcon name={pulse.value > 0 ? "heart" : "drift"} size={12} />{pulse.name} {pulse.value > 0 ? "feels it’s her" : "isn’t sure"}</span>}
+        {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
         {info && (
-          <div className={s.detail} onWheel={(e) => e.stopPropagation()}>
-            <span className={s.tether} aria-hidden />
-            <div className={`${s.detailCard} ${s.cloud}`}>{info.caption}</div>
-            {(main.length > 0 || extra.length > 0) && (
-              <div className={s.pills}>
-                {main.map((a, i) => (
-                  <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.pill} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
-                    <MapIcon name={a.icon} size={14} />{a.label}
-                  </button>
-                ))}
-                {extra.length > 0 && (
-                  <button type="button" style={{ ["--i" as string]: main.length }} className={s.pill} aria-expanded={more} aria-label="More" onClick={() => setMore((m) => !m)}><span className={s.dots} aria-hidden><i /><i /><i /></span></button>
-                )}
-              </div>
-            )}
-            {more && (
-              <div className={s.moreList}>
-                {extra.map((a) => (
-                  <button key={a.label} type="button" aria-pressed={a.on} disabled={a.disabled} onClick={() => { setMore(false); a.run(); }}>
-                    <MapIcon name={a.icon} size={15} />{a.label}
+          <div className={s.menu} role="dialog" aria-label={label}>
+            <button type="button" className={s.menuClose} onClick={() => rings.onSelect(null)} aria-label="Close">×</button>
+            <div className={s.caption}>{info.caption}</div>
+            {rings.evaluations?.[k]?.map((evaluation) => <div key={evaluation.id} className={`${s.agentRationale} ${evaluation.vote === "up" ? s.agentSupport : s.agentPass}`}>
+              <strong><MapIcon name="twin" size={14} />{evaluation.author} · AI evaluation · {evaluation.vote === "up" ? "Supports" : "Doesn’t fit"}</strong>
+              <span>{evaluation.text}</span>
+              <small>Advisory · separate from your votes and approvals</small>
+            </div>)}
+            {info.note && <div className={s.note}><MapIcon name="thread" size={14} />{info.note}</div>}
+            {info.actions.length > 0 && (
+              <div className={s.actions}>
+                {info.actions.map((a, i) => (
+                  <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.act} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
+                    <span aria-hidden className={s.actIcon}><MapIcon name={a.icon} size={18} /></span>
+                    <small>{a.label}</small>
                   </button>
                 ))}
               </div>
             )}
-            {info.note && <p className={`${s.note} ${s.cloud}`}><MapIcon name="thread" size={14} />{info.note}</p>}
           </div>
         )}
       </div>
@@ -342,7 +421,10 @@ function useMapNavigation(center: THREE.Vector3) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const gl = useThree((st) => st.gl);
   const size = useThree((st) => st.size);
-  const pan = useRef<{ id: number; x: number; y: number; moved: boolean; orbit: boolean } | null>(null);
+  // One finger or the left button orbits; the right or middle button, or Shift / Ctrl / Alt with the left, pans. Two fingers pinch to zoom.
+  const pan = useRef<{ id: number; x: number; y: number; moved: boolean; mode: "orbit" | "pan" } | null>(null);
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef(0);
   useEffect(() => {
     mapView.reset(true);
     return () => mapView.reset(true);
@@ -350,6 +432,16 @@ function useMapNavigation(center: THREE.Vector3) {
   useEffect(() => {
     const worldPerPixel = () => (2 * camera.position.distanceTo(center) * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, size.height);
     const move = (e: PointerEvent) => {
+      if (e.pointerType === "touch" && touches.current.has(e.pointerId)) {
+        touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (touches.current.size === 2) {
+          const [a, b] = [...touches.current.values()];
+          const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+          if (pinch.current > 0 && d > 0) mapView.zoomBy(pinch.current / d);
+          pinch.current = d;
+          return;
+        }
+      }
       const p = pan.current;
       if (!p || e.pointerId !== p.id) return;
       // A click wobbles a pixel or two; only a real drag moves the map.
@@ -359,24 +451,30 @@ function useMapNavigation(center: THREE.Vector3) {
         mapView.dragging = true;
         mapCursor.set("pan");
       }
-      if (p.orbit) {
-        // Grab the world and turn it: right turns it right, down tips its far side up.
-        mapView.orbit(-(e.clientX - p.x) * 0.006, (e.clientY - p.y) * 0.004);
+      const dx = e.clientX - p.x;
+      const dy = e.clientY - p.y;
+      if (p.mode === "orbit") {
+        // Dragging right swings the camera round to the left (the world follows the finger); dragging down looks more from above.
+        mapView.orbit(-dx * 0.0058, dy * 0.0042);
       } else {
         const k = worldPerPixel();
         // Screen-down is toward the viewer on the tilted map, which is foreshortened.
-        mapView.pan(-(e.clientX - p.x) * k, -(e.clientY - p.y) * k * 1.3);
+        mapView.panScreen(-dx * k, dy * k * 1.3);
       }
       p.x = e.clientX;
       p.y = e.clientY;
     };
     const up = (e: PointerEvent) => {
+      touches.current.delete(e.pointerId);
+      if (touches.current.size < 2) pinch.current = 0;
       if (pan.current?.id !== e.pointerId) return;
       if (pan.current.moved) mapCursor.set("memory");
       pan.current = null;
       mapView.dragging = false;
     };
     const wrapper = gl.domElement.parentElement ?? gl.domElement;
+    const noMenu = (e: Event) => e.preventDefault();
+    wrapper.addEventListener("contextmenu", noMenu);
     const wheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement | null)?.closest?.("textarea")) return;
       e.preventDefault();
@@ -389,21 +487,29 @@ function useMapNavigation(center: THREE.Vector3) {
       } else {
         // Two fingers on a trackpad: move around, like the sky is being slid.
         const k = worldPerPixel();
-        mapView.pan(e.deltaX * k, e.deltaY * k * 1.3);
+        mapView.panScreen(e.deltaX * k, -e.deltaY * k * 1.3);
       }
     };
+    // Keyboard alternatives for everything the mouse does: arrows pan, Shift + arrows (or Q / E) orbit and tilt, + / - zoom, 0 returns to the overview.
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const step = 3;
-      if (e.key === "ArrowLeft") mapView.pan(-step, 0);
-      else if (e.key === "ArrowRight") mapView.pan(step, 0);
-      else if (e.key === "ArrowUp") mapView.pan(0, -step);
-      else if (e.key === "ArrowDown") mapView.pan(0, step);
+      const turn = 0.18;
+      if (e.shiftKey && e.key === "ArrowLeft") mapView.orbit(turn, 0);
+      else if (e.shiftKey && e.key === "ArrowRight") mapView.orbit(-turn, 0);
+      else if (e.shiftKey && e.key === "ArrowUp") mapView.orbit(0, turn * 0.7);
+      else if (e.shiftKey && e.key === "ArrowDown") mapView.orbit(0, -turn * 0.7);
+      else if (e.key === "q" || e.key === "Q") mapView.orbit(turn, 0);
+      else if (e.key === "e" || e.key === "E") mapView.orbit(-turn, 0);
+      else if (e.key === "ArrowLeft") mapView.panScreen(-step, 0);
+      else if (e.key === "ArrowRight") mapView.panScreen(step, 0);
+      else if (e.key === "ArrowUp") mapView.panScreen(0, step);
+      else if (e.key === "ArrowDown") mapView.panScreen(0, -step);
       else if (e.key === "+" || e.key === "=") mapView.zoomBy(0.85);
       else if (e.key === "-" || e.key === "_") mapView.zoomBy(1 / 0.85);
-      else if (e.key === "q" || e.key === "Q") mapView.orbit(0.2, 0);
-      else if (e.key === "e" || e.key === "E") mapView.orbit(-0.2, 0);
+      else if (e.key === "1" || e.key === "2" || e.key === "3") mapView.preset(Number(e.key) as 1 | 2 | 3);
       else if (e.key === "0") mapView.reset();
       else return;
       e.preventDefault();
@@ -423,18 +529,29 @@ function useMapNavigation(center: THREE.Vector3) {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       wrapper.removeEventListener("wheel", wheel);
-      wrapper.removeEventListener("contextmenu", menu);
+      wrapper.removeEventListener("contextmenu", noMenu);
       window.removeEventListener("keydown", key);
       mapView.dragging = false;
     };
   }, [camera, gl, size.height, center]);
   return {
     start(e: ThreeEvent<PointerEvent>) {
-      const { button, shiftKey, pointerId, clientX, clientY } = e.nativeEvent;
-      if ((button !== 0 && button !== 2) || mapView.locked) return;
-      e.nativeEvent.preventDefault();
+      const n = e.nativeEvent;
+      if (mapView.locked) return;
+      if (n.pointerType === "touch") {
+        touches.current.set(n.pointerId, { x: n.clientX, y: n.clientY });
+        if (touches.current.size === 2) {
+          const [a, b] = [...touches.current.values()];
+          pinch.current = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+          pan.current = null;
+          return;
+        }
+      }
+      if (n.button > 2) return;
+      n.preventDefault();
       window.getSelection()?.removeAllRanges();
-      pan.current = { id: pointerId, x: clientX, y: clientY, moved: false, orbit: button === 0 && !shiftKey };
+      const panning = n.button === 1 || n.button === 2 || n.shiftKey || n.ctrlKey || n.altKey;
+      pan.current = { id: n.pointerId, x: n.clientX, y: n.clientY, moved: false, mode: panning ? "pan" : "orbit" };
     },
   };
 }
@@ -484,7 +601,7 @@ function ZoneBands({ center, hover }: { center: THREE.Vector3; hover: RingZone |
  * theme with that memory selected. Part of the theme's own label, so the
  * cloud can never cover them.
  */
-function MemoryDots({ clues, onPick }: { clues: RingsWorld["clues"]; onPick(key: string): void }) {
+function MemoryDots({ clues, onPick, evaluations }: { clues: RingsWorld["clues"]; onPick(key: string): void; evaluations: RingsWorld["evaluations"] }) {
   const [hover, setHover] = useState<string | null>(null);
   const root = useRef<HTMLSpanElement>(null);
   // Clear the preview whenever the pointer is anywhere else, even if the dots moved or re-rendered under it.
@@ -501,10 +618,11 @@ function MemoryDots({ clues, onPick }: { clues: RingsWorld["clues"]; onPick(key:
     <span ref={root} className={s.perch} onPointerLeave={() => setHover(null)}>
       {peek && <span className={`${s.peek} ${s.cloud}`} role="tooltip"><q>{peek.text}</q><small>{peek.author}{peek.fromPhoto ? " · from a photo" : ""}</small><i className={s.trailDown} aria-hidden /></span>}
       {shown.map((c) => (
-        <button key={c.key} type="button" className={s.dotFace} style={{ ["--who" as string]: c.color }} aria-label={`${c.author}'s memory: ${c.text}`}
+        <button key={c.key} type="button" className={`${s.dotFace} ${c.agent ? s.twinDot : ""}`} style={{ ["--who" as string]: c.color }} aria-label={`${c.author}${c.agent ? " · AI insight" : "’s memory"}: ${c.text}`}
           onPointerEnter={() => setHover(c.key)} onFocus={() => setHover(c.key)} onBlur={() => setHover(null)}
           onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setHover(null); onPick(c.key); }}>
-          <img src={c.photo ?? portraitUrl(c.avatar)} alt="" />
+          {c.agent ? <MapIcon name="twin" size={19} /> : <img src={c.photo ?? portraitUrl(c.avatar)} alt="" />}
+          {evaluations?.[c.key]?.length ? <span className={`${s.dotEvaluation} ${evaluations[c.key]!.some((e) => e.vote === "down") ? s.agentPass : s.agentSupport}`} aria-label="Has Gift Twin evaluation"><MapIcon name={evaluations[c.key]!.some((e) => e.vote === "down") ? "drift" : "check"} size={10} /></span> : null}
         </button>
       ))}
       {clues.length > shown.length && <span className={s.perchMore}>+{clues.length - shown.length}</span>}
@@ -607,6 +725,22 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     [openT?.theme, openT?.x, openT?.z, rings.clues.map((c) => c.key + c.theme).join()],
   );
   const open = (c: RingsWorld["clues"][number]) => close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
+  /** Where a node is drawn right now, for threads that join nodes (the weave). */
+  const anchorOf = (key: string): [number, number] | null => {
+    const c = rings.clues.find((x) => x.key === key);
+    if (c) return open(c) ? place(c.key, ...(fan.get(c.key) ?? [c.x, c.z])) : themeAt.get(c.theme) ?? [c.x, c.z];
+    const idea = rings.ideas.find((x) => x.key === key);
+    return idea ? place(idea.key, idea.x, idea.z) : null;
+  };
+  const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
+  // Never more than three gift candidates are prominent at once: the top ranked overall, or the best of the focused branch, plus the chosen one.
+  // The rest stay in the room's data and in the Book of Possibilities; here they are summed up in one marker.
+  const rankedGifts = rings.gifts.filter((g) => !g.hidden || g.listingId === rings.selectedListingId).sort((a, b) => a.rank - b.rank);
+  const pool = rings.highlight ? rankedGifts.filter((g) => rings.highlight!.has(g.key)) : rankedGifts;
+  const shownGifts = pool.slice(0, 3);
+  const chosen = rankedGifts.find((g) => g.listingId === rings.selectedListingId);
+  if (chosen && !shownGifts.includes(chosen)) shownGifts.push(chosen);
+  const hiddenGifts = rings.gifts.length - shownGifts.length;
 
   // A theme island empties once every memory in it has flown into the box.
   const themeGone = (theme: string) => {
@@ -645,15 +779,25 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const [x, z] = place(c.key, seat[0], seat[1]);
         return (
           <group key={c.key}>
-            {t && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
-            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.04} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)}>
-              <Suspense fallback={null}>
-                <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
-              </Suspense>
-              <Token k={c.key} rings={rings} from={seat} drag={drag} dim={dim(c.key)} lift={rings.openTheme === c.theme} recede={recede(c.key) && rings.openTheme !== c.theme} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory: ${c.text}`}
-                face={<span className={`${s.bubble} ${s.cloud}`} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q><i className={s.trail} aria-hidden />{c.fromPhoto && <i className={s.photoBadge} title="From a photo"><MapIcon name="camera" size={12} /></i>}</span>} />
+            {t && !revealing && lit(c.key) && lit(`theme:${c.theme}`) && <MagicTrail start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, 2.4)} color={c.tint} strong={rings.selectedKey === c.key} />}
+            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)} body={<MemoryNote shape={NOTE_SHAPE[rings.themes.find((th) => th.theme === c.theme)?.jar ?? "interest"]} color={c.tint} animate={animate} />}>
+              <Token k={c.key} rings={rings} from={seat} drag={drag} dim={dim(c.key)} lift={rings.openTheme === c.theme} recede={recede(c.key) && rings.openTheme !== c.theme} offset={[0, -0.6, 2.2]} label={`${c.author}${c.agent ? " · AI insight" : "’s memory"}: ${c.text}`}
+                face={<span className={`${s.bubble} ${s.cloud} ${c.agent ? s.twinCloud : ""}`} style={{ ["--c" as string]: c.tint }}>{c.agent ? <i className={s.twinMark}><MapIcon name="twin" size={20} /></i> : c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<span>{c.agent && <small className={s.twinByline}>{c.author} · AI insight</small>}<q>{c.text}</q></span><i className={s.trail} aria-hidden />{c.fromPhoto && <i className={s.photoBadge} title="From a photo"><MapIcon name="camera" size={12} /></i>}</span>} />
             </RingIsland>
           </group>
+        );
+      })}
+
+      {/* A faint thread from every theme island to the present: the one quiet reminder that they all belong to the same gift. */}
+      {!revealing && rings.themes.map((t) => {
+        const [x, z] = place(t.key, t.x, t.z);
+        const len = Math.hypot(x, z) || 1;
+        // Ends at the edge of the main island, not in the middle of it; sags a little below the straight line.
+        const ex = (x / len) * 5.4;
+        const ez = (z / len) * 5.4;
+        const focused = !!rings.highlight && rings.highlight.has(t.key);
+        return (
+          <QuadraticBezierLine key={`thread:${t.key}`} start={world(x, z, 0.5)} end={world(ex, ez, 0.2)} mid={world((x + ex) / 2, (z + ez) / 2, -1.3)} color="#a98aa6" lineWidth={focused ? 2.4 : 1.8} dashed dashSize={0.5} gapSize={0.45} transparent opacity={rings.highlight && !focused ? 0.15 : 0.6} />
         );
       })}
 
@@ -662,35 +806,28 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const note = researchNote(t.research);
         const isOpen = rings.openTheme === t.theme;
         return (
-          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)}>
+          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)} shape={LOOKS[lookFor(t.label, t.jar)].shape} palette={LOOKS[lookFor(t.label, t.jar)].palette}>
+            <ThemeScenery look={lookFor(t.label, t.jar)} animate={animate} />
             <Jar kind={t.jar} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
-            <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} recede={recede(t.key) && !isOpen} back offset={[0, 0.2, 0.6]} label={`${t.label} theme, ${t.count} shared`}
-              above={<MemoryDots clues={rings.clues.filter((c) => c.theme === t.theme && !open(c))} onPick={(key) => rings.onSelect(key)} />}
-              face={
-                <span className={`${s.theme} ${s.cloud} ${isOpen ? s.themeOpen : ""}`} style={{ ["--c" as string]: t.tint }}>
-                  {t.research === "running" && <i className={s.spinner} aria-hidden />}
-                  <b>{t.label}</b>
-                  <small className={s.themeCount}>{t.count} {t.count === 1 ? "memory" : "memories"}</small>
-                  {note && <em className={t.research === "failed" ? s.researchFailed : s.researchNote}>{note}</em>}
-                </span>
-              } />
+            <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} offset={[0, -0.8, 3]} label={`${t.label} theme`}
+              above={<MemoryDots clues={rings.clues.filter((c) => c.theme === t.theme && !open(c))} onPick={(key) => rings.onSelect(key)} evaluations={rings.evaluations} />}
+              face={<span className={s.theme} style={{ ["--c" as string]: t.tint }}>{t.research === "running" && <i className={s.spinner} aria-hidden />}<span className={s.themeIcon} aria-hidden><ThemeIcon look={lookFor(t.label, t.jar)} /></span><b>{t.label}</b><small>{t.count} {t.count === 1 ? "clue" : "clues"}</small>{researchNote(t.research) && <em className={t.research === "failed" ? s.researchFailed : s.researchNote}>{researchNote(t.research)}</em>}</span>} />
           </RingIsland>
         );
       })}
 
-      {gifts.map((g, i) => {
+      {shownGifts.map((g, i) => {
         const [x, z] = place(g.key, g.x, g.z);
         return (
           <group key={g.key}>
             {g.themes.map((theme) => {
               const t = themeAt.get(theme);
-              return t && !revealing ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : focus && focus !== g.key ? 0.35 : 0.75} /> : null;
+              return t && !revealing && lit(g.key) && lit(`theme:${theme}`) ? <MagicTrail key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, 2.4)} color="#f2c46d" strong={rings.selectedKey === g.key} /> : null;
             })}
-            {rings.selectedListingId === g.listingId && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
+            {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <MagicTrail start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, 2.2)} color="#ffd98a" strong />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
-              <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} recede={recede(g.key)} offset={[0, -0.4, 2.2]} label={`${g.title}, ${g.price}`}
-                peek={<><b>{g.title}</b><small>{g.price}{g.fixture ? " · sample" : ""}</small></>}
-                face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden><MapIcon name="present" size={26} /></i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}><MapIcon name="heart" size={10} />{g.up}</i>}{g.down > 0 && <i className={s.pass}><MapIcon name="drift" size={10} />{g.down}</i>}</span>}</span>} />
+              <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} onTop offset={[0, -0.4, 2.2]} label={g.title}
+                face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={26} /></i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
             </RingIsland>
           </group>
         );
@@ -704,18 +841,37 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         </Html>
       )}
 
-      {(rings.photos ?? []).map((ph, i) => {
-        const shown = rings.selectedKey === ph.key || close;
-        return (
-          <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate} size={shown ? 1 : 0.6}>
-            <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} recede={recede(ph.key)} offset={[0, -0.4, 2.4]} label={`${ph.author}'s photo`}
-              peek={shown ? undefined : <><b>{ph.mine ? "Your photo" : `${ph.author}’s photo`}</b><small>{ph.mine ? (ph.reading ? "reading privately…" : ph.found ? `${ph.found} guesses to review` : "everyone sees it") : "shared with the room"}</small></>}
-              face={shown
-                ? <span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden><MapIcon name="camera" size={30} /></i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>
-                : <span className={s.photoDot}>{ph.images[0] ? <img src={ph.images[0]} alt="" /> : <i aria-hidden><MapIcon name="camera" size={18} /></i>}{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
-          </RingIsland>
-        );
-      })}
+      {hiddenGifts > 0 && rings.onOpenBook && (
+        <Html position={world(6.2, 9.4, 0.4)} center zIndexRange={[24, 10]}>
+          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label={`${hiddenGifts} more researched gifts in the Book of Possibilities`}>
+            <b>+{hiddenGifts}</b> more in the book
+          </button>
+        </Html>
+      )}
+
+      {(rings.photos ?? []).map((ph, i) => (
+        <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate}>
+          <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label={`${ph.author}'s photo`}
+            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden><CameraIcon size={22} /></i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
+        </RingIsland>
+      ))}
+
+      {rings.weave && !revealing && (() => {
+        // Each branch ties where its nodes are drawn now (a resting memory sits on its theme's cloud), and keeps
+        // its key from seeking to attaching, so the same branch swings onto its direction instead of restarting.
+        const slots = new Map<string, number>();
+        return rings.weave.threads.map((w) => {
+          const a = anchorOf(w.from);
+          const b = anchorOf(w.to);
+          if (!a || !b) return null;
+          const n = w.mode === "frayed" ? 0 : slots.get(w.from) ?? 0;
+          if (w.mode !== "frayed") slots.set(w.from, n + 1);
+          const key = w.mode === "frayed" ? `${rings.weave!.id}:fray:${w.from}:${w.to}` : `${rings.weave!.id}:${w.from}#${n}`;
+          const targets = w.targets?.flatMap((k) => { const at = anchorOf(k); return at ? [world(at[0], at[1], 0.5)] : []; });
+          return <WeaveThread key={key} start={world(a[0], a[1], 0.5)} end={world(b[0], b[1], 0.5)}
+            mid={world((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 2.6)} mode={w.mode} targets={targets} label={w.label} delay={w.delay} animate={animate} />;
+        });
+      })()}
 
       {rings.ideas.map((idea, i) => {
         // Its attached card already reads the idea out, so a selected idea keeps its small face.
@@ -727,15 +883,15 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={quiet} recede={recede(idea.key)} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea: ${idea.text}`}
               peek={shown ? undefined : <><b>{idea.text}</b><small>{caption}</small></>}
               face={shown
-                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.trend ? s.trendCloud : ""}`}>{idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
-                : <span className={`${s.ideaDot} ${idea.trend ? s.trendDot : ""}`}>{idea.trend ? <MapIcon name="trend" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
+                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.agent ? s.twinCloud : idea.trend ? s.trendCloud : ""} ${idea.direction ? s.directionCloud : ""}`}>{idea.agent ? <i className={s.twinMark}><MapIcon name="twin" size={18} /></i> : idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : idea.direction ? <i className={s.directionMark} aria-hidden><MapIcon name="spark" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
+                : <span className={`${s.ideaDot} ${idea.agent ? s.twinDot : idea.trend ? s.trendDot : ""} ${idea.direction ? s.directionDot : ""}`}>{idea.agent ? <MapIcon name="twin" size={18} /> : idea.trend ? <MapIcon name="trend" size={18} /> : idea.direction ? <MapIcon name="spark" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.agent && !idea.trend && !idea.direction && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
           </RingIsland>
         );
       })}
 
       <group position={[center.x, center.y, center.z]}>
         <Token k="box" rings={rings} from={[0, 0]} drag={{ ...drag, begin: () => undefined }} dim={dim("box")} offset={[0, 1.2, 9]} label="Our gift box"
-          face={<span className={`${s.box} ${s.cloud} ${rings.selectedKey === "box" ? s.boxOn : ""}`}>{rings.boxResearch === "running" && <i className={s.spinner} aria-hidden />}<MapIcon name="present" size={16} /><b>{rings.boxLabel}</b>{researchNote(rings.boxResearch) && <em className={rings.boxResearch === "failed" ? s.researchFailed : s.researchNote}>{researchNote(rings.boxResearch)}</em>}</span>} />
+          face={<span className={`${s.box} ${rings.selectedKey === "box" ? s.boxOn : ""}`}>{rings.boxResearch === "running" && <i className={s.spinner} aria-hidden />}<GiftIcon size={16} /> <b>{rings.boxLabel}</b>{researchNote(rings.boxResearch) && <em className={rings.boxResearch === "failed" ? s.researchFailed : s.researchNote}>{researchNote(rings.boxResearch)}</em>}</span>} />
       </group>
       {rings.nextStep && rings.selectedKey !== "box" && (
         <Html position={world(0, 9, 1.2)} center zIndexRange={[26, 21]}>
