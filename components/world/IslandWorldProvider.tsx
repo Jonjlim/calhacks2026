@@ -9,6 +9,7 @@ import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { useUnwrapPhase, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { roomStage, useRoomStage } from "@/components/room/roomStage";
 import type { CouncilActor, CouncilEvent, DecorationSpec } from "@/lib/council/contracts";
+import type { RingsWorld } from "./room/GiftRings";
 
 const WorldCanvas = dynamic(() => import("./WorldCanvas"), { ssr: false });
 /**
@@ -25,6 +26,8 @@ export interface RoomWorld {
   clues: { id: string; kind: string; publisherId: string }[];
   /** Clicking a meaningful object in the scene opens its readable overlay in the DOM. */
   onPick?: (target: PickTarget) => void;
+  /** The gift map (D19): room-visible clues, themes and gifts, plus the room's own callbacks. */
+  rings?: RingsWorld | null;
 }
 
 /** Things in the 3D room a viewer can click to read about. */

@@ -111,6 +111,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const startResearch = useMutation(api.councilRoom.start);
   const resumeCouncil = useMutation(api.councilRoom.resume);
   const castVote = useMutation(api.votes.castVote);
+  const setFeedback = useMutation(api.map.setFeedback);
   const clearVote = useMutation(api.votes.clearVote);
   const selectGift = useMutation(api.proposals.selectGift);
   const clearSelection = useMutation(api.proposals.clearSelection);
@@ -140,6 +141,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
         startResearch({ roomId, publishedClueIds: clueIds as Id<"publishedClues">[], idempotencyKey: newRequestKey() }),
       resumeCouncil: (runId) => resumeCouncil({ roomId, runId }),
       castVote: (listingId, vote) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote }),
+      reactToGift: (listingId, kind) => setFeedback({ roomId, listingId: listingId as Id<"productListings">, kind }),
       clearVote: (listingId) => clearVote({ roomId, listingId: listingId as Id<"productListings"> }),
       selectGift: (listingId) => selectGift({ roomId, listingId: listingId as Id<"productListings"> }),
       clearSelection: () => clearSelection({ roomId }),
@@ -149,7 +151,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
-      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, clearVote,
+      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
       selectGift, clearSelection, setLimit, approve, withdrawApproval,
     ],
   );

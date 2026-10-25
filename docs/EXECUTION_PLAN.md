@@ -92,6 +92,8 @@ Each milestone is demoable on its own. Do them in order; M2 and M3 can overlap o
 
 **Done when:** two people add memories on the map and see each other's published memories and cursors live, and a pasted conversation stays visible only to its owner.
 
+**Status (2026-10-24):** a first version runs in the live room. “Open the gift map” glides from the garden to a `map` stage in the shared world canvas (`components/world/room/GiftRings.tsx`, layout in `lib/map/rings.ts`). It shows published clues on the outer ring, the jar groups (Loves, Wishes, Moments) as interim themes, and recommended listings placed between the themes they cite. Clicking empty sky adds a memory or wish. Dragging a gift toward or away from the present casts or clears a vote, and dropping it on the present selects it (organizer) or votes for it. Not done yet: cursors on the map, private items with an “only you” marker, and votes on memories and themes.
+
 ### M3 — Themes and gifts on the map
 
 **Owners:** Dev 3 (theme grouping, council wiring), Dev 4 (listings placed by theme).
