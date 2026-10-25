@@ -14,6 +14,7 @@ import { type TwinVoteCast, type VaultMessage } from "../../lib/agentCollaborato
 import { modelConfigured, mossConfigured } from "./lib";
 import { recallIdeaEvidence } from "./memoryRecall";
 import { castVotes } from "./vote";
+import { loadVaultMessages } from "./vaultMessages";
 
 function prepareModelCache() {
   // Convex's Node filesystem is read-only outside /tmp. This is the native
@@ -82,13 +83,7 @@ export const vote = internalAction({
   handler: async (ctx, args): Promise<TwinVoteCast[]> => {
     const snap = await ctx.runQuery(internal.giftTwin.agent.snapshot, args);
     if (!snap || snap.ideas.length === 0) return [];
-    const messages: VaultMessage[] = [];
-    for (const chunkId of snap.chunkIds) {
-      messages.push(...await ctx.runQuery(internal.giftTwin.agent.chunk, {
-        collaboratorId: args.collaboratorId, uploadId: args.uploadId, chunkId,
-      }));
-    }
-    messages.sort((a, b) => a.sentAt - b.sentAt);
+    const messages = await loadVaultMessages(ctx, { collaboratorId: args.collaboratorId, uploadId: args.uploadId }, snap.chunkIds);
     if (messages.length === 0) return [];
     let recalled: ReadonlyMap<string, VaultMessage[]> | undefined;
     if (mossConfigured()) {
@@ -109,7 +104,7 @@ export const vote = internalAction({
         recalled = result.evidence;
         console.info("gift_twin_memory", {
           provider: "moss", setupMs, indexingMs: result.indexingMs,
-          messageCount: messages.length, queryMs: result.queryMs, failedQueries: result.failedQueries,
+          messageCount: messages.length, indexedMessages: result.indexedMessages, queryMs: result.queryMs, failedQueries: result.failedQueries,
         });
       } catch {
         console.info("gift_twin_memory", { provider: "keyword", reason: "moss_unavailable" });

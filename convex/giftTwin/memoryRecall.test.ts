@@ -4,6 +4,7 @@ import type { ModelTransport } from "../agents/model";
 import type { RoomIdea, VaultMessage } from "../../lib/agentCollaborators/contracts";
 import { recallIdeaEvidence } from "./memoryRecall";
 import { castVotes } from "./vote";
+import { selectMemoryMessages } from "./memorySelection";
 
 const idea: RoomIdea = { ref: "listing:1", kind: "listing", text: "Ceramics workshop" };
 const memory: VaultMessage = { text: "I'd love to learn wheel throwing", sentAt: 1 };
@@ -71,5 +72,17 @@ describe("recipient-local memory recall", () => {
       ideaRef: other.ref, vote: "up", text: "Maya loves golf", confidence: "high", evidenceCount: 1,
     }] });
     expect(await castVotes([idea, other], [memory], "Maya", model, new Map([[idea.ref, [memory]], [other.ref, []]]))).toEqual([]);
+  });
+
+  it("retains explicit negative evidence outside the bounded semantic working set", async () => {
+    const messages = Array.from({ length: 1_024 }, (_, i) => ({ text: `I love hobby ${i}`, sentAt: i }));
+    const excluded = { text: "I hate scented candles", sentAt: 1 };
+    messages[1] = excluded;
+    expect(selectMemoryMessages(messages)).not.toContain(excluded);
+    const local = session([]);
+    const target: RoomIdea = { ref: "listing:candle", kind: "listing", text: "Scented candles" };
+    const result = await recallIdeaEvidence(local, [target], messages, "Maya");
+    expect(result.indexedMessages).toBe(256);
+    expect(result.evidence.get(target.ref)).toContain(excluded);
   });
 });

@@ -519,6 +519,31 @@ The full live room-to-model path, production deployment, larger vault performanc
 and cold-start variability remain **unverified**. Automated integration tests cover
 the room path using a mocked SDK; they do not establish live model answer quality.
 
+### D23 — Responsive twin evaluations (2026-10-25)
+
+Remove model calls from the first useful Gift Twin response. Server-pattern
+insights and explicit votes are stored and deterministically reviewed first;
+only unresolved votes need Moss/model processing. Model-only enrichment and
+votes settle independently and retain upload/expiry checks. The fast review
+receives exact inserted post IDs so concurrent unreviewed model posts cannot
+bypass their existing review. No AI permission, money, consent or data authority
+boundary changes.
+
+Room knowledge changes, new map sprouts and completed product listings schedule
+a transactional unchecked-idea claim after 200 ms. Duplicate wakeups do not create
+duplicate votes or polling loops. The existing 30-second watch is recovery only.
+Vault chunk reads run four at a time. Moss embeds a maximum of 256 distinct
+messages per evaluation, preferring gift/preference language and balancing old
+and recent evidence. Full-vault keyword checks remain; semantic-only recall
+outside the bounded working set is a documented tradeoff. No cross-action private
+cache, disk index, provider or table is added. Local synthetic indexing benchmark:
+2,048 messages, 2,196 ms before vs 309 ms after, with the historical pottery
+memory still ranked first. Live model and product-provider latency are separate.
+Deployed to dev `shiny-dotterel-658`; a live three-message synthetic room check
+passed with a published first finding at 518 ms and reviewed evaluation of a new
+message at 790 ms (client/network included). The temporary room was deleted.
+These timings cover deterministic evidence, not model-only or shopping latency.
+
 ## Bounded multi-gift box — Alex-authorized integration
 
 Alex requested both single and multiple gifts in the buying flow. Keep one

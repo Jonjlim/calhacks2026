@@ -18,7 +18,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { internalAction, internalMutation, internalQuery, type ActionCtx } from "../_generated/server";
+import { internalAction, internalMutation, internalQuery, type MutationCtx } from "../_generated/server";
 import { configuredModel } from "../agents/model";
 import {
   insightDedupeKey,
@@ -32,10 +32,11 @@ import {
   type TwinVoteCast,
   type VaultMessage,
 } from "../../lib/agentCollaborators/contracts";
-import { findInsights } from "./extract";
+import { extractInsights, findInsights } from "./extract";
 import { closeVault, loadUpload, modelConfigured, mossConfigured, roomIdeas } from "./lib";
 import { twinConfidence, twinInsightCategory, twinVote } from "./schema";
-import { castVotes, reconcileVote } from "./vote";
+import { castVotes, heuristicVotes, reconcileVote } from "./vote";
+import { loadVaultMessages } from "./vaultMessages";
 
 const uploadArgs = { collaboratorId: v.id("agentCollaborators"), uploadId: v.string() };
 
@@ -74,13 +75,6 @@ export const chunk = internalQuery({
   },
 });
 
-async function loadMessages(ctx: ActionCtx, args: { collaboratorId: Id<"agentCollaborators">; uploadId: string }, chunkIds: Array<Id<"twinVaultChunks">>) {
-  const messages: VaultMessage[] = [];
-  const { collaboratorId, uploadId } = args;
-  for (const chunkId of chunkIds) messages.push(...(await ctx.runQuery(internal.giftTwin.agent.chunk, { collaboratorId, uploadId, chunkId })));
-  return messages.sort((a, b) => a.sentAt - b.sentAt);
-}
-
 export const processVault = internalAction({
   args: uploadArgs,
   handler: async (ctx, args) => {
@@ -90,19 +84,33 @@ export const processVault = internalAction({
     try {
       const snap: AgentSnapshot | null = await ctx.runQuery(internal.giftTwin.agent.snapshot, args);
       if (!snap) return;
-      const messages = await loadMessages(ctx, args, snap.chunkIds);
-      const model = modelConfigured() ? configuredModel() : undefined;
-      [insights, votes] = await Promise.all([
-        findInsights(messages, snap.recipientName, model),
-        mossConfigured()
-          ? ctx.runAction(internal.giftTwin.memory.vote, args)
-          : castVotes(snap.ideas, messages, snap.recipientName, model),
-      ]);
+      const messages = await loadVaultMessages(ctx, args, snap.chunkIds);
+      insights = extractInsights(messages, snap.recipientName);
+      votes = heuristicVotes(snap.ideas, messages, snap.recipientName);
       checkedRefs = snap.ideas.map((idea) => idea.ref);
     } finally {
       // Always leave "processing", even after a failure, so the watch loop starts.
-      await ctx.runMutation(internal.giftTwin.agent.recordFindings, { ...args, insights, votes, checkedRefs, firstPass: true });
+      await ctx.runMutation(internal.giftTwin.agent.recordFindings, { ...args, insights, votes, checkedRefs, firstPass: true, deterministicReview: true });
     }
+    // Model enrichment cannot hold the first useful findings or the watch loop.
+    if (modelConfigured() || mossConfigured()) await ctx.scheduler.runAfter(0, internal.giftTwin.agent.enrichVault, {
+      ...args, refs: checkedRefs.filter((ref) => !votes.some((vote) => vote.ideaRef === ref)),
+    });
+  },
+});
+
+export const enrichVault = internalAction({
+  args: { ...uploadArgs, refs: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const upload = { collaboratorId: args.collaboratorId, uploadId: args.uploadId };
+    // Separate scheduled actions settle independently: a slow insight call never
+    // delays votes, and a slow vote never delays new insights.
+    if (args.refs.length > 0) await ctx.scheduler.runAfter(0, internal.giftTwin.agent.voteOnNewIdeas, args);
+    if (!modelConfigured()) return;
+    const snap: AgentSnapshot | null = await ctx.runQuery(internal.giftTwin.agent.snapshot, upload);
+    if (!snap) return;
+    const insights = await findInsights(await loadVaultMessages(ctx, upload, snap.chunkIds), snap.recipientName, configuredModel());
+    await ctx.runMutation(internal.giftTwin.agent.recordFindings, { ...upload, insights, votes: [], checkedRefs: [], firstPass: false });
   },
 });
 
@@ -111,9 +119,18 @@ export const voteOnNewIdeas = internalAction({
   handler: async (ctx, args) => {
     const snap: AgentSnapshot | null = await ctx.runQuery(internal.giftTwin.agent.snapshot, args);
     if (!snap || snap.ideas.length === 0) return;
+    const upload = { collaboratorId: args.collaboratorId, uploadId: args.uploadId };
+    const messages = await loadVaultMessages(ctx, upload, snap.chunkIds);
+    const fast = heuristicVotes(snap.ideas, messages, snap.recipientName);
+    if (fast.length > 0) await ctx.runMutation(internal.giftTwin.agent.recordFindings, {
+      ...upload, insights: [], votes: fast, checkedRefs: [], firstPass: false, deterministicReview: true,
+    });
+    const resolved = new Set(fast.map((vote) => vote.ideaRef));
+    const remaining = snap.ideas.filter((idea) => !resolved.has(idea.ref));
+    if (remaining.length === 0) return;
     const votes: TwinVoteCast[] = mossConfigured()
-      ? await ctx.runAction(internal.giftTwin.memory.vote, args)
-      : await castVotes(snap.ideas, await loadMessages(ctx, args, snap.chunkIds), snap.recipientName, modelConfigured() ? configuredModel() : undefined);
+      ? await ctx.runAction(internal.giftTwin.memory.vote, { ...upload, refs: remaining.map((idea) => idea.ref) })
+      : await castVotes(remaining, messages, snap.recipientName, modelConfigured() ? configuredModel() : undefined);
     if (votes.length === 0) return;
     await ctx.runMutation(internal.giftTwin.agent.recordFindings, {
       collaboratorId: args.collaboratorId,
@@ -150,6 +167,7 @@ export const recordFindings = internalMutation({
     votes: v.array(voteArg),
     checkedRefs: v.array(v.string()),
     firstPass: v.boolean(),
+    deterministicReview: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const loaded = await loadUpload(ctx, args.collaboratorId, args.uploadId);
@@ -163,6 +181,7 @@ export const recordFindings = internalMutation({
         .withIndex("by_collaborator_dedupe", (q) => q.eq("collaboratorId", collaborator._id).eq("dedupeKey", dedupeKey))
         .first()) !== null;
     let inserted = 0;
+    const insertedIds: Id<"agentCollaboratorPosts">[] = [];
 
     for (const raw of args.insights.slice(0, TWIN_LIMITS.insightsPerRun)) {
       const parsed = twinInsightSchema.safeParse(raw);
@@ -170,7 +189,7 @@ export const recordFindings = internalMutation({
       const insight = parsed.data;
       const dedupeKey = insightDedupeKey(insight.category, insight.text);
       if (await seen(dedupeKey)) continue;
-      await ctx.db.insert("agentCollaboratorPosts", {
+      const postId = await ctx.db.insert("agentCollaboratorPosts", {
         roomId: room._id,
         collaboratorId: collaborator._id,
         kind: "insight",
@@ -182,6 +201,7 @@ export const recordFindings = internalMutation({
         status: "suggested",
         createdAt: now,
       });
+      insertedIds.push(postId);
       inserted += 1;
     }
 
@@ -197,7 +217,7 @@ export const recordFindings = internalMutation({
       const ideaText = idea.text;
       const dedupeKey = voteDedupeKey(cast.ideaRef);
       if (await seen(dedupeKey)) continue;
-      await ctx.db.insert("agentCollaboratorPosts", {
+      const postId = await ctx.db.insert("agentCollaboratorPosts", {
         roomId: room._id,
         collaboratorId: collaborator._id,
         kind: "vote",
@@ -212,6 +232,7 @@ export const recordFindings = internalMutation({
         status: "suggested",
         createdAt: now,
       });
+      insertedIds.push(postId);
       inserted += 1;
     }
 
@@ -225,19 +246,23 @@ export const recordFindings = internalMutation({
         collaboratorId: collaborator._id,
         uploadId: args.uploadId,
       });
+      // Catch ideas that arrived while the first pass was still processing.
+      await ctx.scheduler.runAfter(200, internal.giftTwin.agent.checkIdeas, {
+        collaboratorId: collaborator._id, uploadId: args.uploadId,
+      });
     }
-    if (inserted > 0) await ctx.scheduler.runAfter(0, internal.giftTwin.review.reviewPosts, { collaboratorId: collaborator._id });
+    if (inserted > 0) await ctx.scheduler.runAfter(0, internal.giftTwin.review.reviewPosts, {
+      collaboratorId: collaborator._id, ...(args.deterministicReview ? { deterministicReview: true, postIds: insertedIds } : {}),
+    });
   },
 });
 
 /**
- * Claims room ideas the twin has not looked at, then reschedules itself.
+ * Claims room ideas the twin has not looked at, without starting a watch loop.
  * Claiming before voting means a failed vote run loses only those votes and
  * never stops the loop.
  */
-export const watchTick = internalMutation({
-  args: uploadArgs,
-  handler: async (ctx, args) => {
+async function claimNewIdeas(ctx: MutationCtx, args: { collaboratorId: Id<"agentCollaborators">; uploadId: string }) {
     const loaded = await loadUpload(ctx, args.collaboratorId, args.uploadId);
     if (!loaded) return;
     const { collaborator, room } = loaded;
@@ -248,7 +273,20 @@ export const watchTick = internalMutation({
       await ctx.db.patch(collaborator._id, { checkedIdeaRefs: mergeRefs(collaborator.checkedIdeaRefs, fresh) });
       await ctx.scheduler.runAfter(0, internal.giftTwin.agent.voteOnNewIdeas, { ...args, refs: fresh });
     }
-    await ctx.scheduler.runAfter(TWIN_LIMITS.watchIntervalMs, internal.giftTwin.agent.watchTick, args);
+}
+
+export const checkIdeas = internalMutation({
+  args: uploadArgs,
+  handler: claimNewIdeas,
+});
+
+export const watchTick = internalMutation({
+  args: uploadArgs,
+  handler: async (ctx, args) => {
+    await claimNewIdeas(ctx, args);
+    const loaded = await loadUpload(ctx, args.collaboratorId, args.uploadId);
+    if (loaded?.collaborator.vaultStatus === "ready")
+      await ctx.scheduler.runAfter(TWIN_LIMITS.watchIntervalMs, internal.giftTwin.agent.watchTick, args);
   },
 });
 

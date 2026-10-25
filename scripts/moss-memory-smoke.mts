@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MossClient } from "@moss-js/moss";
+import { selectMemoryMessages } from "../convex/giftTwin/memorySelection.ts";
 
 async function main() {
   if (!process.argv.includes("--run")) {
@@ -51,6 +52,31 @@ async function main() {
     }
     console.log(JSON.stringify({ provider: "moss", setupMs, indexingMs, results }, null, 2));
     if (results.some((result) => !result.passed)) process.exitCode = 1;
+    if (process.argv.includes("--benchmark")) {
+      const messages = [
+        { text: "I'd love to learn wheel throwing and make my own bowls out of clay.", sentAt: 0 },
+        ...Array.from({ length: 2_047 }, (_, i) => ({
+          text: `Heading home after meeting ${i}. The bus arrived at the usual stop and the weather was clear today.`, sentAt: i + 1,
+        })),
+      ];
+      const timings = [];
+      for (const [name, docs] of [["previous_full_vault", messages], ["bounded_working_set", selectMemoryMessages(messages)]] as const) {
+        const bench = await client.session(`twin-bench-${randomUUID()}`);
+        try {
+          const started = performance.now();
+          for (let i = 0; i < docs.length; i += 128)
+            await bench.addDocs(docs.slice(i, i + 128).map((message, j) => ({ id: `m${i + j}`, text: message.text })));
+          const indexingMs = performance.now() - started;
+          const queryStarted = performance.now();
+          const match = await bench.query("ceramics workshop", { topK: 1, alpha: 0.8 });
+          timings.push({ name, documentCount: docs.length, indexingMs, queryMs: performance.now() - queryStarted, passed: match.docs[0]?.id === "m0" });
+          if (match.docs[0]?.id !== "m0") process.exitCode = 1;
+        } finally {
+          await bench.close();
+        }
+      }
+      console.log(JSON.stringify({ benchmark: "synthetic_2048_messages", timings }, null, 2));
+    }
   } finally {
     await client.close();
   }

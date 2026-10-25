@@ -45,13 +45,16 @@ export function addable(post: Pick<Doc<"agentCollaboratorPosts">, "kind" | "cate
 }
 
 export const reviewSnapshot = internalQuery({
-  args: { collaboratorId: v.id("agentCollaborators") },
+  args: { collaboratorId: v.id("agentCollaborators"), postIds: v.optional(v.array(v.id("agentCollaboratorPosts"))) },
   handler: async (ctx, args): Promise<ReviewSnapshot | null> => {
     const collaborator = await ctx.db.get(args.collaboratorId);
     if (!collaborator || collaborator.status === "revoked") return null;
     const room = await ctx.db.get(collaborator.roomId);
     if (!room || room.deletedAt !== undefined) return null;
-    const pending = await ctx.db
+    const pending = args.postIds
+      ? (await Promise.all(args.postIds.slice(0, TWIN_LIMITS.insightsPerRun + TWIN_LIMITS.votesPerRun).map((id) => ctx.db.get(id))))
+        .filter((post): post is Doc<"agentCollaboratorPosts"> => post !== null && post.collaboratorId === collaborator._id && post.status === "suggested")
+      : await ctx.db
       .query("agentCollaboratorPosts")
       .withIndex("by_collaborator_status", (q) => q.eq("collaboratorId", collaborator._id).eq("status", "suggested"))
       .take(TWIN_LIMITS.insightsPerRun + TWIN_LIMITS.votesPerRun);
@@ -86,12 +89,15 @@ export const reviewSnapshot = internalQuery({
 });
 
 export const reviewPosts = internalAction({
-  args: { collaboratorId: v.id("agentCollaborators") },
+  args: { collaboratorId: v.id("agentCollaborators"), deterministicReview: v.optional(v.boolean()), postIds: v.optional(v.array(v.id("agentCollaboratorPosts"))) },
   handler: async (ctx, args) => {
-    const snapshot: ReviewSnapshot | null = await ctx.runQuery(internal.giftTwin.review.reviewSnapshot, args);
+    if (args.deterministicReview && !args.postIds) return;
+    const snapshot: ReviewSnapshot | null = await ctx.runQuery(internal.giftTwin.review.reviewSnapshot, {
+      collaboratorId: args.collaboratorId, ...(args.postIds ? { postIds: args.postIds } : {}),
+    });
     if (!snapshot) return;
     const name = snapshot.recipientName;
-    const interpreted = await interpretWithModel(modelConfigured() ? configuredModel() : undefined, snapshot.candidates, {
+    const interpreted = await interpretWithModel(!args.deterministicReview && modelConfigured() ? configuredModel() : undefined, snapshot.candidates, {
       name,
       occasion: snapshot.occasion,
       roomClues: snapshot.roomClues,

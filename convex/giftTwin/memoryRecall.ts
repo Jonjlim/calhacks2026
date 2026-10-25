@@ -2,6 +2,7 @@
 import type { SessionIndex } from "@moss-js/moss";
 import { TWIN_LIMITS, type RoomIdea, type VaultMessage } from "../../lib/agentCollaborators/contracts";
 import { searchMessages, searchTerms } from "./vote";
+import { selectMemoryMessages } from "./memorySelection";
 
 export async function recallIdeaEvidence(
   session: Pick<SessionIndex, "addDocs" | "query">,
@@ -11,7 +12,7 @@ export async function recallIdeaEvidence(
 ) {
   // IDs are local to this invocation. No room, device, or recipient identifiers
   // are sent to Moss in the session name or document metadata.
-  const byId = new Map(messages.map((message, index) => [`m${index}`, message]));
+  const byId = new Map(selectMemoryMessages(messages).map((message, index) => [`m${index}`, message]));
   const indexingStart = performance.now();
   // Bound native embedding work per batch even for a vault full of short texts.
   const docs = [...byId].map(([id, message]) => ({ id, text: message.text }));
@@ -38,5 +39,5 @@ export async function recallIdeaEvidence(
     }
     evidence.set(idea.ref, [...new Set([...lexical, ...semantic])].slice(0, 12));
   }
-  return { evidence, indexingMs, queryMs, failedQueries };
+  return { evidence, indexingMs, queryMs, failedQueries, indexedMessages: byId.size };
 }

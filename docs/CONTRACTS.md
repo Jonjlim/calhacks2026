@@ -410,6 +410,30 @@ Errors: `refused` for policy, `validation_failed` for bad bodies. Never throw ra
 
 ### Agent collaborators and the Gift Twin (demo, D20, 2026-10-24)
 
+Latency update (Dev 3, 2026-10-25; consumers Dev 1/Dev 2): the first pass records
+screened deterministic insights/votes immediately and marks the vault ready.
+`internal.giftTwin.agent.enrichVault` adds model-only insights and unresolved votes
+independently in the background, with the same upload/expiry fences and dedupe.
+`recordFindings` and `reviewPosts` accept optional `deterministicReview: boolean`;
+only server-pattern findings use it to run the existing deterministic review
+without a second model round-trip. That review is restricted to the exact inserted
+`postIds`; it cannot pick up unrelated pending model posts. Model-generated
+insights retain model review.
+New-idea evaluation similarly records pattern votes first and sends only unresolved
+refs to Moss/model. Existing votes remain immutable advisory posts.
+
+`internal.giftTwin.agent.checkIdeas` accepts `{ collaboratorId, uploadId }`, claims
+unchecked current idea refs transactionally, and schedules their evaluation without
+starting another polling loop. Published room knowledge, new sprouts and completed
+listings wake it after 200 ms. The 30-second watch is a recovery fallback. Bursts
+dedupe at the transactional claim. No raw private data reaches the shared agent.
+
+Moss indexes at most 256 distinct messages per evaluation: gift/preference-bearing
+messages first, retaining both recent and older evidence; remaining space samples
+the rest. Keyword evidence still searches the entire authorized vault. This bounds
+embedding latency but semantic-only matches outside that working set may be missed.
+No private cross-action cache, disk index, new table or provider is introduced.
+
 Moss memory (2026-10-25): Owner Dev 3; consumers Dev 1 (existing screened feed),
 Dev 2 (authorization/purge review). `internal.giftTwin.memory.vote` accepts only
 `{ collaboratorId, uploadId, refs?: string[] }` and returns `TwinVoteCast[]`.

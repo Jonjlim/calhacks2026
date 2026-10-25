@@ -3,6 +3,7 @@
  * Own job transitions locally so Dev 2's generic jobs.ts remains untouched.
  */
 import { v } from "convex/values";
+import { enqueueTwinCheck } from "../giftTwin/lib";
 import type { PublishedClue, RecommendationsView, Result, SearchBrief } from "../../lib/contracts";
 import { normalizedListingSchema } from "../../lib/validation";
 import { internal } from "../_generated/api";
@@ -200,6 +201,7 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
+    await enqueueTwinCheck(ctx, job.roomId);
     await enqueueResearchContinuation(ctx, job._id);
     return null;
   },

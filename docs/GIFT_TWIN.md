@@ -20,12 +20,13 @@ sequenceDiagram
   R->>R: read chat.db, keep only messages the recipient sent
   R->>R: recipient agrees to a one-time 24 h upload
   R->>C: startUpload(consent) → uploadMessages × n → finishUpload
-  C->>T: agent.processVault
-  T->>C: insights + votes on current room ideas (screened sentences)
-  C->>B: review.reviewPosts
+  C->>T: agent.processVault (patterns, no model wait)
+  T->>C: immediately record screened insights + explicit votes
+  C->>B: deterministic review of those posts
+  C-->>T: agent.enrichVault (model extras + unresolved votes independently)
   B->>C: insights → clues; downvotes → exclusion/ownership clues; upvotes → noted
-  loop every 30 s until the vault closes
-    C->>T: agent.watchTick → voteOnNewIdeas for ideas added since
+  loop on room changes (200 ms wakeup), plus 30 s recovery watch
+    C->>T: agent.checkIdeas → voteOnNewIdeas for ideas added since
   end
   C->>C: expireVault after 24 h (or forget / disconnect) deletes the messages
   C-->>F: "Room idea: Maya loves backpacking · ▼ Downvoted"
@@ -34,11 +35,11 @@ sequenceDiagram
 The twin does two things:
 
 1. **Insights: gift ideas found in the messages.** Anything the recipient wants, likes, does, owns, or dislikes that a friend could turn into a gift. One clear mention is enough: "I've been playing tennis a lot" and "I've been wanting an Arc'teryx jacket" both count. Repetition only raises confidence. Things that are not giftable are skipped: "I love dinner", "I love you guys", "I just got home".
-2. **Votes on the room's ideas.** For each clue, idea branch, and listing in the room, the twin looks for clear evidence in the recipient's messages. **Up** when they back it, **down** when they contradict it (friends say "Maya loves backpacking", she wrote "I hate backpacking, never again") or show she already owns it. An idea with no clear evidence gets no vote. Ideas added later get a vote within about 30 seconds while the vault is open.
+2. **Votes on the room's ideas.** For each clue, idea branch, and listing in the room, the twin looks for clear evidence in the recipient's messages. **Up** when they back it, **down** when they contradict it (friends say "Maya loves backpacking", she wrote "I hate backpacking, never again") or show she already owns it. An idea with no clear evidence gets no vote. Published memories, new idea branches, and completed listings wake the twin after 200 ms; evaluation then takes as long as the evidence/model work needs. A 30-second watch recovers missed changes.
 
 What the gift agent (`review.reviewPosts`) does with them:
 
-- **Insights** that pass the deterministic floor (medium or high confidence, categorized) are published as `manual` clues. When the server LLM is configured, it also judges gift relevance and can only veto. Skipped insights are hidden.
+- **Insights** that pass the deterministic floor (medium or high confidence, categorized) are published as `manual` clues. Pattern-derived findings use immediate deterministic coherence/deduplication review. Model-generated additions still go through the model relevance review, which can only veto. Skipped insights are hidden.
 - **Downvotes** become `exclusion` clues (she dislikes it) or `ownership` clues (she already has it), so research and the buyer agent steer away. The friend's original clue is left untouched.
 - **Upvotes** are shown in the feed with no new clue.
 - Published clues are attributed to the member who invited the twin, who can edit or withdraw them like any memory.
@@ -79,13 +80,36 @@ The single-use invite is in a URL fragment and is cleared from the address bar a
 
 ### Moss semantic memory
 
-The twin can use Moss hybrid retrieval when evaluating room ideas, including new
-ideas found by its watch loop. “Ceramics workshop” can recall “I'd love to learn
+The twin uses explicit pattern evidence first, then Moss hybrid retrieval for
+unresolved room ideas. “Ceramics workshop” can recall “I'd love to learn
 wheel throwing” even with no keyword overlap. Explicit keyword matches are kept
 alongside semantic matches so ownership and contradictions remain available. The
 existing recipient model decides what the evidence means; Moss does not reason
-or authorize anything. Initial insight extraction still scans the authorized
-vault. The buyer/council agents get only the existing screened posts and clues.
+or authorize anything. Initial pattern extraction scans the authorized vault and
+records findings before any model call. Model enrichment runs independently in
+the background. The buyer/council agents get only the existing screened posts and clues.
+
+Moss embeds at most 256 distinct messages per evaluation. Gift/preference-bearing
+messages take priority, with both recent and older messages represented. Full-vault
+keyword checks retain explicit ownership and contradiction evidence. This caps
+embedding work; a semantic-only match outside the selected working set may be
+missed. No private index is retained between actions. On a local synthetic
+2,048-message benchmark, indexing dropped from 2,196 ms to 309 ms (about 7×),
+and the old pottery preference remained the top match. This measures indexing,
+not end-to-end model or shopping-provider latency.
+
+The optimized version was deployed to dev `shiny-dotterel-658`. One live synthetic
+three-message check measured the first published finding at 518 ms after starting
+`finishUpload`, and a reviewed vote on a newly published contradictory message at
+790 ms, including client/network time. The temporary room was deleted afterward.
+These exercise the deterministic fast path; model-only matches, large uploads and
+shopping-provider time have separate latency. Repeat without real recipient data:
+
+```bash
+node --env-file-if-exists=.env.local scripts/gift-twin-latency-smoke.mts --run
+# Compare full-vault vs bounded Moss indexing (synthetic messages only):
+node scripts/moss-memory-smoke.mts --run --convex-env --benchmark
+```
 
 Set these **on the Convex deployment**, then deploy the updated functions:
 
@@ -162,7 +186,7 @@ npm run twin -- pair ABCD2345          # uses NEXT_PUBLIC_CONVEX_URL from .env.l
 npm run twin -- share --fixture        # sample messages; drop --fixture to read real iMessage
 ```
 
-`share` reads the messages, shows the consent summary, asks once, uploads, and exits. The twin's notes and votes appear on `/room/<roomId>/twin` within seconds. Add another clue and the twin votes on it within about 30 seconds. Running `share` again replaces the vault and restarts the 24 hours. Change the read budget with `--max-mb`, or add `--days N` as an extra cutoff. Use `--dry-run` to see the summary without uploading. Other commands: `forget` (delete the vault now), `status`, `doctor` (checks Full Disk Access), `unpair`.
+`share` reads the messages, shows the consent summary, asks once, uploads, and exits. The twin's notes and votes appear on `/room/<roomId>/twin` within seconds. Add another clue and the twin starts evaluating it after the 200 ms room-change wakeup; model-dependent votes can take longer. Running `share` again replaces the vault and restarts the 24 hours. Change the read budget with `--max-mb`, or add `--days N` as an extra cutoff. Use `--dry-run` to see the summary without uploading. Other commands: `forget` (delete the vault now), `status`, `doctor` (checks Full Disk Access), `unpair`.
 
 Real iMessage access: System Settings → Privacy & Security → Full Disk Access → enable your terminal app, then `npm run twin -- doctor`.
 

@@ -45,6 +45,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -325,13 +326,14 @@ describe("Moss memory and consent fences", () => {
 
   it("routes initial and later idea evaluations through a private session and closes it", async () => {
     const { t, bob, roomId } = await paired();
-    await seedClue(t, roomId, "Maya loves backpacking");
+    await seedClue(t, roomId, "Ceramics workshop");
     enableMoss();
     await share(t);
-    expect(moss.query).toHaveBeenCalledWith("Maya loves backpacking", { topK: 8, alpha: 0.8 });
+    expect(moss.query).toHaveBeenCalledWith("Ceramics workshop", { topK: 8, alpha: 0.8 });
     expect(moss.session).toHaveBeenCalledWith(expect.stringMatching(/^twin-[0-9a-f-]+$/));
     expect(moss.close).toHaveBeenCalledTimes(1);
     await seedClue(t, roomId, "Maya would love scented candles");
+    await seedClue(t, roomId, "Sculpting workshop");
     vi.advanceTimersByTime(TWIN_LIMITS.watchIntervalMs);
     await t.finishInProgressScheduledFunctions();
     await settle(t);
@@ -344,6 +346,7 @@ describe("Moss memory and consent fences", () => {
   it("continues evaluating from keywords when Moss setup fails, and still closes the client", async () => {
     const { t, bob, roomId } = await paired();
     await seedClue(t, roomId, "Maya loves backpacking");
+    await seedClue(t, roomId, "Ceramics workshop");
     enableMoss();
     moss.session.mockRejectedValue(new Error("provider failure with private details"));
     await share(t);
@@ -354,7 +357,7 @@ describe("Moss memory and consent fences", () => {
 
   it("discards in-flight recall when the recipient forgets the vault during indexing", async () => {
     const { t, bob, roomId } = await paired();
-    await seedClue(t, roomId, "Maya loves backpacking");
+    await seedClue(t, roomId, "Ceramics workshop");
     enableMoss();
     moss.addDocs.mockImplementationOnce(async () => {
       unwrap(await t.mutation(api.giftTwin.device.forget, { deviceToken: TOKEN }));
@@ -363,7 +366,9 @@ describe("Moss memory and consent fences", () => {
     await share(t);
     expect(moss.close).toHaveBeenCalledOnce();
     expect(await chunkCount(t)).toBe(0);
-    expect(unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId })).posts).toEqual([]);
+    // Findings published before forgetting remain history; new private recall
+    // cannot add a vote after the recipient deletes the vault.
+    expect(unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId })).posts.some((post) => post.kind === "vote")).toBe(false);
   });
 
   it("denies reads and findings at expiry even before the deletion job runs", async () => {
@@ -384,6 +389,54 @@ describe("Moss memory and consent fences", () => {
     enableMoss();
     expect(await t.action(internal.giftTwin.memory.vote, args)).toEqual([]);
     expect(moss.session).not.toHaveBeenCalled();
+  });
+});
+
+describe("twin responsiveness", () => {
+  it("makes initial findings ready without waiting for any configured model call", async () => {
+    const { t, session, bob, roomId } = await paired();
+    const started = unwrap(await t.mutation(api.giftTwin.device.startUpload, { deviceToken: TOKEN, consent: true }));
+    for (const messages of splitIntoUploadBatches(MAYA))
+      unwrap(await t.mutation(api.giftTwin.device.uploadMessages, { deviceToken: TOKEN, uploadId: started.uploadId, messages }));
+    unwrap(await t.mutation(api.giftTwin.device.finishUpload, { deviceToken: TOKEN, uploadId: started.uploadId }));
+    vi.stubEnv("LLM_BASE_URL", "https://model.example/v1");
+    vi.stubEnv("LLM_MODEL", "test");
+    vi.stubEnv("LLM_API_KEY", "test");
+    const fetcher = vi.fn().mockRejectedValue(new Error("Model must not block first findings"));
+    vi.stubGlobal("fetch", fetcher);
+    await t.action(internal.giftTwin.agent.processVault, { collaboratorId: session.collaboratorId as Id<"agentCollaborators">, uploadId: started.uploadId });
+    expect(fetcher).not.toHaveBeenCalled();
+    const feed = unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId }));
+    expect(feed.collaborators[0]?.vault?.status).toBe("ready");
+    expect(feed.posts.some((post) => post.text.includes("hydration vest"))).toBe(true);
+  });
+
+  it("evaluates newly published messages after 200 ms and dedupes wakeups without spawning polling loops", async () => {
+    const { t, bob, roomId } = await paired();
+    await share(t);
+    const start = Date.now();
+    unwrap(await bob.mutation(api.clues.upsertManualPreference, { roomId, kind: "interest", text: "Maya would love scented candles" }));
+    unwrap(await bob.mutation(api.clues.upsertManualPreference, { roomId, kind: "interest", text: "Maya loves backpacking" }));
+    vi.advanceTimersByTime(200);
+    await settle(t);
+    expect(Date.now() - start).toBeLessThan(TWIN_LIMITS.watchIntervalMs);
+    const feed = unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId }));
+    expect(feed.posts.filter((post) => post.ideaText === "Maya would love scented candles")).toMatchObject([{ vote: "down" }]);
+    expect(feed.posts.filter((post) => post.ideaText === "Maya loves backpacking")).toMatchObject([{ vote: "down" }]);
+    const scheduled = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+    expect(scheduled.filter((job) => job.name.endsWith("watchTick"))).toHaveLength(1);
+  });
+
+  it("skips Moss and model evaluation for ideas already resolved by explicit evidence", async () => {
+    const { t, bob, roomId } = await paired();
+    await seedClue(t, roomId, "Maya loves backpacking");
+    vi.stubEnv("GIFT_TWIN_MOSS_ENABLED", "true");
+    vi.stubEnv("MOSS_PROJECT_ID", "test-project");
+    vi.stubEnv("MOSS_PROJECT_KEY", "test-key");
+    await share(t);
+    expect(moss.session).not.toHaveBeenCalled();
+    expect(unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId })).posts)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ vote: "down" })]));
   });
 });
 
