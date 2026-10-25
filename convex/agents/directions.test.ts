@@ -137,6 +137,57 @@ describe("the council proposing directions without a model", () => {
   });
 });
 
+describe("the council reacting to passes", () => {
+  const scheduledReplacement = (s: Awaited<ReturnType<typeof setup>>) =>
+    s.t.run(async (ctx) => (await ctx.db.system.query("_scheduled_functions").collect()).find((f) => f.name.includes("directions") && f.name.endsWith("replace")));
+
+  it("retires a passed direction, keeps the reason, and replaces only that one", async () => {
+    const s = await setup();
+    vi.stubEnv("LLM_API_KEY", "");
+    const a = await s.direction("Pottery tools", "pottery trimming tools");
+    const b = await s.direction("Glaze kit", "pottery glaze kit");
+    unwrap(await s.alex.mutation(api.mapSignals.setDirection, { roomId: s.roomId, targetKind: "direction", targetId: a, value: -1, reason: "vibe" }));
+    expect((await s.t.run((ctx) => ctx.db.get(a)))?.retiredAt).toBeTypeOf("number");
+    const job = await scheduledReplacement(s);
+    expect(job?.args[0]).toMatchObject({ directionId: a, passed: [expect.stringContaining("wrong vibe")] });
+    await s.t.action(internal.agents.directions.replace, job!.args[0] as { roomId: Id<"rooms">; directionId: Id<"mapDirections">; participantId: Id<"participants">; passed: string[] });
+    const listed = unwrap(await s.alex.query(api.agents.directions.list, { roomId: s.roomId }));
+    expect(listed.map((d) => d.id)).toContain(b);
+    expect(listed.map((d) => d.id)).not.toContain(a);
+    const replacement = (await s.t.run((ctx) => ctx.db.query("mapDirections").collect())).find((d) => d.replaces === a);
+    expect(replacement).toBeDefined();
+    const trail = unwrap(await s.alex.query(api.trail.list, { roomId: s.roomId }));
+    expect(trail.find((e) => e.text.startsWith("Retired “Pottery tools”"))?.text).toContain("wrong vibe");
+    expect(trail.find((e) => e.text.startsWith("Suggested"))?.text).toContain("in place of “Pottery tools”");
+  });
+
+  it("gives up on a direction once the room lets two of its gifts go", async () => {
+    const s = await setup();
+    const a = await s.direction("Pottery tools", "pottery trimming tools");
+    await s.finish(await s.search(a, "a1"));
+    const listings = await s.t.run((ctx) => ctx.db.query("productListings").collect());
+    unwrap(await s.alex.mutation(api.votes.castVote, { roomId: s.roomId, listingId: listings[0]!._id, value: "down", reason: "price" }));
+    expect((await s.t.run((ctx) => ctx.db.get(a)))?.retiredAt).toBeUndefined();
+    unwrap(await s.alex.mutation(api.votes.castVote, { roomId: s.roomId, listingId: listings[1]!._id, value: "down" }));
+    expect((await s.t.run((ctx) => ctx.db.get(a)))?.retiredAt).toBeTypeOf("number");
+    expect((await scheduledReplacement(s))?.args[0]).toMatchObject({ passed: [expect.stringContaining("too pricey")] });
+  });
+
+  it("gives a pulled-in direction a third gift, and puts a pulled gift first", async () => {
+    const s = await setup();
+    const a = await s.direction("Pottery tools", "pottery trimming tools");
+    await s.finish(await s.search(a, "a1"));
+    const before = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId })).recommendations;
+    unwrap(await s.alex.mutation(api.mapSignals.setDirection, { roomId: s.roomId, targetKind: "direction", targetId: a, value: 1 }));
+    const after = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId })).recommendations;
+    expect(after.length).toBe(before.length + 1);
+    const last = after.at(-1)!;
+    unwrap(await s.alex.mutation(api.votes.castVote, { roomId: s.roomId, listingId: last.listingId as Id<"productListings">, value: "up" }));
+    const pulled = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId })).recommendations;
+    expect(pulled[0]?.listingId).toBe(last.listingId);
+  });
+});
+
 describe("how we got here", () => {
   it("records each step as one readable line, for members only", async () => {
     const s = await setup();

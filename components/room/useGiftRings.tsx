@@ -16,7 +16,7 @@ import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
-import type { RoomActions, RoomData } from "./types";
+import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
 
 /** One colour per storybook friend, shared by cursors, pledge arcs, vote chips and faces. */
 export const AVATAR_COLOR: Record<AvatarId, string> = { explorer: "#d0675a", kind: "#d98fb8", curious: "#e2ad6b", calm: "#79b391", dreamer: "#8d86d0" };
@@ -35,6 +35,8 @@ const PULSE_MS = 3200;
 const CURSOR_MS = 8000;
 /** Gifts shown on the map before the rest fold behind “+N more”. */
 const TOP_GIFTS = 6;
+/** How long the council's reaction to passes stays in the status line. */
+const REACTION_MS = 15_000;
 /** A failed search stays on its theme this long, so it isn't mistaken for a quiet success. */
 const RESEARCH_FAIL_MS = 10 * 60 * 1000;
 
@@ -72,6 +74,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [trendAsked, setTrendAsked] = useState<number | null>(null);
   /** Index of the photo open in the large tap-the-person view, if any. */
   const [marking, setMarking] = useState<number | null>(null);
+  /** The node whose pass is waiting for an optional reason. */
+  const [passing, setPassing] = useState<string | null>(null);
   /** "How we got here": the whole room's story, or one gift's (its listing id). */
   const [story, setStory] = useState<{ listingId?: string } | null>(null);
   const closeStory = useCallback(() => setStory(null), []);
@@ -117,7 +121,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const clues = useMemo(() => allClues.filter((c) => !isGiftIdea(c.text)), [allClues]);
   const ideas = useMemo(() => allClues.filter((c) => isGiftIdea(c.text)), [allClues]);
   const listingById = useMemo(() => new Map(data.listings.map((l) => [l.id, l])), [data.listings]);
-  const recs = useMemo(() => [...data.recommendations].filter((r) => listingById.has(r.listingId)).sort((a, b) => b.score - a.score), [data.recommendations, listingById]);
+  // The server's order is final: gifts the room pulled in first, then by score (D23 trial).
+  const recs = useMemo(() => data.recommendations.filter((r) => listingById.has(r.listingId)), [data.recommendations, listingById]);
 
   // Direction signals: net pull per memory or theme, the viewer's own vote, and who voted.
   const signalRows = data.mapSignals;
@@ -248,27 +253,48 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     : null;
   const researchTheme = research && researchFrom && researchFrom !== "box" && layout.themes.some((t) => t.id === researchFrom) ? researchFrom : null;
 
-  const vote = (listingId: string, value: "up" | "down") => {
+  const vote = (listingId: string, value: "up" | "down", reason?: PassReason) => {
     if (!actions) return;
     const mine = data.votes[listingId]?.myVote;
-    void (mine === value
+    const said = reason ? ` (${PASS_REASONS.find((r) => r.id === reason)!.label.toLowerCase()})` : "";
+    void (mine === value && !reason
       ? run(() => actions.clearVote(listingId), "Vote taken back.")
-      : run(() => actions.castVote(listingId, value), value === "up" ? "You pulled it closer: it feels right." : "You pushed it away for now. Nothing was deleted."));
+      : run(() => actions.castVote(listingId, value, reason), value === "up" ? "You pulled it closer: it feels right, and it moves up the shortlist."
+        : `You passed${said}. If the room lets this direction’s gifts go, the council will suggest something different.`));
   };
-  const signal = (targetKind: "clue" | "theme" | "direction", targetId: string, value: 1 | -1) => {
+  const signal = (targetKind: "clue" | "theme" | "direction", targetId: string, value: 1 | -1, reason?: PassReason) => {
     if (!actions) return;
     const mine = signals.mine[`${targetKind}:${targetId}`];
-    const next = mine === value ? 0 : value;
-    void run(() => actions.setDirection(targetKind, targetId, next), next === 0 ? "Vote taken back."
-      : next > 0 ? (targetKind === "direction" ? "You pulled this direction in. It stays on the map." : "You pulled it closer. Gifts in that direction move in too.")
-      : targetKind === "direction" ? "You passed on this direction. It fades, and leaves once half the room passes. Nothing was deleted." : "You pushed it away for now. Nothing was deleted.");
+    const next = mine === value && !reason ? 0 : value;
+    void run(() => actions.setDirection(targetKind, targetId, next, reason), next === 0 ? "Vote taken back."
+      : next > 0 ? (targetKind === "direction" ? "You pulled this direction in. It shows one more gift." : "You pulled it closer. Gifts in that direction move in too.")
+      : targetKind === "direction" ? "You passed on this direction. Once the room lets it go, the council suggests a different one." : "You pushed it away for now. Nothing was deleted.");
+  };
+  // A pass asks why first (one tap, optional), so the council knows what to avoid next.
+  const passFirst = (key: string, mineAlready: boolean, takeBack: () => void): (() => void) => () => {
+    if (mineAlready) takeBack();
+    else setPassing(key);
   };
   const voteActs = (targetKind: "clue" | "theme" | "direction", targetId: string): RingAction[] => {
     const mine = signals.mine[`${targetKind}:${targetId}`];
     return actions ? [
       { icon: "heart", label: "Feels like her", tone: "yes", on: mine === 1, disabled: !!pending, run: () => signal(targetKind, targetId, 1) },
-      { icon: "drift", label: "Not really", tone: "pass", on: mine === -1, disabled: !!pending, run: () => signal(targetKind, targetId, -1) },
+      { icon: "drift", label: "Not really", tone: "pass", on: mine === -1, disabled: !!pending,
+        run: targetKind === "direction" ? passFirst(`direction:${targetId}`, mine === -1, () => signal(targetKind, targetId, -1)) : () => signal(targetKind, targetId, -1) },
     ] : [];
+  };
+  /** The one-tap reasons shown in place of a node's actions while its pass is being given. */
+  const reasonActs = (key: string): RingAction[] => {
+    const give = (reason?: PassReason) => {
+      setPassing(null);
+      if (key.startsWith("gift:")) vote(key.slice(5), "down", reason);
+      else if (key.startsWith("direction:")) signal("direction", key.slice(10), -1, reason);
+    };
+    return [
+      ...PASS_REASONS.map((r) => ({ icon: "drift" as const, label: r.label, tone: "pass" as const, disabled: !!pending, run: () => give(r.id) })),
+      { icon: "check" as const, label: "Just pass", disabled: !!pending, run: () => give() },
+      { icon: "undo" as const, label: "Cancel", more: true, run: () => setPassing(null) },
+    ];
   };
   const choose = (listingId: string) => {
     if (!actions) return;
@@ -305,6 +331,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
 
   const actionsFor = (key: string): RingDetail | null => {
+    const base = nodeDetail(key);
+    if (!base || passing !== key) return base;
+    return { caption: <>{base.caption}<small>Why pass? One tap tells the council what to steer away from.</small></>, actions: reasonActs(key) };
+  };
+  const nodeDetail = (key: string): RingDetail | null => {
     // Once a gift is chosen the box opens its own panel; before that, the present is where the council's tools live.
     if (key === "box") {
       if (selection || !actions) return null;
@@ -336,7 +367,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         note: whyListing === listingId && rec ? whyChain(rec, listing) : undefined,
         actions: actions ? [
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
-          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
+          { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: passFirst(key, mine === "down", () => vote(listingId, "down")) },
           { icon: "thread", label: "Why?", on: whyListing === listingId, run: () => setWhyListing((w) => (w === listingId ? null : listingId)) },
           { icon: "present", label: isOrganizer ? (inBox ? "In the box" : "Put in the box") : "Vote for the box", tone: "gold", on: inBox, more: true, disabled: !!pending, run: () => choose(listingId) },
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
@@ -755,6 +786,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     onSelect: (key) => {
       setComposer(null);
       setSelectedKey(key);
+      if (key !== passing) setPassing(null);
       // A theme fans out its memories; a memory keeps its theme open around it.
       if (key?.startsWith("theme:")) setOpenTheme(key.slice(6));
       else if (key?.startsWith("clue:")) setOpenTheme(themeOfClue.get(key.slice(5)) ?? null);
@@ -813,5 +845,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         {...(story.listingId ? { focus: { listingId: story.listingId, ...(via ? { directionId: via.id, clueIds: via.clueIds } : rec ? { clueIds: rec.publishedClueIds } : {}) } } : {})} />
     );
   }
-  return { rings, notice, error: error ?? trendFailed, openBox, story: storyNode };
+  // The council's reaction to the room's passes reaches everyone's status line as it happens.
+  const reaction = (data.trail ?? []).findLast((e) => e.actor === "council" && now - e.at < REACTION_MS
+    && (e.text.startsWith("Retired") || e.text.startsWith("Suggested") || e.text.startsWith("Couldn’t find")));
+  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, story: storyNode };
 }

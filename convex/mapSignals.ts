@@ -13,6 +13,8 @@ import { requireMember } from "./lib/auth";
 import { err, memberError, ok } from "./lib/result";
 import { usableTrendJob } from "./research/trendJobs";
 import { logTrail } from "./lib/trail";
+import { PASS_REASON_TEXT, reactToPasses } from "./agents/directions";
+import * as V from "./validators";
 
 type TargetKind = "clue" | "theme" | "direction" | "trend";
 
@@ -27,8 +29,10 @@ export const setDirection = mutation({
     targetId: v.string(),
     /** 1 pulls toward the present, −1 pushes away, 0 takes the caller's signal back. */
     value: v.union(v.literal(1), v.literal(-1), v.literal(0)),
+    /** Why, on a pass (D23 trial): the council avoids it when it replaces a direction. */
+    reason: v.optional(V.passReason),
   },
-  handler: async (ctx, { roomId, targetKind, targetId, value }) => {
+  handler: async (ctx, { roomId, targetKind, targetId, value, reason }) => {
     type Out = { targetKind: TargetKind; targetId: string; value: number };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Out>(member.code);
@@ -43,7 +47,7 @@ export const setDirection = mutation({
       const direction = id ? await ctx.db.get(id) : null;
       if (!direction || direction.roomId !== roomId) return err<Out>("not_found", "That direction isn't on this map.");
       if (value !== 0) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: value > 0 ? "kept" : "rejected", directionId: direction._id,
-        text: `${member.me.displayName || "A friend"} ${value > 0 ? "pulled in" : "passed on"} the direction “${direction.label}”.` });
+        text: `${member.me.displayName || "A friend"} ${value > 0 ? "pulled in" : "passed on"} the direction “${direction.label}”${value < 0 && reason ? ` (${PASS_REASON_TEXT[reason]})` : ""}.` });
     } else if (targetKind === "trend") {
       // A trend cloud is one returned suggestion of a usable sample in this room: "trendJobId:query".
       const at = targetId.indexOf(":");
@@ -63,12 +67,18 @@ export const setDirection = mutation({
       .query("mapSignals")
       .withIndex("by_member_target", (q) => q.eq("roomId", roomId).eq("participantId", member.me._id).eq("targetKind", targetKind).eq("targetId", targetId))
       .first();
+    const why = value < 0 && reason ? { reason } : {};
     if (value === 0) {
       if (existing) await ctx.db.delete(existing._id);
     } else if (existing) {
-      await ctx.db.patch(existing._id, { value, updatedAt: Date.now() });
+      await ctx.db.patch(existing._id, { value, updatedAt: Date.now(), reason: value < 0 ? reason : undefined });
     } else {
-      await ctx.db.insert("mapSignals", { roomId, participantId: member.me._id, targetKind, targetId, value, updatedAt: Date.now() });
+      await ctx.db.insert("mapSignals", { roomId, participantId: member.me._id, targetKind, targetId, value, updatedAt: Date.now(), ...why });
+    }
+    // A pass can be the one that makes the council give up on a direction and suggest another.
+    if (targetKind === "direction" && value < 0) {
+      const id = ctx.db.normalizeId("mapDirections", targetId);
+      if (id) await reactToPasses(ctx, roomId, id, member.me._id);
     }
     return ok<Out>({ targetKind, targetId, value });
   },

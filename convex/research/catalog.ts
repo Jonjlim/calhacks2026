@@ -66,8 +66,9 @@ export async function readCatalog(
     }));
 
   // Directions still on the map, each with its newest finished search (D23 trial).
-  const directions = await ctx.db.query("mapDirections").withIndex("by_room", q => q.eq("roomId", room._id)).take(12);
-  const lanes: { direction: Doc<"mapDirections">; job: Doc<"researchJobs"> }[] = [];
+  const directions = (await ctx.db.query("mapDirections").withIndex("by_room", q => q.eq("roomId", room._id)).take(60))
+    .filter(d => !d.retiredAt);
+  const lanes: { direction: Doc<"mapDirections">; job: Doc<"researchJobs">; pulled: boolean }[] = [];
   if (directions.length) {
     const members = (await ctx.db.query("participants").withIndex("by_room", q => q.eq("roomId", room._id)).collect()).length;
     const signals = await ctx.db.query("mapSignals").withIndex("by_room", q => q.eq("roomId", room._id)).take(2000);
@@ -78,7 +79,7 @@ export async function readCatalog(
       const job = await ctx.db.query("researchJobs")
         .withIndex("by_room_direction", q => q.eq("roomId", room._id).eq("directionId", direction._id))
         .order("desc").filter(q => q.eq(q.field("status"), "succeeded")).first();
-      if (job) lanes.push({ direction, job });
+      if (job) lanes.push({ direction, job, pulled: tally.up > tally.down });
     }
   }
 
@@ -97,10 +98,11 @@ export async function readCatalog(
     }
   };
 
-  for (const { direction, job } of lanes) {
+  for (const { direction, job, pulled } of lanes) {
     const pool = (await ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", job._id)).collect())
       .filter(l => l.roomId === room._id).map(toListing);
-    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION);
+    // A direction the room pulled in earns one more gift on the map.
+    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION + (pulled ? 1 : 0));
     const foundBy: SearchOrigin = { query: direction.query, source: "direction", directionId: direction._id, ...(direction.clueIds[0] ? { publishedClueId: direction.clueIds[0] } : {}) };
     add(job, pool, ranked, foundBy, row => row.publishedClueIds.length
       ? row.explanation
@@ -132,6 +134,16 @@ export async function readCatalog(
     add(candidatePool, pool, result.ranked, foundBy,
       row => [withSearchNote(row.explanation, row.publishedClueIds, foundBy, clues), ...(approved.get(row.listingId) ?? [])].join(" "));
     searchPools.push({ jobId: candidatePool._id, query: candidatePool.brief?.queryTerms[0] ?? "", ...result.counts });
+  }
+
+  // Gifts the room pulled in lead the shortlist; passed ones trail. Scores and citations are unchanged.
+  if (recommendations.length > 1) {
+    const net = new Map<string, number>();
+    for (const vote of await ctx.db.query("votes").withIndex("by_room", q => q.eq("roomId", room._id)).take(2000)) {
+      net.set(vote.listingId, (net.get(vote.listingId) ?? 0) + (vote.value === "up" ? 1 : vote.value === "down" ? -1 : 0));
+    }
+    const order = new Map(recommendations.map((r, i) => [r.listingId, i]));
+    recommendations.sort((a, b) => (net.get(b.listingId) ?? 0) - (net.get(a.listingId) ?? 0) || b.score - a.score || order.get(a.listingId)! - order.get(b.listingId)!);
   }
 
   return {

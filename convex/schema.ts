@@ -221,6 +221,8 @@ export default defineSchema({
     participantId: v.id("participants"),
     value: V.voteValue,
     updatedAt: v.number(),
+    /** Why a pass was cast (D23 trial); only on "down". */
+    reason: v.optional(V.passReason),
   })
     .index("by_room", ["roomId"])
     .index("by_listing_participant", ["listingId", "participantId"]),
@@ -424,6 +426,8 @@ export default defineSchema({
     targetId: v.string(),
     value: v.number(),
     updatedAt: v.number(),
+    /** Why a pass was cast (D23 trial); only on −1. */
+    reason: v.optional(V.passReason),
   })
     .index("by_room", ["roomId"])
     .index("by_member_target", ["roomId", "participantId", "targetKind", "targetId"]),
@@ -485,6 +489,10 @@ export default defineSchema({
     source: v.union(v.literal("agent"), v.literal("preset")),
     knowledgeRevision: v.number(),
     createdAt: v.number(),
+    /** Set when the room's passes retired it; it leaves the map and the council suggests a replacement. */
+    retiredAt: v.optional(v.number()),
+    /** The direction this one replaced, so "How we got here" can join them. */
+    replaces: v.optional(v.id("mapDirections")),
   }).index("by_room", ["roomId"]),
 
   recipientProfiles: defineTable({

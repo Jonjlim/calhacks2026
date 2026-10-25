@@ -157,7 +157,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       startResearch: (clueIds) =>
         startResearch({ roomId, publishedClueIds: clueIds as Id<"publishedClues">[], idempotencyKey: newRequestKey() }),
       resumeCouncil: (runId) => resumeCouncil({ roomId, runId }),
-      castVote: (listingId, vote) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote }),
+      castVote: (listingId, vote, reason) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote, ...(reason ? { reason } : {}) }),
       reactToGift: (listingId, kind) => setFeedback({ roomId, listingId: listingId as Id<"productListings">, kind }),
       clearVote: (listingId) => clearVote({ roomId, listingId: listingId as Id<"productListings"> }),
       selectGift: (listingId) => selectGift({ roomId, listingId: listingId as Id<"productListings"> }),
@@ -171,7 +171,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
         discoveryQuery: query, idempotencyKey: newRequestKey(),
       }),
       passTrend: (trendJobId, query, passed) => passTrend({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query, passed }),
-      setDirection: (targetKind, targetId, value) => setDirection({ roomId, targetKind, targetId, value }),
+      setDirection: (targetKind, targetId, value, reason) => setDirection({ roomId, targetKind, targetId, value, ...(reason ? { reason } : {}) }),
       suggestThemes: () => suggestThemes({ roomId }),
       sharpen: () => sharpen({ roomId }),
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),

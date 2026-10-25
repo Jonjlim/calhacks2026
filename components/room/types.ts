@@ -65,6 +65,13 @@ export interface RoomData {
 
 export type TrailEntry = OkValue<FunctionReturnType<typeof api.trail.list>>[number];
 
+/** Why a friend passed (D23 trial). */
+export type PassReason = "style" | "price" | "has_similar" | "vibe";
+export const PASS_REASONS: { id: PassReason; label: string }[] = [
+  { id: "style", label: "Not her style" }, { id: "price", label: "Too pricey" },
+  { id: "has_similar", label: "Has something like it" }, { id: "vibe", label: "Wrong vibe" },
+];
+
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
 
 /** Backend calls available in live mode. Absent in preview mode, where controls are hidden. */
@@ -82,7 +89,8 @@ export interface RoomActions {
   addManualClue: Run<[kind: ClueKind, text: string]>;
   startResearch: Run<[publishedClueIds: string[]]>;
   resumeCouncil: Run<[runId: string]>;
-  castVote: Run<[listingId: string, value: VoteValue]>;
+  /** `reason` on a pass (D23 trial): the council avoids it when it replaces a direction. */
+  castVote: Run<[listingId: string, value: VoteValue, reason?: PassReason]>;
   /** “She has it” (shared, publishes an ownership clue) or “too pricey for me” (personal). */
   reactToGift: Run<[listingId: string, kind: "owned" | "price"]>;
   clearVote: Run<[listingId: string]>;
@@ -98,7 +106,7 @@ export interface RoomActions {
   /** Shared, attributed "doesn't fit" on a trend idea; `false` takes it back. */
   passTrend?: Run<[trendJobId: string, query: string, passed: boolean]>;
   /** Pull a memory, theme or direction toward the present (1), push it away (−1), or take it back (0). On a trend cloud, 1 catches it and −1 lets it drift. */
-  setDirection: Run<[targetKind: "clue" | "theme" | "direction" | "trend", targetId: string, value: 1 | -1 | 0]>;
+  setDirection: Run<[targetKind: "clue" | "theme" | "direction" | "trend", targetId: string, value: 1 | -1 | 0, reason?: PassReason]>;
   /** Ask the council to combine memories into gift directions (D23 trial). */
   proposeDirections?: Run;
   /** Search real gifts for one direction (D23 trial). */

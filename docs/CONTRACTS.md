@@ -1786,6 +1786,14 @@ interface MapDirection {
 - **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
 - **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.
 
+#### Passes the council reacts to (D23 trial)
+
+- **Reasons.** `votes.castVote` and `mapSignals.setDirection` accept optional `reason: "style" | "price" | "has_similar" | "vibe"` on a pass ("not her style", "too pricey", "she has something like it", "wrong vibe"). Stored on the vote/signal row; ignored on pulls. Skipping the reason is still a pass.
+- **Retiring.** A direction is retired (`mapDirections.retiredAt`, never deleted) when the room has let the direction go (`fadeOf` = gone) or let `GIFT_PASSES_TO_RETIRE` (2) of the gifts its newest search found go. Retired directions leave `agents.directions.list` and the catalog; their search, reasons and history stay in the decision log.
+- **Replacement.** Retiring schedules `internal.agents.directions.replace`: one new direction beside the others (`replaces` links them), drafted with the same model/preset path and checks, told which directions the room passed on and why ("too pricey" asks for a simpler or smaller gift). It never deletes or resets other directions and starts no trend lookup.
+- **Pulls.** A direction pulled in (more pulls than passes) shows 3 gifts instead of 2. `listRecommendations` is ordered by the room's net gift votes, then score: pulled gifts lead and passed ones trail. Scores and citations are unchanged; the map keeps this server order.
+- The retirement and the replacement each write one council line to the decision log, which also reaches every member's status line for 15 seconds.
+
 #### Decision log — "How we got here" (D23 trial)
 
 ```ts

@@ -9,6 +9,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { err, memberError, ok } from "./lib/result";
 import { logTrail, shortTitle } from "./lib/trail";
+import { PASS_REASON_TEXT, reactToPasses } from "./agents/directions";
 import * as V from "./validators";
 
 type Tally = { up: number; down: number; flag_duplicate: number };
@@ -29,8 +30,9 @@ async function tallyFor(ctx: QueryCtx, listingId: Id<"productListings">): Promis
 
 /** One vote per participant per listing; casting again replaces it. */
 export const castVote = mutation({
-  args: { roomId: v.id("rooms"), listingId: v.id("productListings"), value: V.voteValue },
-  handler: async (ctx, { roomId, listingId, value }) => {
+  /** `reason` (D23 trial): why, on a pass. The council avoids it when it replaces a direction. */
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings"), value: V.voteValue, reason: v.optional(V.passReason) },
+  handler: async (ctx, { roomId, listingId, value, reason }) => {
     type Out = { listingId: Id<"productListings">; tally: Tally };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Out>(member.code);
@@ -42,15 +44,19 @@ export const castVote = mutation({
       .withIndex("by_listing_participant", (q) => q.eq("listingId", listingId).eq("participantId", member.me._id))
       .unique();
     const now = Date.now();
+    const why = value === "down" && reason ? reason : undefined;
     if (existing) {
-      await ctx.db.patch(existing._id, { value, updatedAt: now });
+      await ctx.db.patch(existing._id, { value, updatedAt: now, reason: why });
     } else {
-      await ctx.db.insert("votes", { roomId, listingId, participantId: member.me._id, value, updatedAt: now });
+      await ctx.db.insert("votes", { roomId, listingId, participantId: member.me._id, value, updatedAt: now, ...(why ? { reason: why } : {}) });
     }
-    // "How we got here" (D23 trial): only a changed vote is a new decision.
-    if (existing?.value !== value) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, listingId,
+    // "How we got here" (D23 trial): only a changed vote, or a newly given reason, is a new decision.
+    if (existing?.value !== value || (why && existing?.reason !== why)) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, listingId,
       outcome: value === "up" ? "kept" : value === "down" ? "rejected" : "info",
-      text: `${member.me.displayName || "A friend"} ${value === "up" ? "pulled in" : value === "down" ? "passed on" : "voted on"} “${shortTitle(listing.title)}”.` });
+      text: `${member.me.displayName || "A friend"} ${value === "up" ? "pulled in" : value === "down" ? "passed on" : "voted on"} “${shortTitle(listing.title)}”${why ? ` (${PASS_REASON_TEXT[why]})` : ""}.` });
+    // Enough passes on a direction's gifts make the council give up on that direction and suggest another.
+    const job = value === "down" ? await ctx.db.get(listing.jobId) : null;
+    if (job?.directionId) await reactToPasses(ctx, roomId, job.directionId, member.me._id);
     return ok<Out>({ listingId, tally: await tallyFor(ctx, listingId) });
   },
 });
