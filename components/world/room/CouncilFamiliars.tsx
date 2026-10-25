@@ -37,7 +37,7 @@ const FAILED = "#d95b4a";
 const RESULT_MS = 7000;
 /** Distance in front of the camera, and how tall a companion is on screen (share of the viewport height). */
 const DEPTH = 10;
-const HEIGHT_SHARE = 0.1;
+const HEIGHT_SHARE = 0.085;
 /** Model height per unit of `scale` (measured). */
 const MODEL_UNITS = 1.63;
 /** Screen position of the dock in normalised device coordinates. */
@@ -437,7 +437,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       )}
       {/* Its name, always, on a small tag under it. */}
       {!quiet && (
-        <Html position={[0, -0.35, 0]} center zIndexRange={[36, 30]} style={{ pointerEvents: "none" }}>
+        <Html position={[0, 0.1, 0]} center zIndexRange={[36, 30]} style={{ pointerEvents: "none" }}>
           <span data-map-token className={s.familiarName} style={{ ["--tint" as string]: tint }}>{COUNCIL_LABEL[actor]}</span>
         </Html>
       )}
