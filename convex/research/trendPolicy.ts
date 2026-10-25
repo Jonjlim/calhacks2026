@@ -1,5 +1,5 @@
 import type { PublishedClue } from "../../lib/contracts";
-import { isUnconfirmedObservation, shoppingPhrase } from "./text";
+import { isUnconfirmedObservation, shoppingPhrases } from "./text";
 
 export const TREND_SAMPLE_TTL_MS = 24 * 60 * 60 * 1000;
 // Letters only: no digits keeps addresses, phone numbers and dates out of the query.
@@ -16,7 +16,8 @@ export function isSafeTrendSeed(seed: string): boolean {
 export function trendSeed(clue: Pick<PublishedClue, "kind" | "text" | "status">, blockedNames: string[]): string | null {
   if (clue.status !== "active" || !["interest", "explicit_wish"].includes(clue.kind)
     || isUnconfirmedObservation(clue.text) || /^maybe\b/i.test(clue.text.trim())) return null;
-  const seed = shoppingPhrase(clue.text).replace(/\s+/g, " ").trim();
+  // Trends compare one subject; "hiking and camping" seeds on "hiking".
+  const seed = (shoppingPhrases(clue.text)[0] ?? "").replace(/\s+/g, " ").trim();
   if (!isSafeTrendSeed(seed)) return null;
   const blocked = new Set(blockedNames.flatMap(name => name.toLowerCase().match(/[a-z]+/g) ?? []).filter(token => token.length > 1));
   return seed.split(" ").some(token => blocked.has(token)) ? null : seed;

@@ -5,7 +5,7 @@
  * become terms the search and ranking must avoid.
  */
 import type { PublishedClue, SearchBrief } from "../../lib/contracts";
-import { cluePhrase, isUnconfirmedObservation, shoppingPhrase } from "./text";
+import { cluePhrase, isUnconfirmedObservation, shoppingPhrases } from "./text";
 
 export const DEFAULT_LISTING_LIMIT = 12;
 const MAX_LISTING_LIMIT = 12;
@@ -55,10 +55,11 @@ function uniquePhrases(clues: BriefClue[], positive = false): string[] {
   const seen = new Set<string>();
   const phrases: string[] = [];
   for (const c of clues) {
-    const phrase = positive ? shoppingPhrase(c.text) : cluePhrase(c.text);
-    if (phrase && !seen.has(phrase)) {
-      seen.add(phrase);
-      phrases.push(phrase);
+    for (const phrase of positive ? shoppingPhrases(c.text) : [cluePhrase(c.text)]) {
+      if (phrase && !seen.has(phrase)) {
+        seen.add(phrase);
+        phrases.push(phrase);
+      }
     }
   }
   return phrases;
