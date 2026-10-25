@@ -20,5 +20,7 @@ describe("council robots", () => {
     expect(robotClip({ status: "idle", reveal: true, hover: true })).toBe("Celebrate");
     expect(robotClip({ status: "completed", walking: true })).toBe("Walk");
     expect(robotClip({ status: "failed", hover: true })).toBe("Sit");
+    expect(robotClip({ status: "started", atWork: true })).toBe("Idle");
+    expect(robotClip({ status: "started", atWork: true, walking: true })).toBe("Walk");
   });
 });

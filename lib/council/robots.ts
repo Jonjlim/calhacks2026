@@ -29,6 +29,8 @@ export interface RobotClipInput {
   hover?: boolean;
   /** The gift reveal is playing. */
   reveal?: boolean;
+  /** Standing at its work node (or waiting beside it) while the task runs. */
+  atWork?: boolean;
   /** An occasional idle gesture. */
   gesture?: "Wave" | "Sit";
 }
@@ -38,7 +40,7 @@ export function robotClip(i: RobotClipInput): RobotClip {
   if (i.walking) return "Walk";
   if (i.reveal) return "Celebrate";
   if (i.status === "failed") return "Sit";
-  if (i.status === "started") return "Walk";
+  if (i.status === "started") return i.atWork ? "Idle" : "Walk";
   if (i.status === "completed" && i.celebrating) return "Celebrate";
   if (i.hover) return "Wave";
   if (i.status === "idle" && i.gesture) return i.gesture;
