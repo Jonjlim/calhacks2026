@@ -12,6 +12,8 @@ import type { QueryCtx } from "../_generated/server";
 import { searchOrigin, withSearchNote } from "./foundBy";
 import { filterListings, rankListings, type ExcludedListing } from "./score";
 import { trendJobIdInFingerprint } from "./trendJobs";
+import { loadRoomSteering, steerRanked, type RoomSteering } from "./groupRanking";
+import { boxListingIds } from "../lib/giftBox";
 
 export interface CatalogState extends RecommendationsView {
   clues: PublishedClue[];
@@ -29,9 +31,9 @@ const toListing = ({ _id, _creationTime: _, ...fields }: Doc<"productListings">)
  * Ranks one search's listings and says what happened to them: how many it
  * found, how many the room's clues removed, how many were repeats of one product.
  */
-function rankPool(pool: ProductListing[], clues: PublishedClue[], budgetMinor: number | undefined, limit: number) {
+function rankPool(pool: ProductListing[], clues: PublishedClue[], budgetMinor: number | undefined, limit: number, steering: RoomSteering, directionId?: string) {
   const { kept, excluded } = filterListings({ listings: pool, clues });
-  const distinct = rankListings({ listings: pool, clues, budgetMinor, limit: kept.length });
+  const distinct = steerRanked(rankListings({ listings: pool, clues, budgetMinor, limit: kept.length }), pool, steering, directionId);
   return {
     ranked: distinct.slice(0, limit),
     excluded,
@@ -83,6 +85,7 @@ export async function readCatalog(
     }
   }
 
+  const steering = await loadRoomSteering(ctx, room);
   const recommendations: Recommendation[] = [];
   const listings: ProductListing[] = [];
   const searchPools: SearchPoolSummary[] = [];
@@ -102,7 +105,7 @@ export async function readCatalog(
     const pool = (await ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", job._id)).collect())
       .filter(l => l.roomId === room._id).map(toListing);
     // A direction the room pulled in earns one more gift on the map.
-    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION + (pulled ? 1 : 0));
+    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION + (pulled ? 1 : 0), steering, direction._id);
     const foundBy: SearchOrigin = { query: direction.query, source: "direction", directionId: direction._id, ...(direction.clueIds[0] ? { publishedClueId: direction.clueIds[0] } : {}) };
     add(job, pool, ranked, foundBy, row => row.publishedClueIds.length
       ? row.explanation
@@ -120,7 +123,7 @@ export async function readCatalog(
       .filter((listing) => listing.roomId === room._id && (!council || (council.deliveredAt && approved.has(listing._id))))
       .map(toListing);
     const limit = lanes.length ? GIFTS_PER_DIRECTION : candidatePool.brief?.listingLimit ?? 12;
-    const result = rankPool(pool, clues, room.budgetMinor, limit);
+    const result = rankPool(pool, clues, room.budgetMinor, limit, steering);
     excluded = result.excluded;
     const trendId = trendJobIdInFingerprint(candidatePool.inputHash);
     const trendJobId = trendId ? ctx.db.normalizeId("trendJobs", trendId) : null;
@@ -136,15 +139,25 @@ export async function readCatalog(
     searchPools.push({ jobId: candidatePool._id, query: candidatePool.brief?.queryTerms[0] ?? "", ...result.counts });
   }
 
-  // Gifts the room pulled in lead the shortlist; passed ones trail. Scores and citations are unchanged.
-  if (recommendations.length > 1) {
-    const net = new Map<string, number>();
-    for (const vote of await ctx.db.query("votes").withIndex("by_room", q => q.eq("roomId", room._id)).take(2000)) {
-      net.set(vote.listingId, (net.get(vote.listingId) ?? 0) + (vote.value === "up" ? 1 : vote.value === "down" ? -1 : 0));
+  // Keep the current box's observed products available even after a new search.
+  const selection = room.currentSelectionId ? await ctx.db.get(room.currentSelectionId) : null;
+  if (selection?.status === "active") {
+    for (const id of boxListingIds(selection)) {
+      if (shownIds.has(id)) continue;
+      const doc = await ctx.db.get(id);
+      if (!doc || doc.roomId !== room._id) continue;
+      const listing = toListing(doc);
+      const rows = rankListings({ listings: [listing], clues, budgetMinor: room.budgetMinor, limit: 1 });
+      if (rows[0]) {
+        recommendations.push({ ...rows[0], id: `box:${id}`, roomId: room._id, createdAt: selection.selectedAt });
+        shownIds.add(id);
+      }
+      if (!listings.some(l => l.id === id)) listings.push(listing);
     }
-    const order = new Map(recommendations.map((r, i) => [r.listingId, i]));
-    recommendations.sort((a, b) => (net.get(b.listingId) ?? 0) - (net.get(a.listingId) ?? 0) || b.score - a.score || order.get(a.listingId)! - order.get(b.listingId)!);
   }
+  // Each lane is vote-ranked before truncation. Apply the same ordering across lanes.
+  const finalOrder = steerRanked(recommendations, listings, steering, new Map(recommendations.map(r => [r.listingId, r.foundBy?.directionId])));
+  recommendations.splice(0, recommendations.length, ...finalOrder);
 
   return {
     clues,

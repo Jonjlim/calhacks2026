@@ -488,3 +488,17 @@ Legacy single-gift fields remain first-item compatibility projections. Simulatio
 continues to use the approved revision, never a client-calculated amount.
 Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
 rows remain valid without a data migration. No deployment accompanies this change.
+
+
+## Group polling and a multi-gift map box
+
+Alex requested live group answers rather than first-answer closure. Store
+optional attributed ballots on the existing room question; no extra service or
+database. Poll votes are advisory and never publish a recipient fact. Explicit
+product votes take precedence, question support then steers eligible candidates
+before pool limits, and existing relevance/citations remain unchanged. Source
+filters remain authoritative. Selected products are kept in the room projection
+across subsequent searches. The map calls atomic add/remove operations, retains
+all selected product links, approves one combined versioned estimate and reveals
+every item through a selectable set. Old single-gift APIs and rows remain valid.
+No payment/deployment change is part of this implementation.

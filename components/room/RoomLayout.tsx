@@ -144,14 +144,14 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       const sel = data.selection?.status === "active" ? data.selection : null;
       const rings = ringsRef.current;
       if (!sel || !rings || convergence.active) return;
-      const rec = data.recommendations.find((r) => r.listingId === sel.listingId);
-      const cited = new Set(rec?.publishedClueIds ?? []);
+      const selectedIds = new Set(sel.items?.map(item => item.listingId) ?? [sel.listingId]);
+      const cited = new Set(data.recommendations.filter(r => selectedIds.has(r.listingId)).flatMap(r => r.publishedClueIds));
       const kindOf = new Map(data.publishedClues.map((c) => [c.id, c.kind]));
       const inputs: ArtifactInput[] = [
         ...rings.clues.map((c): ArtifactInput => ({ key: c.key, source: kindOf.get(c.key.slice(5)) === "explicit_wish" ? "wish" : "memory", text: c.text, x: c.x, z: c.z, supports: cited.has(c.key.slice(5)) })),
         ...rings.ideas.map((i): ArtifactInput => ({ key: i.key, source: "idea", text: i.text, x: i.x, z: i.z })),
         // The other real gifts the room considered; the chosen one is the reveal itself.
-        ...rings.gifts.filter((g) => g.listingId !== sel.listingId).map((g): ArtifactInput => ({ key: g.key, source: "gift", text: g.title, x: g.x, z: g.z })),
+        ...rings.gifts.filter((g) => !selectedIds.has(g.listingId)).map((g): ArtifactInput => ({ key: g.key, source: "gift", text: g.title, x: g.x, z: g.z })),
       ];
       convergence.start({ selectionId: sel.id, inputs, total: inputs.length, instant: instant || reducedMotion });
     },
@@ -353,7 +353,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
       {selection && (
         <ConvergenceOverlay
-          gift={{ selection, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues }}
+          gift={{ selection, listings: data.listings, recommendations: data.recommendations, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues }}
           isOrganizer={isOrganizer}
           onPlan={() => setDrawer({ kind: "shares" })}
           onReplay={replayReveal}

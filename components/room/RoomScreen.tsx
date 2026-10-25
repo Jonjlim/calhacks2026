@@ -121,6 +121,10 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const setFeedback = useMutation(api.map.setFeedback);
   const clearVote = useMutation(api.votes.clearVote);
   const selectGift = useMutation(api.proposals.selectGift);
+  const addGiftToBox = useMutation(api.proposals.addGiftToBox);
+  const removeGiftFromBox = useMutation(api.proposals.removeGiftFromBox);
+  const voteQuestion = useMutation(api.questionPolls.vote);
+  const finishQuestion = useMutation(api.questionPolls.finish);
   const clearSelection = useMutation(api.proposals.clearSelection);
   const setLimit = useMutation(api.proposals.setContributionLimit);
   const approve = useMutation(api.proposals.approveRevision);
@@ -161,6 +165,10 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       reactToGift: (listingId, kind) => setFeedback({ roomId, listingId: listingId as Id<"productListings">, kind }),
       clearVote: (listingId) => clearVote({ roomId, listingId: listingId as Id<"productListings"> }),
       selectGift: (listingId) => selectGift({ roomId, listingId: listingId as Id<"productListings"> }),
+      addGiftToBox: (listingId) => addGiftToBox({ roomId, listingId: listingId as Id<"productListings"> }),
+      removeGiftFromBox: (listingId) => removeGiftFromBox({ roomId, listingId: listingId as Id<"productListings"> }),
+      voteQuestion: (questionId, option) => voteQuestion({ questionId: questionId as Id<"mapSharpens">, option }),
+      finishQuestion: (questionId) => finishQuestion({ questionId: questionId as Id<"mapSharpens"> }),
       clearSelection: () => clearSelection({ roomId }),
       setLimit: (amountMinor) => setLimit({ roomId, amountMinor }),
       approve: (revisionId) => approve({ revisionId: revisionId as Id<"proposalRevisions"> }),
@@ -218,7 +226,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
+      selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
       proposeDirections,
     ],
   );
@@ -286,7 +294,19 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
     cursors: cursors?.ok ? cursors.value : undefined,
     roomPhotos: photos?.ok ? photos.value : undefined,
   };
-  return <RoomSurfaceView surface={surface} data={extras} actions={actions} />;
+  const legacyActions = { ...actions, addGiftToBox: undefined, removeGiftFromBox: undefined, voteQuestion: undefined, finishQuestion: undefined };
+  return <ErrorBoundary fallback={<RoomSurfaceView surface={surface} data={extras} actions={legacyActions} />}>
+    <RoomWithQuestionPoll roomId={roomId} data={extras} actions={actions} legacyActions={legacyActions} surface={surface} />
+  </ErrorBoundary>;
+}
+
+/** A missing optional poll endpoint must never hide directions, photos or the rest of the map. */
+function RoomWithQuestionPoll({ roomId, data, actions, legacyActions, surface }: {
+  roomId: Id<"rooms">; data: RoomData; actions: RoomActions; legacyActions: RoomActions; surface: RoomSurface;
+}) {
+  const poll = useQuery(api.questionPolls.state, { roomId });
+  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined }}
+    actions={poll?.ok ? actions : legacyActions} />;
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {

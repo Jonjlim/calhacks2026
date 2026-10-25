@@ -1,3 +1,4 @@
+import type { QuestionPollView } from "@/lib/contracts";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/convex/_generated/api";
 import type {
@@ -51,6 +52,7 @@ export interface RoomData {
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
+  questionPoll?: QuestionPollView | null;
   sharpen?: OkValue<FunctionReturnType<typeof api.agents.themes.getSharpen>>;
   cursors?: OkValue<FunctionReturnType<typeof api.map.listCursors>>;
   /** Photos members added on the map, shared with the whole room (D20). */
@@ -95,6 +97,8 @@ export interface RoomActions {
   reactToGift: Run<[listingId: string, kind: "owned" | "price"]>;
   clearVote: Run<[listingId: string]>;
   selectGift: Run<[listingId: string]>;
+  addGiftToBox?: Run<[listingId: string]>;
+  removeGiftFromBox?: Run<[listingId: string]>;
   clearSelection: Run;
   setLimit: Run<[amountMinor: number]>;
   approve: Run<[revisionId: string]>;
@@ -114,6 +118,8 @@ export interface RoomActions {
   suggestThemes: Run;
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
+  voteQuestion?: Run<[questionId: string, option: number | null]>;
+  finishQuestion?: Run<[questionId: string]>;
   dismissSharpen: Run<[sharpenId: string]>;
   /** Adds 1–3 photos: a copy shared with the room, and a private copy read once for clues (with the uploader's tap on the recipient). */
   importPhotos: Run<[items: { blob: Blob; marker?: { x: number; y: number } }[]]>;

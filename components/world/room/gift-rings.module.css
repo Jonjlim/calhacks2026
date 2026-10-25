@@ -448,3 +448,11 @@
 .chain b { font-weight: 700; }
 .pickState { display: inline-flex; align-items: center; gap: 3px; }
 .markPolaroid > span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Group poll choices remain visible while people change their votes. */
+.askOptions button[aria-pressed="true"] { background: #eee4c9; box-shadow: inset 0 0 0 2px #a17d3e; }
+
+.boxPanel { max-height: 76vh; overflow-y: auto; overscroll-behavior: contain; max-width: calc(100vw - 32px); }
+
+.ask > .askSkip { display: block; margin: 7px auto 0; }
+.boxGift + .boxGift { margin-top: 10px; }

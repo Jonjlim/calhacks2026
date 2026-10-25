@@ -80,6 +80,7 @@ export interface RingsWorld {
   /** The viewer's pointer on the map plane, for their own live cursor. */
   onPointer?(x: number, z: number): void;
   selectedListingId?: string;
+  selectedListingIds?: string[];
   boxLabel: string;
   /** Everyone's share of the current revision, drawn above the present. */
   pledge?: PledgeWorld | null;
@@ -661,7 +662,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
               const t = themeAt.get(theme);
               return t && !revealing ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : focus && focus !== g.key ? 0.35 : 0.75} /> : null;
             })}
-            {rings.selectedListingId === g.listingId && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
+            {(rings.selectedListingIds?.includes(g.listingId) ?? rings.selectedListingId === g.listingId) && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} recede={recede(g.key)} offset={[0, -0.4, 2.2]} label={`${g.title}, ${g.price}`}
                 peek={<><b>{g.title}</b><small>{g.price}{g.fixture ? " · sample" : ""}</small></>}

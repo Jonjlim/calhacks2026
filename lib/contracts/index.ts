@@ -830,3 +830,18 @@ export interface MapTheme {
   knowledgeRevision: number;
   updatedAt: number;
 }
+
+
+/** Room-visible group steering; no ballot publishes a recipient preference. */
+export interface QuestionPollView {
+  questionId: string;
+  counts: number[];
+  votedCount: number;
+  memberCount: number;
+  myOption: number | null;
+  leader: number | null;
+  tied: boolean;
+  stale: boolean;
+  open: boolean;
+  canFinish: boolean;
+}

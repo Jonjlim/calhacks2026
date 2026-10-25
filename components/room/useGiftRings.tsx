@@ -1,5 +1,7 @@
 "use client";
 
+import { QuestionPoll } from "./QuestionPoll";
+
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { reencodeImage } from "@/lib/live/image";
@@ -70,6 +72,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [allGifts, setAllGifts] = useState(false);
   // Where this viewer started a search, so its progress shows on that theme.
   const [researchFrom, setResearchFrom] = useState<string | null>(null);
+  const [hiddenPoll, setHiddenPoll] = useState<string | null>(null);
   // When this viewer asked for trends, so the outcome of that lookup (not an older one) reaches the status line.
   const [trendAsked, setTrendAsked] = useState<number | null>(null);
   /** Index of the photo open in the large tap-the-person view, if any. */
@@ -186,6 +189,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const avatarOf = (id: string) => avatarFor(participants, id);
   const colorOf = (id: string) => AVATAR_COLOR[avatarOf(id)];
   const selection = data.selection?.status === "active" ? data.selection : null;
+  const selectedIds = new Set(selection?.items?.map(item => item.listingId) ?? (selection ? [selection.listingId] : []));
   const revision = data.proposal.revision;
   const approved = revision ? data.proposal.approvals.filter((a) => a.revisionId === revision.id && a.status === "approved").length : 0;
   const priceOf = (listingId: string) => {
@@ -237,7 +241,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const memories = [...new Set([...cited, ...(viaDirection?.clueIds.filter((id) => themeOfClue.has(id)) ?? [])])];
     highlight = new Set([`gift:${whyRec.listingId}`, ...memories.map((id) => `clue:${id}`), ...memories.map((id) => `theme:${themeOfClue.get(id)}`),
       ...(trend ? [trendKey(trend.trendJobId, trend.query)] : []), ...(viaDirection ? [`direction:${viaDirection.id}`] : [])]);
-    if (selection?.listingId === whyRec.listingId) highlight.add("box");
+    if (selectedIds.has(whyRec.listingId)) highlight.add("box");
   } else if (selectedKey?.startsWith("direction:")) {
     // Opening a direction lights the memories it combines and the gifts it found.
     const d = directionOf(selectedKey.slice(10));
@@ -298,8 +302,12 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const choose = (listingId: string) => {
     if (!actions) return;
+    if (isOrganizer && selection && !actions.addGiftToBox) {
+      setError("The multi-gift backend update is not available yet. Your existing gift was kept.");
+      return;
+    }
     void (isOrganizer
-      ? run(() => actions.selectGift(listingId), "It’s in the box. Everyone approves this exact version.").then((ok) => ok && setSelectedKey("box"))
+      ? run(() => actions.addGiftToBox ? actions.addGiftToBox(listingId) : actions.selectGift(listingId), actions.addGiftToBox ? "Added to the box. Your other gifts stay; everyone approves the updated collection." : "Gift selected. Everyone approves this version.").then((ok) => ok && setSelectedKey("box"))
       : run(() => actions.castVote(listingId, "up"), "Your vote is in. The organizer puts the final gift in the box."));
   };
 
@@ -360,16 +368,17 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const rec = recs.find((r) => r.listingId === listingId);
       if (!listing) return null;
       const mine = data.votes[listingId]?.myVote;
-      const inBox = selection?.listingId === listingId;
+      const inBox = selectedIds.has(listingId);
       const viaDirection = directionOf(rec?.foundBy?.directionId);
       return {
         caption: <><b>{listing.title}</b><small>{priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}{viaDirection ? ` · ${viaDirection.label}` : trendByListing.has(listingId) ? " · via a trend" : ""}{rec?.publishedClueIds.length ? ` · fits ${rec.publishedClueIds.length} ${rec.publishedClueIds.length === 1 ? "memory" : "memories"}` : ""}</small></>,
         note: whyListing === listingId && rec ? whyChain(rec, listing) : undefined,
         actions: actions ? [
+          { icon: "present", label: isOrganizer ? (inBox ? "In the box ✓" : !actions.addGiftToBox && selection ? "Backend update needed" : "Add to box") : "Vote for the box", tone: "gold", on: inBox, disabled: !!pending || (isOrganizer && !actions.addGiftToBox && !!selection && !inBox), run: () => inBox ? setSelectedKey("box") : choose(listingId) },
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
           { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: passFirst(key, mine === "down", () => vote(listingId, "down")) },
           { icon: "thread", label: "Why?", on: whyListing === listingId, run: () => setWhyListing((w) => (w === listingId ? null : listingId)) },
-          { icon: "present", label: isOrganizer ? (inBox ? "In the box" : "Put in the box") : "Vote for the box", tone: "gold", on: inBox, more: true, disabled: !!pending, run: () => choose(listingId) },
+
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "coins", label: "Too pricey for me", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
           { icon: "thread", label: "How we got here", more: true, run: () => setStory({ listingId }) },
@@ -659,7 +668,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
 
   // The sharpen round: one question between the two leading gifts.
   let overlay: ReactNode = null;
-  if (sharpen && sharpen.status === "open") {
+  const poll = data.questionPoll?.questionId === sharpen?._id ? data.questionPoll : null;
+  if (sharpen && poll && actions?.voteQuestion) {
+    if (hiddenPoll !== sharpen._id) overlay = <QuestionPoll question={sharpen} poll={poll} pending={!!pending}
+      onVote={option => void run(() => actions.voteQuestion!(sharpen._id, option), option === null ? "Your question vote was withdrawn." : "Your vote is in. The gift shortlist updates for the room.")}
+      onFinish={isOrganizer && actions.finishQuestion ? () => void run(() => actions.finishQuestion!(sharpen._id), "The room’s choice is saved. No recipient fact was published.") : undefined}
+      onSkip={!poll.open ? () => setHiddenPoll(sharpen._id) : isOrganizer ? () => void run(() => actions.dismissSharpen(sharpen._id), "Question skipped.") : undefined} />;
+  } else if (sharpen && sharpen.status === "open") {
     const about = directionOf(sharpen.directionId);
     overlay = (
       <div className={s.ask} data-map-token>
@@ -759,7 +774,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const down = data.votes[g.listingId]?.tally.down ?? 0;
       // A pass fades a gift; once half the room has passed and nobody pulled it in, it leaves the map (D23 trial).
       const fade = fadeOf({ up, down }, members);
-      const kept = selection?.listingId === g.listingId || selectedKey === `gift:${g.listingId}` || whyListing === g.listingId;
+      const kept = selectedIds.has(g.listingId) || selectedKey === `gift:${g.listingId}` || whyListing === g.listingId;
       return {
         key: `gift:${g.listingId}`, listingId: g.listingId, title: l.title, price: priceOf(g.listingId), imageUrl: l.imageUrl, themes: g.themes, x: g.x, z: g.z, rank: i + 1,
         up, down, fixture: l.source === "manual_fixture",
@@ -775,10 +790,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     cursors,
     overlay,
     selectedListingId: selection?.listingId,
+    selectedListingIds: [...selectedIds],
     pledge,
     boxPanel: selection ? boxPanel : null,
     nextStep,
-    boxLabel: selection ? `${priceOf(selection.listingId)} · ${approved}/${participants.length} yes` : "Our gift box",
+    boxLabel: selection ? `${selectedIds.size} ${selectedIds.size === 1 ? "gift" : "gifts"} · ${revision && revision.status !== "infeasible" ? formatMinor(revision.payableTotalMinor) : "Review estimate"} · ${approved}/${participants.length} yes` : "Our gift box",
     selectedKey,
     highlight,
     composer: composer && (photoComposer ?? composerNode) ? { x: composer.x, z: composer.z, node: photoComposer ?? composerNode } : null,

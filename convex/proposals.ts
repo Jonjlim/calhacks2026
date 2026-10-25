@@ -328,3 +328,32 @@ export const withdrawApproval = mutation({
     return ok((await ctx.db.get(approval._id))!);
   },
 });
+
+
+/** Add one gift without replacing existing items, including under concurrent clicks. */
+export const addGiftToBox = mutation({
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
+  handler: async (ctx, { roomId, listingId }) => {
+    const member = await requireMember(ctx, roomId);
+    if (!member.ok) return memberError(member.code);
+    if (member.me.role !== "organizer") return err("unauthorized", "Only the organizer can change the gift box.");
+    const selection = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+    const ids = selection?.status === "active" ? boxListingIds(selection) : [];
+    return replaceGiftBox(ctx, roomId, ids.includes(listingId) ? ids : [...ids, listingId]);
+  },
+});
+
+/** Remove only this gift; other selected gifts and their sources remain. */
+export const removeGiftFromBox = mutation({
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
+  handler: async (ctx, { roomId, listingId }): Promise<Result<{ selection: Doc<"giftSelections"> | null; revision?: Doc<"proposalRevisions"> }>> => {
+    const member = await requireMember(ctx, roomId);
+    if (!member.ok) return memberError(member.code);
+    if (member.me.role !== "organizer") return err("unauthorized", "Only the organizer can change the gift box.");
+    const selection = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+    const ids = selection?.status === "active" ? boxListingIds(selection).filter(id => id !== listingId) : [];
+    if (ids.length) return replaceGiftBox(ctx, roomId, ids);
+    const cleared = await clearGiftBox(ctx, roomId);
+    return cleared.ok ? ok({ selection: null }) : cleared;
+  },
+});

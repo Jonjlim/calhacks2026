@@ -26,6 +26,8 @@ export interface RevealGift {
   listing?: ProductListing;
   recommendation?: Recommendation;
   clues: PublishedClue[];
+  listings?: ProductListing[];
+  recommendations?: Recommendation[];
 }
 
 const isGoogle = (url: string) => {
@@ -81,8 +83,16 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
     if (state === "complete") heading.current?.focus({ preventScroll: true });
   }, [state]);
 
-  const { listing, selection, recommendation } = gift;
-  const snapshot = selection.listingSnapshot;
+  const { selection } = gift;
+  const [focus, setFocus] = useState(0);
+  useEffect(() => setFocus(0), [selection.id]);
+  const items = selection.items;
+  const item = items?.[Math.min(focus, items.length - 1)];
+  const focusedId = item?.listingId ?? selection.listingId;
+  const listing = gift.listings?.find(l => l.id === focusedId) ?? (gift.listing?.id === focusedId ? gift.listing : undefined);
+  const recommendation = gift.recommendations?.find(r => r.listingId === focusedId) ?? (gift.recommendation?.listingId === focusedId ? gift.recommendation : undefined);
+  const snapshot = item?.listingSnapshot ?? selection.listingSnapshot;
+  const photoUrl = item?.listingSnapshot.imageUrl ?? listing?.imageUrl;
   const url = snapshot.sourceUrl || listing?.sourceUrl;
   const price = snapshot.priceStatus === "observed" && snapshot.priceMinor !== undefined ? formatMinor(snapshot.priceMinor, listing?.currency ?? "USD") : null;
   const why = useMemo(() => {
@@ -91,7 +101,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
   }, [recommendation, gift.clues]);
   const freshness = useMemo(() => (listing ? getPriceFreshness({ ...listing, retrievedAt: snapshot.retrievedAt }, Date.now()) : null), [listing, snapshot.retrievedAt]);
   const [photoFailed, setPhotoFailed] = useState(false);
-  useEffect(() => setPhotoFailed(false), [listing?.imageUrl]);
+  useEffect(() => setPhotoFailed(false), [photoUrl]);
 
   const revealed = active && (state === "revealing" || state === "complete") && !leaving;
   const playing = active && !leaving && state !== "complete" && state !== "revealing";
@@ -144,8 +154,8 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
             <motion.div animate={reduced ? undefined : { y: [0, -7, 0] }} transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }} className="relative rounded-[10px] bg-[#fbf3e3] p-3 pb-9 shadow-[0_28px_50px_-22px_rgba(60,36,30,0.65),0_0_0_1px_rgba(120,84,60,0.18)]">
               <span aria-hidden className="absolute -top-3 left-1/2 h-6 w-20 -translate-x-1/2 -rotate-2 rounded-[3px] bg-[#f3b9c4]/80 shadow-sm" />
               <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-[6px] bg-[#fffaf1] ring-1 ring-[#c7a88a]/40">
-                {listing?.imageUrl && !photoFailed ? (
-                  <img src={listing.imageUrl} alt={snapshot.title} className="h-full w-full object-contain" onError={() => setPhotoFailed(true)} />
+                {photoUrl && !photoFailed ? (
+                  <img src={photoUrl} alt={snapshot.title} className="h-full w-full object-contain" onError={() => setPhotoFailed(true)} />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_40%,#fff4d6,#f6dcc7)] px-5 text-center">
                     <span aria-hidden className="text-[#a07a2c]"><MapIcon name="present" size={44} /></span>
@@ -172,7 +182,13 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
             className="paper-card pointer-events-auto absolute z-30 flex flex-col gap-3 overflow-y-auto rounded-[24px] p-6"
             style={wide ? { left: panel.x, top: Math.max(20, size.h * 0.07), width: panel.w, maxHeight: size.h - Math.max(20, size.h * 0.07) - 24 } : { left: 16, right: 16, bottom: 12, maxHeight: "46vh" }}
           >
-            <p className="text-[11.5px] font-semibold tracking-[0.14em] text-coral uppercase">Our gift{sample ? " · sample" : ""}</p>
+            <p className="text-[11.5px] font-semibold tracking-[0.14em] text-coral uppercase">{items && items.length > 1 ? `Our ${items.length} gifts` : "Our gift"}{sample ? " · sample" : ""}</p>
+            {items && items.length > 1 && <div role="group" aria-label="Selected gifts" className="flex flex-wrap gap-2">
+              {items.map((it, i) => <button key={it.listingId} type="button" aria-pressed={focus === i} onClick={() => setFocus(i)}
+                className="rounded-lg border border-dusk/20 px-2 py-1 text-left text-xs" style={focus === i ? { background: "#eee4c9" } : undefined}>
+                {i + 1}. {it.listingSnapshot.title}
+              </button>)}
+            </div>}
             <h2 ref={heading} tabIndex={-1} className="font-display text-[30px] leading-[1.05] text-dusk outline-none">{snapshot.title}</h2>
             <p className="text-[15px] text-dusk">
               <strong className="font-semibold">{price ?? "Price unknown"}</strong>

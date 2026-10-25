@@ -297,6 +297,7 @@ export const answerSharpen = mutation({
     const member = await requireMember(ctx, row.roomId);
     if (!member.ok) return memberError<Out>(member.code);
     if (row.status !== "open") return err<Out>("invalid_revision", "Someone already answered this question.");
+    if (row.ballots !== undefined) return err<Out>("invalid_revision", "This question is using group votes. Vote in the room poll instead.");
     const chosen = row.options[option];
     if (!chosen) return err<Out>("validation_failed", "Pick one of the answers.");
     if (!chosen.clue.trim()) {

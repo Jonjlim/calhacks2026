@@ -444,6 +444,7 @@ export default defineSchema({
 
   /** One sharpen round: a single question that splits the finalists (D19). Answering publishes the chosen clue as the answering member. */
   mapSharpens: defineTable({
+    ballots: v.optional(v.array(v.object({ participantId: v.id("participants"), option: v.number(), updatedAt: v.number() }))),
     roomId: v.id("rooms"),
     question: v.string(),
     options: v.array(v.object({ label: v.string(), clue: v.string(), listingIds: v.array(v.id("productListings")) })),

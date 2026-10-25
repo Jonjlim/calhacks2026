@@ -1813,3 +1813,39 @@ interface TrailEntry {
 - Append-only `roomTrail` table, written inside the steps themselves: how memories were read as search words; each direction the council kept (with its why and search) and each one the checks threw out (with the reason); the probe question; each Google Trends screen result (seen vs kept); each search's outcome (results, kept, dropped, failures); pulls/passes on directions and gifts, caught/dropped trend clouds, question answers, "she already has it"; who put what in the box; approvals with the **room-visible share** and total, and the "everyone approved — simulated" line.
 - **Privacy:** only room-visible facts. Never raw imports, unpublished guesses, recipient-private data or anyone's contribution maximum. Logging never blocks or changes a decision. Purged with the room.
 - The map opens it from the box's "Why this gift?", a gift's ⋯ menu, and the council menu; lines on the chosen gift's path (same listing, direction or cited memories) are highlighted.
+
+
+### Live group question votes and additive gift-box actions
+
+Alex requested changeable group question votes, vote-driven ranking and multiple
+selected gifts in the map UI. Owners: Dev 4 implementation; Dev 1 consumes the
+map controls, Dev 2 reviews membership/selection and Dev 3 consumes questions.
+
+`mapSharpens.ballots?` is an additive array of `{participantId, option, updatedAt}`
+with at most one ballot per member and 2,000 ballots per question. Old rows remain
+valid and room purge already deletes the parent. `questionPolls.state({roomId})`
+returns the latest non-dismissed question's ID, live option counts, own option,
+member/voter counts, leader (null on tie), open/closed/stale status and canFinish.
+`questionPolls.vote({questionId, option: number | null})` records, changes or
+withdraws the caller's own vote; it rejects nonmembers, stale, superseded or
+closed questions and invalid options. Voting never publishes a clue, changes
+money, or changes the explicit listing votes table. Organizer-only
+`questionPolls.finish({questionId})` closes a current poll with a unique leader;
+ties remain open or can be skipped through the existing dismissal operation.
+Existing answerSharpen remains for compatibility; the live map uses poll votes.
+
+Research ordering applies direct gift votes, then question support, then existing
+relevance/deterministic tie order BEFORE truncating a pool. Question support is
+an advisory signal from explicitly linked product IDs or literal product-title
+matches to an option; it is not a recipient fact or a new evidence citation.
+Ownership, exclusion, invalid-listing and availability filters remain authoritative.
+A question's signals apply only at its current knowledge revision. Existing
+selected products remain available in the room projection across searches.
+
+`proposals.addGiftToBox({roomId, listingId})` atomically appends one distinct gift
+and is idempotent. `removeGiftFromBox` removes only that gift, clearing when empty.
+Both are organizer-only, preserve the 12-item bound and payment locks, and use
+existing proposal recomputation/approval invalidation. `setGiftBox` remains full
+replacement; `selectGift` remains legacy replace-with-one. The live map now uses
+add/remove, presents Add to box as a primary action and renders every item and
+the combined proposal estimate. Votes never select gifts or approve a proposal.
