@@ -131,11 +131,25 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       const view = mapView.step(dt, reducedMotion);
       const poseOf = (stage: typeof shown): CameraPose => {
         if (stage !== "map") return stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : p.landing;
-        // The map can be dragged and zoomed: slide both ends of the view, and pull the camera along its line of sight.
+        // The map can be turned, tilted, moved and zoomed: orbit the camera around its target, pull it
+        // along its line of sight, then slide both ends of the view.
         const base = pullBack(mapPose(w, size.height), view.zoom);
         const [px, py, pz] = base.position;
         const [tx, ty, tz] = base.target;
-        return { ...base, position: [px + view.x, py, pz + view.z], target: [tx + view.x, ty, tz + view.z] };
+        const ox = px - tx;
+        const oy = py - ty;
+        const oz = pz - tz;
+        const flat = Math.hypot(ox, oz);
+        const dist = Math.hypot(flat, oy);
+        // Tilt changes the angle from straight down; keep it between nearly overhead and well above the horizon.
+        const polar = Math.min(1.25, Math.max(0.08, Math.atan2(flat, oy) - view.tilt));
+        const heading = Math.atan2(ox, oz) + view.yaw;
+        const ring = Math.sin(polar) * dist;
+        return {
+          ...base,
+          position: [tx + view.x + Math.sin(heading) * ring, ty + Math.cos(polar) * dist, tz + view.z + Math.cos(heading) * ring],
+          target: [tx + view.x, ty, tz + view.z],
+        };
       };
       const scenePose = poseOf(shown);
       if (roomStage.glide && !reducedMotion) {
