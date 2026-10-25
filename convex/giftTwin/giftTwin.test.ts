@@ -278,7 +278,8 @@ describe("cloud twin agent", () => {
   });
 
   it("revoking stops the device and deletes the messages", async () => {
-    const { t, alice, bob, session } = await paired();
+    const { t, alice, bob, session, roomId } = await paired();
+    const targetId = await seedClue(t, roomId, "Maya likes matcha");
     await share(t);
     expect(await bob.mutation(api.giftTwin.room.revokeCollaborator, { collaboratorId: session.collaboratorId as never })).toMatchObject({
       ok: false,
@@ -287,6 +288,13 @@ describe("cloud twin agent", () => {
     unwrap(await alice.mutation(api.giftTwin.room.revokeCollaborator, { collaboratorId: session.collaboratorId as never }));
     expect(await chunkCount(t)).toBe(0);
     expect(await t.query(api.giftTwin.device.session, { deviceToken: TOKEN })).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    const history = unwrap(await bob.query(api.giftTwin.room.getFeed, { roomId }));
+    expect(history.collaborators).toEqual([]);
+    expect(history.posts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "vote", ideaRef: `clue:${targetId}`, authorName: "Maya's Gift Twin" }),
+      expect.objectContaining({ kind: "insight", authorName: "Maya's Gift Twin", publishedClueId: expect.any(String) }),
+    ]));
+    expect(JSON.stringify(history)).not.toMatch(/deviceTokenHash|pairingCodeHash|vaultUploadId|therapist/);
   });
 });
 

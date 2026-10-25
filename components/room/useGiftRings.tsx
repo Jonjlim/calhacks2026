@@ -10,6 +10,7 @@ import { MapIcon } from "@/components/world/room/MapIcon";
 import type { PledgeWorld } from "@/components/world/room/PledgeRing";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
+import { giftTwinMap } from "@/lib/map/giftTwin";
 import { emptyTrendNote, isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
@@ -111,6 +112,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // Friends' gift ideas float in the inner ring; everything else is a memory on the outer ring.
   const clues = useMemo(() => allClues.filter((c) => !isGiftIdea(c.text)), [allClues]);
   const ideas = useMemo(() => allClues.filter((c) => isGiftIdea(c.text)), [allClues]);
+  const twin = useMemo(() => giftTwinMap(data.agentCollaborators, new Set(ideas.map((idea) => idea.id))), [data.agentCollaborators, ideas]);
   const listingById = useMemo(() => new Map(data.listings.map((l) => [l.id, l])), [data.listings]);
   const recs = useMemo(() => [...data.recommendations].filter((r) => listingById.has(r.listingId)).sort((a, b) => b.score - a.score), [data.recommendations, listingById]);
 
@@ -334,7 +336,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const idea = ideas.find((c) => `idea:${c.id}` === key);
     if (idea) {
       return {
-        caption: <><b>{idea.text.slice(GIFT_IDEA_PREFIX.length)}</b><small>{name(idea.publisherId) === "You" ? "Your" : `${name(idea.publisherId)}’s`} gift idea · research turns it into real listings</small></>,
+        caption: <><b>{idea.text.slice(GIFT_IDEA_PREFIX.length)}</b><small>{twin.clueAuthors.get(idea.id) ? `${twin.clueAuthors.get(idea.id)} · AI suggestion` : `${name(idea.publisherId) === "You" ? "Your" : `${name(idea.publisherId)}’s`} gift idea`} · research turns it into real listings</small></>,
         actions: [
           ...findGiftsFrom("box", "Find this gift"),
           ...(actions && idea.publisherId === me.id ? [{ icon: "undo" as const, label: "Take it back", more: true, disabled: !!pending, run: () => void run(() => actions.withdrawClue(idea.id), "Your gift idea was withdrawn.").then((ok) => ok && setSelectedKey(null)) }] : []),
@@ -343,11 +345,12 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     }
     const clue = clues.find((c) => `clue:${c.id}` === key);
     if (!clue) return null;
+    const twinAuthor = twin.clueAuthors.get(clue.id);
     const theme = themeOfClue.get(clue.id) ?? "";
     const trendSample = (data.trends?.samples ?? []).find((sample) => sample.publishedClueId === clue.id);
     const trendNote = trendSample ? emptyTrendNote(trendSample) : null;
     return {
-      caption: <><b>“{clue.text}”</b><small>{name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory · in {themeLabel(theme)}</small>{trendNote && <small>{trendNote}</small>}</>,
+      caption: <><b>“{clue.text}”</b><small>{twinAuthor ? `${twinAuthor} · AI insight` : `${name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory`} · in {themeLabel(theme)}</small>{trendNote && <small>{trendNote}</small>}</>,
       actions: [
         ...voteActs("clue", clue.id),
         ...findGiftsFrom(theme),
@@ -596,12 +599,12 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const rings: RingsWorld = {
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
-      return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), color: colorOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue.id) };
+      return { key: `clue:${c.id}`, text: clue.text, author: twin.clueAuthors.get(clue.id) ?? name(clue.publisherId), agent: twin.clueAuthors.has(clue.id), avatar: avatarOf(clue.publisherId), color: twin.clueAuthors.has(clue.id) ? "#8b72ba" : colorOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue.id) };
     }),
-    ideas: ideas.map((idea, i) => {
+    ideas: ideas.map<RingsWorld["ideas"][number]>((idea, i) => {
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
-      return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarOf(idea.publisherId), x, z };
+      return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: twin.clueAuthors.get(idea.id) ?? name(idea.publisherId), agent: twin.clueAuthors.has(idea.id), tag: twin.clueAuthors.has(idea.id) ? `${twin.clueAuthors.get(idea.id)} · AI suggestion` : undefined, avatar: avatarOf(idea.publisherId), x, z };
     }).concat(trendIdeas.map((t) => {
       const passes = passByKey.get(t.key)?.count ?? 0;
       return { key: t.key, text: t.query, author: name(t.source.publisherId), avatar: avatarOf(t.source.publisherId), x: t.x, z: t.z,
@@ -609,7 +612,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     })),
     themes: layout.themes.map((t) => {
       // Up to four faces of the friends who shared into this theme.
-      const authors = [...new Set(layout.clues.filter((c) => c.theme === t.id).map((c) => clues.find((x) => x.id === c.id)!.publisherId))].slice(0, 4);
+      const authors = [...new Set(layout.clues.filter((c) => c.theme === t.id).filter((c) => !twin.clueAuthors.has(c.id)).map((c) => clues.find((x) => x.id === c.id)!.publisherId))].slice(0, 4);
       return {
         key: `theme:${t.id}`, theme: t.id, label: t.label, count: t.count, x: t.x, z: t.z, tint: themeTint.get(t.id) ?? OTHER_TINT, jar: themeJar.get(t.id) ?? "moment",
         faces: authors.map((id) => ({ avatar: avatarOf(id), color: colorOf(id) })),
@@ -630,6 +633,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     moreGifts: layout.gifts.length > TOP_GIFTS ? { count: layout.gifts.length - TOP_GIFTS, open: allGifts, toggle: () => setAllGifts((v) => !v) } : null,
     boxResearch: research && !researchTheme ? research : null,
     votes: signals.tally,
+    evaluations: twin.evaluations,
     pulses,
     cursors,
     overlay,

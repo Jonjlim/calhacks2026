@@ -1,10 +1,11 @@
 "use client";
 
+import { MapIcon } from "@/components/world/room/MapIcon";
 import type { AgentCollaboratorFeed as Feed, AgentCollaboratorPostView } from "@/lib/agentCollaborators/contracts";
 
 const VOTE = {
-  up: { label: "▲ Upvoted", tone: "bg-[#dcebdf] text-[#2f5e3d]" },
-  down: { label: "▼ Downvoted", tone: "bg-[#f3dcd5] text-[#8c3b2c]" },
+  up: { label: "Supports", tone: "bg-[#dcebdf] text-[#2f5e3d]" },
+  down: { label: "Doesn’t fit", tone: "bg-[#f3dcd5] text-[#8c3b2c]" },
 } as const;
 
 function sentence(text: string): string {
@@ -29,7 +30,7 @@ export function AgentCollaboratorFeed({ feed }: { feed: Feed }) {
           <ol className="flex flex-col gap-3">
             {votes.map((post) => (
               <li key={post.id}>
-                <PostBubble author={names.get(post.collaboratorId) ?? "Gift Twin"} post={post} />
+                <PostBubble author={post.authorName ?? names.get(post.collaboratorId) ?? "Gift Twin"} post={post} />
               </li>
             ))}
           </ol>
@@ -41,7 +42,7 @@ export function AgentCollaboratorFeed({ feed }: { feed: Feed }) {
           <ol className="flex flex-col gap-3">
             {insights.map((post) => (
               <li key={post.id}>
-                <PostBubble author={names.get(post.collaboratorId) ?? "Gift Twin"} post={post} />
+                <PostBubble author={post.authorName ?? names.get(post.collaboratorId) ?? "Gift Twin"} post={post} />
               </li>
             ))}
           </ol>
@@ -53,11 +54,12 @@ export function AgentCollaboratorFeed({ feed }: { feed: Feed }) {
 
 function PostBubble({ author, post }: { author: string; post: AgentCollaboratorPostView }) {
   return (
-    <div className="max-w-[90%] rounded-2xl rounded-bl-sm border border-dusk/10 bg-white/80 px-4 py-3">
+    <div className={`max-w-[95%] rounded-2xl rounded-bl-sm border-2 px-4 py-3 ${post.vote === "up" ? "border-[#94bda3] bg-[#e9f5ed]" : post.vote === "down" ? "border-[#d9a198] bg-[#fbece8]" : "border-[#b29bce] bg-[#f3edfc]"}`}>
       <p className="flex flex-wrap items-center gap-2 text-[12px] font-semibold text-dusk/60">
-        <span aria-hidden>✦</span>
+        <MapIcon name="twin" size={18} />
         {author}
-        <span className="rounded-full bg-dusk/5 px-2 py-0.5 font-medium">AI collaborator</span>
+        <span className="rounded-full bg-[#e5d9f4] px-2 py-0.5 font-medium text-[#73549d]">AI collaborator</span>
+        {post.kind === "insight" && <span className="text-[#73549d]">Gift insight</span>}
         {post.vote && <span className={`rounded-full px-2 py-0.5 font-medium ${VOTE[post.vote].tone}`}>{VOTE[post.vote].label}</span>}
         <span className="font-normal">
           {post.confidence} confidence{post.evidenceCount ? ` · ${post.evidenceCount} message${post.evidenceCount === 1 ? "" : "s"}` : ""}

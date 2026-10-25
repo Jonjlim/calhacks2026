@@ -17,7 +17,6 @@ import type { Result } from "../../lib/contracts";
 import { PAIRING_CODE_ALPHABET, TWIN_LIMITS, type AgentCollaboratorFeed } from "../../lib/agentCollaborators/contracts";
 import { collaboratorView, giftTwinEnabled, postView, revoke, sha256Hex } from "./lib";
 
-const FEED_POSTS = 60;
 const RECIPIENT_LABEL_MAX_CHARS = 40;
 
 /** Rejection sampling keeps every alphabet character equally likely. */
@@ -115,10 +114,11 @@ export const getFeed = query({
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return memberError(member.code);
     const collaborators = await ctx.db.query("agentCollaborators").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).collect();
-    const posts = await ctx.db.query("agentCollaboratorPosts").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).order("desc").take(FEED_POSTS);
+    const posts = await ctx.db.query("agentCollaboratorPosts").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).order("desc").collect();
+    const names = new Map(collaborators.map((c) => [c._id, c.displayName]));
     return ok({
       collaborators: collaborators.filter((c) => c.status !== "revoked").map(collaboratorView),
-      posts: posts.reverse().filter((p) => p.status !== "dismissed").map(postView),
+      posts: posts.reverse().filter((p) => p.status !== "dismissed").map((p) => ({ ...postView(p), authorName: names.get(p.collaboratorId) ?? "Gift Twin" })),
     });
   },
 });
