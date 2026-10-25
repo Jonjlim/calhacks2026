@@ -16,7 +16,7 @@ import { convergence, useConvergenceActive, useConvergenceState } from "@/compon
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
-import { sfx } from "@/components/world/sfx";
+import { playWhoosh, sfx } from "@/components/world/sfx";
 import { hasChosenSky, setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { isDarkSky, SKIES } from "@/components/world/timeOfDay";
 import { mapView } from "@/components/world/room/mapView";
@@ -96,6 +96,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => sfx.setEnabled(soundEnabled), [soundEnabled]);
+  // The camera pulling back from the present to the map gets a whoosh; arriving straight on the map doesn't.
+  const lastStage = useRef(stage);
+  useEffect(() => {
+    if (stage === "map" && lastStage.current !== "map") playWhoosh();
+    lastStage.current = stage;
+  }, [stage]);
   // The room opens under a warm rose-gold sunrise unless the person has picked a sky of their own.
   useEffect(() => {
     if (!hasChosenSky()) setTimeOfDay("sunrise", { remember: false });

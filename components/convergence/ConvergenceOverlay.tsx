@@ -11,6 +11,7 @@ import { formatMinor } from "@/lib/money";
 import { getPriceFreshness } from "@/lib/research/freshness";
 import { parchmentRect } from "@/components/unwrap/parchmentLayout";
 import { convergence, useConvergenceActive, useConvergenceLeaving, useConvergenceState } from "./convergenceClock";
+import { playRibbon } from "@/components/world/sfx";
 
 /**
  * The DOM half of the Great Gift Convergence: it drives the clock's frame loop,
@@ -45,6 +46,15 @@ const isGoogle = (url: string) => {
 export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gift: RevealGift; isOrganizer: boolean; onPlan(): void; onReplay(): void }) {
   const active = useConvergenceActive();
   const state = useConvergenceState();
+  // The ribbon's sounds land on the reveal's own beats: untie, wind and tie, whip off, then the paper bursts.
+  useEffect(() => {
+    if (state === "anticipation") playRibbon("untie");
+    else if (state === "wrapping") playRibbon("wrap");
+    else if (state === "burst") playRibbon("burst");
+    if (state !== "charging") return;
+    const whip = window.setTimeout(() => playRibbon("whip"), (CONVERGENCE_TIMES.ribbonOff[0] - CONVERGENCE_TIMES.charge[0]) * 1000);
+    return () => window.clearTimeout(whip);
+  }, [state]);
   const leaving = useConvergenceLeaving();
   const reduced = useReducedMotion() ?? false;
   const [size, setSize] = useState({ w: 1440, h: 900 });
