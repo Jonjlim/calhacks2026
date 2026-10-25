@@ -449,3 +449,17 @@ No external service or secret is added. Existing sandbox primitives remain dorma
 The reusable box component is integrated by Dev 1 into the new map, with a
 separate labelled local fixture preview for browser review. Actual shared runtime
 acceptance remains pending deployment of the additive schema/functions.
+
+### D21 — Evaluate Bitdeer as a replacement model provider (unverified)
+
+Alex requested testing Model Studio with GLM-5.3-Flash. Dev 4 adds only the
+standalone `scripts/bitdeer-check.mts` candidate-provider spike (documented in
+DEV4_BITDEER_SPIKE.md). It targets the official HTTPS inference endpoint, uses
+synthetic text and generated test images, and requires an explicit `--run` plus
+privately configured key for at most three paid calls with no retries. The
+existing app provider/adapter, deployment and environment files are unchanged.
+Bitdeer is an **unverified alternative**, not an added active LLM service. Dev 3
+must verify API parameters, application schemas, photo behavior and timing before
+switching the existing configurable provider. No new SDK, database or service is
+introduced. Offline fixture checks do not establish live model capability or
+prize eligibility.
