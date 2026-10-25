@@ -120,7 +120,7 @@ Tests: `npx vitest run convex/giftTwin lib/agentCollaborators` and `npm run test
 
 The demo is shaped so promotion is additive:
 
-1. **Main room.** Mount `<AgentCollaboratorFeed feed={...} />` on the map (D19) and show the twin's ▲/▼ next to the clue or listing it voted on (`ideaRef`).
+1. **Main room (implemented).** The live map subscribes to the screened collaborator feed. Twin-authored clues use paired-star icons and violet clouds/dots instead of the inviting human's avatar. Evaluations appear on the target as named green Supports or red Doesn’t fit badges; selecting one shows its screened rationale. Human vote totals and proposal approvals stay separate. The recipient twin studio and phone view show the same distinct AI identity.
 2. **Buyer agent.** Downvotes already arrive as exclusion/ownership clues. A later step could down-rank the voted idea directly instead of adding a counter-clue.
 3. **Trend agent.** Insert `agentCollaborators` rows with `kind: "trend_scout"` (server-owned, no device token) and post into `agentCollaboratorPosts` with the same review step.
 4. **Recipient-owned twins.** Today a twin is bound to one room. For production, key twins to a recipient identity and grant them to rooms, so one upload serves many gift rooms under one consent record. Add rate limiting on `device.pair` attempts.

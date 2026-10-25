@@ -6,6 +6,7 @@ import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEf
 import * as THREE from "three";
 import { AVATAR_WORLD_SCALE, type AvatarId, StorybookAvatar } from "@/components/characters/StorybookAvatar";
 import { BOX_DROP_RADIUS, dragResult, RING_RADII, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
+import type { TwinEvaluation } from "@/lib/map/giftTwin";
 import { portraitUrl } from "@/lib/room/avatars";
 import { IslandMesh } from "../FloatingIsland";
 import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
@@ -52,7 +53,7 @@ export interface RingDetail {
 export type RingResearch = "running" | "failed" | null;
 
 export interface RingsWorld {
-  clues: { key: string; text: string; author: string; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
+  clues: { key: string; text: string; author: string; agent?: boolean; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
   /** Photos members added, shared with the whole room (D20). The uploader also sees what the private read found. */
   photos?: { key: string; images: string[]; author: string; mine: boolean; found: number; reading: boolean; x: number; z: number }[];
   /** Council themes, or the three clue groups until the council has grouped them. */
@@ -61,7 +62,7 @@ export interface RingsWorld {
   openTheme?: string | null;
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
   /** Friends' gift ideas and sourced trend suggestions. `tag` replaces the "gift idea" caption; `faded` after someone passed. */
-  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean }[];
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean; agent?: boolean }[];
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -71,6 +72,8 @@ export interface RingsWorld {
   nextStep?: { icon: MapIconName; label: string; disabled?: boolean; run?(): void } | null;
   /** Votes on memories and themes, by node key. */
   votes?: Readonly<Record<string, { up: number; down: number }>>;
+  /** AI evaluations never enter participant vote totals or approval counts. */
+  evaluations?: Readonly<Record<string, TwinEvaluation[]>>;
   /** Another member just voted on this node: a short bubble with their name. */
   pulses?: Readonly<Record<string, { name: string; value: number; color: string }>>;
   /** Other members' pointers on the map plane. */
@@ -250,6 +253,11 @@ function Token({ k, rings, from, drag, face, peek, label, offset, dim, recede, l
           onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
           {face}
         </button>
+        {rings.evaluations?.[k]?.length ? <span className={s.agentVotes}>
+          {rings.evaluations[k].map((evaluation) => <button key={evaluation.id} type="button" className={`${s.agentVote} ${evaluation.vote === "up" ? s.agentSupport : s.agentPass}`} title={`${evaluation.author}: ${evaluation.text}`} onClick={() => rings.onSelect(selected ? null : k)}>
+            <MapIcon name="twin" size={12} /><MapIcon name={evaluation.vote === "up" ? "check" : "drift"} size={12} />{evaluation.author} · {evaluation.vote === "up" ? "Supports" : "Doesn’t fit"}
+          </button>)}
+        </span> : null}
         {votes && (votes.up > 0 || votes.down > 0) && (
           <span className={s.voteChips} aria-label={`${votes.up} feel it, ${votes.down} not really`}>
             {votes.up > 0 && <i className={s.yes}><MapIcon name="heart" size={10} />{votes.up}</i>}
@@ -261,6 +269,11 @@ function Token({ k, rings, from, drag, face, peek, label, offset, dim, recede, l
           <div className={s.detail} onWheel={(e) => e.stopPropagation()}>
             <span className={s.tether} aria-hidden />
             <div className={`${s.detailCard} ${s.cloud}`}>{info.caption}</div>
+            {rings.evaluations?.[k]?.map((evaluation) => <div key={evaluation.id} className={`${s.agentRationale} ${evaluation.vote === "up" ? s.agentSupport : s.agentPass}`}>
+              <strong><MapIcon name="twin" size={14} />{evaluation.author} · AI evaluation · {evaluation.vote === "up" ? "Supports" : "Doesn’t fit"}</strong>
+              <span>{evaluation.text}</span>
+              <small>Advisory · separate from your votes and approvals</small>
+            </div>)}
             {(main.length > 0 || extra.length > 0) && (
               <div className={s.pills}>
                 {main.map((a, i) => (
@@ -459,7 +472,7 @@ function ZoneBands({ center, hover }: { center: THREE.Vector3; hover: RingZone |
  * theme with that memory selected. Part of the theme's own label, so the
  * cloud can never cover them.
  */
-function MemoryDots({ clues, onPick }: { clues: RingsWorld["clues"]; onPick(key: string): void }) {
+function MemoryDots({ clues, onPick, evaluations }: { clues: RingsWorld["clues"]; onPick(key: string): void; evaluations: RingsWorld["evaluations"] }) {
   const [hover, setHover] = useState<string | null>(null);
   const root = useRef<HTMLSpanElement>(null);
   // Clear the preview whenever the pointer is anywhere else, even if the dots moved or re-rendered under it.
@@ -476,10 +489,11 @@ function MemoryDots({ clues, onPick }: { clues: RingsWorld["clues"]; onPick(key:
     <span ref={root} className={s.perch} onPointerLeave={() => setHover(null)}>
       {peek && <span className={`${s.peek} ${s.cloud}`} role="tooltip"><q>{peek.text}</q><small>{peek.author}{peek.fromPhoto ? " · from a photo" : ""}</small><i className={s.trailDown} aria-hidden /></span>}
       {shown.map((c) => (
-        <button key={c.key} type="button" className={s.dotFace} style={{ ["--who" as string]: c.color }} aria-label={`${c.author}'s memory: ${c.text}`}
+        <button key={c.key} type="button" className={`${s.dotFace} ${c.agent ? s.twinDot : ""}`} style={{ ["--who" as string]: c.color }} aria-label={`${c.author}${c.agent ? " · AI insight" : "’s memory"}: ${c.text}`}
           onPointerEnter={() => setHover(c.key)} onFocus={() => setHover(c.key)} onBlur={() => setHover(null)}
           onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setHover(null); onPick(c.key); }}>
-          <img src={c.photo ?? portraitUrl(c.avatar)} alt="" />
+          {c.agent ? <MapIcon name="twin" size={19} /> : <img src={c.photo ?? portraitUrl(c.avatar)} alt="" />}
+          {evaluations?.[c.key]?.length ? <span className={`${s.dotEvaluation} ${evaluations[c.key]!.some((e) => e.vote === "down") ? s.agentPass : s.agentSupport}`} aria-label="Has Gift Twin evaluation"><MapIcon name={evaluations[c.key]!.some((e) => e.vote === "down") ? "drift" : "check"} size={10} /></span> : null}
         </button>
       ))}
       {clues.length > shown.length && <span className={s.perchMore}>+{clues.length - shown.length}</span>}
@@ -622,11 +636,11 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           <group key={c.key}>
             {t && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
             <RingIsland at={world(x, z)} kind="clue" delay={i * 0.04} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)}>
-              <Suspense fallback={null}>
+              {!c.agent && <Suspense fallback={null}>
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
-              </Suspense>
-              <Token k={c.key} rings={rings} from={seat} drag={drag} dim={dim(c.key)} lift={rings.openTheme === c.theme} recede={recede(c.key) && rings.openTheme !== c.theme} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory: ${c.text}`}
-                face={<span className={`${s.bubble} ${s.cloud}`} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q><i className={s.trail} aria-hidden />{c.fromPhoto && <i className={s.photoBadge} title="From a photo"><MapIcon name="camera" size={12} /></i>}</span>} />
+              </Suspense>}
+              <Token k={c.key} rings={rings} from={seat} drag={drag} dim={dim(c.key)} lift={rings.openTheme === c.theme} recede={recede(c.key) && rings.openTheme !== c.theme} offset={[0, -0.6, 2.2]} label={`${c.author}${c.agent ? " · AI insight" : "’s memory"}: ${c.text}`}
+                face={<span className={`${s.bubble} ${s.cloud} ${c.agent ? s.twinCloud : ""}`} style={{ ["--c" as string]: c.tint }}>{c.agent ? <i className={s.twinMark}><MapIcon name="twin" size={20} /></i> : c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<span>{c.agent && <small className={s.twinByline}>{c.author} · AI insight</small>}<q>{c.text}</q></span><i className={s.trail} aria-hidden />{c.fromPhoto && <i className={s.photoBadge} title="From a photo"><MapIcon name="camera" size={12} /></i>}</span>} />
             </RingIsland>
           </group>
         );
@@ -640,7 +654,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)}>
             <Jar kind={t.jar} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
             <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} recede={recede(t.key) && !isOpen} back offset={[0, 0.2, 0.6]} label={`${t.label} theme, ${t.count} shared`}
-              above={<MemoryDots clues={rings.clues.filter((c) => c.theme === t.theme && !open(c))} onPick={(key) => rings.onSelect(key)} />}
+              above={<MemoryDots clues={rings.clues.filter((c) => c.theme === t.theme && !open(c))} onPick={(key) => rings.onSelect(key)} evaluations={rings.evaluations} />}
               face={
                 <span className={`${s.theme} ${s.cloud} ${isOpen ? s.themeOpen : ""}`} style={{ ["--c" as string]: t.tint }}>
                   {t.research === "running" && <i className={s.spinner} aria-hidden />}
@@ -702,8 +716,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={quiet} recede={recede(idea.key)} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea: ${idea.text}`}
               peek={shown ? undefined : <><b>{idea.text}</b><small>{caption}</small></>}
               face={shown
-                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.trend ? s.trendCloud : ""}`}>{idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
-                : <span className={`${s.ideaDot} ${idea.trend ? s.trendDot : ""}`}>{idea.trend ? <MapIcon name="trend" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
+                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.agent ? s.twinCloud : idea.trend ? s.trendCloud : ""}`}>{idea.agent ? <i className={s.twinMark}><MapIcon name="twin" size={18} /></i> : idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
+                : <span className={`${s.ideaDot} ${idea.agent ? s.twinDot : idea.trend ? s.trendDot : ""}`}>{idea.agent ? <MapIcon name="twin" size={18} /> : idea.trend ? <MapIcon name="trend" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && !idea.agent && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
           </RingIsland>
         );
       })}

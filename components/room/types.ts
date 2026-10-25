@@ -1,3 +1,4 @@
+import type { AgentCollaboratorFeed } from "@/lib/agentCollaborators/contracts";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/convex/_generated/api";
 import type {
@@ -46,6 +47,8 @@ export interface RoomData {
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
   /** Latest sourced Google Trends suggestions for one memory, and listings found from them. */
   trends?: TrendDiscoveryView;
+  /** Screened AI notes and evaluations, kept separate from participant votes. */
+  agentCollaborators?: AgentCollaboratorFeed;
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;

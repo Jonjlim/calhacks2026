@@ -267,6 +267,7 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
   const sharpen = useQuery(api.agents.themes.getSharpen, args);
   const cursors = useQuery(api.map.listCursors, args);
   const photos = useQuery(api.photos.listRoomPhotos, args);
+  const collaborators = useQuery(api.giftTwin.room.getFeed, args);
   const extras: RoomData = {
     ...data,
     mapSignals: signals?.ok ? signals.value : undefined,
@@ -274,6 +275,7 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
     sharpen: sharpen?.ok ? sharpen.value : undefined,
     cursors: cursors?.ok ? cursors.value : undefined,
     roomPhotos: photos?.ok ? photos.value : undefined,
+    agentCollaborators: collaborators?.ok ? collaborators.value : undefined,
   };
   return <RoomSurfaceView surface={surface} data={extras} actions={actions} />;
 }

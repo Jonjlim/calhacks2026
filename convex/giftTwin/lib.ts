@@ -129,6 +129,7 @@ export function postView(doc: Doc<"agentCollaboratorPosts">): AgentCollaboratorP
     text: doc.text,
     confidence: doc.confidence,
     ...(doc.evidenceCount !== undefined ? { evidenceCount: doc.evidenceCount } : {}),
+    ...(doc.ideaRef !== undefined ? { ideaRef: doc.ideaRef } : {}),
     ...(doc.ideaText !== undefined ? { ideaText: doc.ideaText } : {}),
     ...(doc.vote !== undefined ? { vote: doc.vote } : {}),
     status: doc.status,

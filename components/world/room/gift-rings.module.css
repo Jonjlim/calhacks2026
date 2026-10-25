@@ -402,3 +402,18 @@
 .trendMark { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #6f8f4a; font-style: normal; }
 .pickState { display: inline-flex; align-items: center; gap: 3px; }
 .markPolaroid > span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Gift Twin: paired-star identity, separate from friend portraits and green trend clouds. */
+.bubble.cloud.twinCloud, .twinCloud { --cloud: #f3edfc; --edge: #b29bce; border-color: #b29bce; }
+.twinDot { display: grid; place-items: center; color: #73549d; background: #f3edfc; border-color: #b29bce; }
+.twinMark { display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%; color: #73549d; background: #fff; font-style: normal; }
+.twinByline { display: block; margin-bottom: 4px; color: #73549d; font-size: 10px; font-weight: 700; }
+.agentVotes { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-top: 5px; }
+.agentVote { display: inline-flex; align-items: center; gap: 4px; max-width: 240px; padding: 4px 8px; border: 1px solid; border-radius: 12px; font: 600 10px/1.3 var(--font-sans), sans-serif; cursor: pointer; }
+.agentSupport { color: #315f47; background: #e9f5ed; border-color: #94bda3; }
+.agentPass { color: #8f473f; background: #fbece8; border-color: #d9a198; }
+.agentRationale { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; padding: 12px; border: 1px solid; border-radius: 14px; font-size: 12px; line-height: 1.5; }
+.agentRationale strong { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.agentRationale small { font-size: 10px; opacity: .8; }
+.dotFace { position: relative; }
+.dotEvaluation { position: absolute; right: -3px; bottom: -3px; display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid; border-radius: 50%; }

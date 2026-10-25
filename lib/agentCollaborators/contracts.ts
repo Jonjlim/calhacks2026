@@ -263,7 +263,10 @@ export interface AgentCollaboratorPostView {
   text: string;
   confidence: TwinConfidence;
   evidenceCount?: number;
-  /** Votes only: the room idea and the twin's vote on it. */
+  /** Public collaborator identity, retained for posts after disconnect. */
+  authorName?: string;
+  /** Votes only: server-validated target and the twin's evaluation. */
+  ideaRef?: string;
   ideaText?: string;
   vote?: TwinVote;
   status: AgentPostStatus;
