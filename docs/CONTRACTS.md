@@ -1189,16 +1189,25 @@ LLM-initiated payment operations are forbidden.
 
 Owner: Dev 1 (council UI) with Dev 3 (agents). Consumers: the `fetch-agent/` coordinator, `/council` page. Additive tables; no existing table changes. Code: `lib/council/contracts.ts`, `lib/council/library.json`, `convex/council.ts`.
 
-One registered Fetch.ai agent (Chat Protocol, ASI:One) runs five specialist roles as real functions and emits an event at each execution boundary:
-
+Five registered Fetch.ai uAgents run in one process (a uAgents Bureau). The **Courier** is the public agent (Chat Protocol for ASI:One, plus the website's REST `POST /council/run` and `GET /health`; the `POST /council/run` acceptance additively returns optional `agentAddress` (the Courier's `agent1…` address), which Convex stores as optional `councilRuns.agentAddress` and exposes on the room's council `run`). It asks four specialist agents with typed uAgents messages and `ctx.send_and_receive`; each specialist emits its own events for its actor at its real execution boundaries:
 | Actor | Task | Does |
 | --- | --- | --- |
 | `archivist` | `analyze_memories` | Extracts clues (interests, wishes, owned items, dislikes, budget) from the request/memories |
 | `muse` | `design_decoration` | Maps clues to a `DecorationSpec` from the approved library only |
 | `scout` | `research_gifts` | Real product research via the existing Apify pipeline (`/council/research`), cached |
 | `keeper` | `check_constraints` | Budget, ownership and dislike rules; hard exclusions vs. soft notes |
-| `courier` | `deliver_recommendations` | Coordinates and prepares the final answer |
+| `courier` | `deliver_recommendations` | Coordinates the specialists and prepares the final answer |
 
+Specialist messages (`fetch-agent/council/messages.py`, uAgents `Model`s). Every request carries `{ run_id, source: "asi1"|"web", demo_key?, room_run }`; every result carries `{ run_id, ok, error? }`. Nested payloads are the JSON form of the Python contracts in `fetch-agent/council/contracts.py` and are re-validated by the receiver:
+
+| Role | Request | Result |
+| --- | --- | --- |
+| Archivist | `ArchivistRequest { memories: [{memory_id, text}], budget_minor? }` | `ArchivistResult { analysis? }` |
+| Muse | `MuseRequest { analysis, memory_ids }` | `MuseResult { decorations: DecorationSpec[] }` |
+| Scout | `ScoutRequest { analysis }` | `ScoutResult { report: ScoutReport }` |
+| Keeper | `KeeperRequest { analysis, listings: Listing[] }` | `KeeperResult { report: KeeperReport }` |
+
+Timeouts and fallback: if a specialist does not answer within its timeout (`COUNCIL_<ROLE>_TIMEOUT_S`) or replies with something that fails validation, the Courier emits that actor's `failed` event (the `error` says the local fallback was used) and runs the same role function in-process without further events for that actor. Late events from the abandoned specialist are dropped. The Scout is the exception: its fallback runs no second search and reports that no listings were verified. ASI:One (`asi1`) may assist the Archivist (extra clues found in the text), the Muse (an approved asset instead of the generic charm) and the Keeper (one "Fit: …" note per kept listing, no digits or currency); deterministic rules decide everything else and every model output is validated. No event or callback shape changed: event `result` keys stay `{ summary?, count?, decorations?, cached?, error? }`.
 `CouncilEvent` — `{ eventId, runId, actor, task, status: started|completed|failed, sequence, timestamp, result? }`. `result` is display-only and small: `{ summary?, count?, decorations?, cached?, error? }`. Products, URLs and raw memories never travel in events. `roomId` is never invented: ASI:One runs have none; web demo runs carry a browser `demoKey`.
 
 `DecorationSpec` — `{ memoryId, jar: wish|interest|moment, assetId, color, placement, label }`, every enum from `lib/council/library.json`.

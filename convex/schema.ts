@@ -517,6 +517,7 @@ export default defineSchema({
     runId: v.string(),
     source: v.union(v.literal("web"), v.literal("asi1")),
     demoKey: v.optional(v.string()),
+    agentAddress: v.optional(v.string()),
     roomId: v.optional(v.id("rooms")),
     researchJobId: v.optional(v.id("researchJobs")),
     knowledgeRevision: v.optional(v.number()),

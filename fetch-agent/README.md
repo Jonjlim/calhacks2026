@@ -1,8 +1,8 @@
 # Unwrap Gift Council
 
+![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:gift-recommendation](https://img.shields.io/badge/gift--recommendation-3D8BD3)
 ![tag:shopping](https://img.shields.io/badge/shopping-3D8BD3)
-![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 
 **Finds real, budget-checked gifts from what you remember about someone.**
 
@@ -16,18 +16,34 @@ Tell the council about the person: what they love, what they want to try, what t
 
 ## What happens
 
-One coordinator agent runs five specialist roles, each a real function:
+The council is five Fetch.ai agents that talk to each other with typed messages:
 
-| Role | Work |
+| Agent | Work |
 | --- | --- |
-| **Archivist** | Reads your message and extracts clues: interests, wishes, preferences, things already owned, dislikes, budget, occasion, and what is still unknown. |
-| **Muse** | Turns the memory into a symbolic charm for the Unwrap gift box (pottery → a terracotta ceramic charm), chosen from a fixed library. |
+| **Courier** (this agent) | The public coordinator. It receives your chat, asks each specialist for its part, and writes the answer. |
+| **Archivist** | Reads your message and extracts clues: interests, wishes, preferences, things already owned, dislikes, budget, occasion, and what is still unknown. Rules first; ASI:One may add clues it finds in your text. |
+| **Muse** | Turns the memory into a symbolic charm for the Unwrap gift box (pottery → a terracotta ceramic charm), chosen from a fixed library. ASI:One may suggest another approved charm when no keyword matches. |
 | **Scout** | Searches live Google Shopping results via a verified Apify actor (through the Unwrap backend), keeping only listings with an https link and an exact USD price or an honest “price not observed”. |
-| **Keeper** | Enforces the budget, removes things they already own or dislike, and notes soft preferences like “handmade”. |
-| **Courier** | Coordinates the run and writes the answer. |
+| **Keeper** | Enforces the budget, removes things they already own or dislike, and notes soft preferences like “handmade”. ASI:One may add a short “why it fits” note; it never changes what is kept. |
 
-Muse and Scout run in parallel. Each step reports progress, which the Unwrap website uses to animate its AI Council characters.
+```
+             ┌─ ArchivistRequest ─→ Archivist
+ASI:One ─→ Courier ─┼─ MuseRequest ──────→ Muse     (in parallel with the Scout)
+             ├─ ScoutRequest ─────→ Scout
+             └─ KeeperRequest ────→ Keeper
+```
 
+Muse and Scout run in parallel. If a specialist does not answer in time, the Courier says so and does that step itself (except research, which it never repeats or invents). Each agent reports its progress, which the Unwrap website uses to animate its AI Council characters.
+
+## Agent addresses
+
+| Agent | Address |
+| --- | --- |
+| Courier (Unwrap Gift Council) | `agent1q…` (fill in from `python print_addresses.py`) |
+| Archivist | `agent1q…` |
+| Muse | `agent1q…` |
+| Scout | `agent1q…` |
+| Keeper | `agent1q…` |
 ## Honesty rules
 
 - Products, links and prices come only from research results, never from the language model.

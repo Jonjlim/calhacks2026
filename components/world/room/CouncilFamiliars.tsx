@@ -5,8 +5,9 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
-import { CouncilMember } from "@/components/council/CouncilMember";
-import { COUNCIL_LABEL, COUNCIL_TINT, type CouncilClip, poseFor } from "@/lib/council/animation";
+import { AVATAR_WORLD_SCALE, StorybookAvatar } from "@/components/characters/StorybookAvatar";
+import { COUNCIL_LABEL, type CouncilClip, poseFor } from "@/lib/council/animation";
+import { COUNCIL_AVATAR, ROBOT_TINT, robotClip } from "@/lib/council/robots";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilMemberState, reduceCouncil } from "@/lib/council/contracts";
 import type { RoomWorld } from "../IslandWorldProvider";
 import { sparkleTexture } from "../painterly/textures";
@@ -125,7 +126,7 @@ function useGentle(text: string | null): { text: string; mounted: boolean; visib
 }
 
 /** Each companion's own small, restrained idle gesture. Desynchronised by phase. */
-const IDLE_ACTION: Record<CouncilActor, CouncilClip> = { archivist: "read_scroll", muse: "wave", scout: "search", keeper: "approve", courier: "excited_hop" };
+const IDLE_GESTURE: Record<CouncilActor, "Wave" | "Sit"> = { archivist: "Sit", muse: "Wave", scout: "Wave", keeper: "Sit", courier: "Wave" };
 
 /** What in the world an actor's real event concerns, where that is unambiguous. Archivist has no single object, so it gets no trail. */
 function trailTarget(actor: CouncilActor, rings: ReturnType<typeof useRings>): THREE.Vector3 | null {
@@ -180,20 +181,66 @@ function Trail({ from, to, tint, startedAt }: { from: THREE.Object3D; to: THREE.
   );
 }
 
-function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet, focused, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; /** During the gift reveal: how they feel about it. */ mood?: CouncilClip; quiet: boolean; /** The branch in focus concerns this companion (memories: Archivist, themes: Muse, gifts: Scout). */ focused?: boolean; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
+/** Where in the world an actor's running task happens, if anywhere: the clues, the top theme, the top gift, the box, the centre. */
+function workSpot(actor: CouncilActor, rings: ReturnType<typeof useRings>): THREE.Vector3 | null {
+  const ground = platformTop();
+  const at = (x: number, z: number, y = ground) => new THREE.Vector3(GIFT_SPOT.x + x, y, GIFT_SPOT.z + z);
+  if (actor === "archivist") {
+    const clues = rings?.clues ?? [];
+    if (!clues.length) return at(-3.2, 2.4);
+    const x = clues.reduce((n, c) => n + c.x, 0) / clues.length;
+    const z = clues.reduce((n, c) => n + c.z, 0) / clues.length;
+    return at(x, z, ringBase());
+  }
+  if (actor === "muse") {
+    const t = rings?.themes[0];
+    return t ? at(t.x * 0.85, t.z * 0.85, ringBase()) : at(2.6, -2.6);
+  }
+  if (actor === "scout") {
+    const g = rings?.gifts[0];
+    return g ? at(g.x * 0.85, g.z * 0.85, ringBase()) : at(3.4, 2.2);
+  }
+  // Keeper beside the box, Courier at the centre; offset so the two never stand inside the present.
+  return actor === "keeper" ? at(-1.9, 1.2) : at(1.9, 1.6);
+}
+
+/** Model height in its own units (hood top of the storybook exports). */
+const AVATAR_UNITS = 2.2;
+/** Size when walking in the world, a touch bigger than the player spirits so they read from the map view. */
+const WORLD_SCALE = AVATAR_WORLD_SCALE * 1.25;
+/** World units per second when walking out or back. */
+const WALK_SPEED = 7;
+
+const _dock = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _qy = new THREE.Quaternion();
+const _yAxis = new THREE.Vector3(0, 1, 0);
+
+function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet, focused, spot, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; /** During the gift reveal: how they feel about it. */ mood?: CouncilClip; quiet: boolean; /** The branch in focus concerns this companion (memories: Archivist, themes: Muse, gifts: Scout). */ focused?: boolean; /** Where it goes to work while its task runs. */ spot: THREE.Vector3 | null; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const size = useThree((st) => st.size);
   const group = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Sprite>(null);
   const [hover, setHover] = useState(false);
-  const [gesture, setGesture] = useState<CouncilClip | undefined>(undefined);
+  const [gesture, setGesture] = useState<"Wave" | "Sit" | undefined>(undefined);
   const working = member.status === "started";
   const failed = member.status === "failed";
-  const tint = failed ? FAILED : COUNCIL_TINT[actor];
+  const role = ROBOT_TINT[actor];
+  const tint = failed ? FAILED : role;
   const glowMat = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: tint, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), [tint]);
   useEffect(() => () => glowMat.dispose(), [glowMat]);
-  const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1 });
-  // While its task runs, its line changes every few seconds; a result or an error keeps its own words.
+  const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1, pos: new THREE.Vector3(), mode: "dock" as "dock" | "out" | "there" | "back", init: false });
+  const [walking, setWalking] = useState(false);
+  // Only a completion that arrives live celebrates; a refresh restores a quiet pose.
+  const [celebrating, setCelebrating] = useState(false);
+  const lastSeq = useRef(member.sequence);
+  useEffect(() => {
+    if (member.sequence === lastSeq.current) return;
+    lastSeq.current = member.sequence;
+    setCelebrating(member.status === "completed");
+  }, [member.sequence, member.status]);
   const [turn, setTurn] = useState(0);
   const running = bubble?.tone === "working";
   useEffect(() => {
@@ -206,18 +253,19 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
   const gentle = useGentle(!quiet && speaking && said ? said : null);
   const narrow = size.width < NARROW;
   const active = !!bubble;
+  const away = working && !!spot && !narrow && !mood;
 
-  // A small, occasional gesture of its own while nothing is happening; desynchronised across the five.
   useEffect(() => {
     if (!animate || member.status !== "idle") return;
     let timer = 0;
     const loop = (delay: number) => {
       timer = window.setTimeout(() => {
-        setGesture(IDLE_ACTION[actor]);
+        setGesture(IDLE_GESTURE[actor]);
+        // Sit holds its last frame, so it is released after a moment; Wave ends itself.
         timer = window.setTimeout(() => {
           setGesture(undefined);
           loop(9000 + Math.random() * 9000);
-        }, 2200);
+        }, 3000);
       }, delay);
     };
     loop(2500 + COUNCIL_ACTORS.indexOf(actor) * 2300 + Math.random() * 3000);
@@ -228,24 +276,23 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
     if (group.current) onTrail(actor, group.current);
   }, [actor, onTrail]);
 
-  // On narrow screens only the one that is speaking is shown, lower down.
-  const shown = !narrow || speaking;
+  const shown = !narrow || speaking || walking;
   const place = narrow ? 0.05 : DOCK_TOP - slot * DOCK_STEP;
+  const clip = !animate ? "Idle" : robotClip({ status: member.status, walking, celebrating, hover, reveal: !!mood, gesture });
 
   useFrame(({ clock }, dt) => {
     const g = group.current;
     if (!g) return;
     const st = state.current;
     const t = clock.elapsedTime;
-    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 5);
+    const step = Math.min(dt, 0.1);
+    const k = 1 - Math.exp(-step * 5);
     g.visible = shown;
-    // Fixed on the screen: in front of the camera, aligned to it, so the world turning behind never turns them.
     camera.getWorldDirection(_fwd);
     _right.setFromMatrixColumn(camera.matrixWorld, 0);
     _up.setFromMatrixColumn(camera.matrixWorld, 1);
     const halfH = DEPTH * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const halfW = halfH * camera.aspect;
-    // Steps out toward the world a little for news, or while hovered or working.
     st.out += (((speaking ? 1 : 0) + (hover ? 0.8 : 0) + (working ? 0.4 : 0) + (focused ? 0.6 : 0)) - st.out) * k;
     if (bubble && bubble.at > st.lastAt) {
       st.lastAt = bubble.at;
@@ -253,24 +300,53 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       if (speaking && bubble.tone !== "working") playCouncilTick();
     }
     const hop = Math.max(0, Math.sin((t - st.react) * 7)) * Math.exp(-(t - st.react) * 2.2) * (t - st.react < 1.4 ? 1 : 0);
-    // Hugs the left edge of the window: a few pixels of margin plus half a companion, whatever the window size, and corrected for the
-    // sideways shift the map's framing applies to the view.
     const viewShift = camera.view?.enabled ? -camera.view.offsetX / size.width : 0;
     const edgePx = 12 + HEIGHT_SHARE * size.height * 0.42;
     const nx = -1 + (2 * (edgePx + st.out * 26)) / size.width - 2 * viewShift;
     const ny = place + (animate ? Math.sin(t * 1.1 + slot * 1.9) * 0.012 : 0) + hop * 0.035;
-    g.position.copy(camera.position).addScaledVector(_fwd, DEPTH).addScaledVector(_right, nx * halfW).addScaledVector(_up, ny * halfH);
-    g.quaternion.copy(camera.quaternion);
-    // Turned a little toward the world, and toward the gift while it is being revealed.
-    g.rotateY(0.4 + (hover ? 0.2 : 0) + (mood ? 0.55 : 0));
-    // Keeps its on-screen size whatever the field of view or window height.
-    st.scale = (HEIGHT_SHARE * 2 * halfH) / MODEL_UNITS * (narrow ? 1.15 : 1) * (1 + st.out * 0.12);
-    g.scale.setScalar(st.scale / 2.3);
+    _dock.copy(camera.position).addScaledVector(_fwd, DEPTH).addScaledVector(_right, nx * halfW).addScaledVector(_up, ny * halfH);
+    const dockScale = (HEIGHT_SHARE * 2 * halfH) / AVATAR_UNITS * (narrow ? 1.15 : 1) * (1 + st.out * 0.12);
+    if (!st.init) { st.pos.copy(_dock); st.init = true; }
+
+    // Docked: fixed on the screen. Away: a real walk in world space to the work spot and back.
+    if (away && (st.mode === "dock" || st.mode === "back")) st.mode = "out";
+    if (!away && (st.mode === "out" || st.mode === "there")) st.mode = "back";
+    const dest = st.mode === "out" || st.mode === "there" ? spot! : _dock;
+    let moving = false;
+    if (st.mode === "dock") st.pos.copy(_dock);
+    else {
+      _dir.subVectors(dest, st.pos);
+      const dist = _dir.length();
+      const reach = WALK_SPEED * step * (st.mode === "back" ? 1.3 : 1);
+      if (dist <= Math.max(reach, 0.05)) {
+        st.pos.copy(dest);
+        st.mode = st.mode === "back" ? "dock" : "there";
+      } else {
+        st.pos.addScaledVector(_dir, reach / dist);
+        moving = true;
+      }
+    }
+    if (moving !== walking) setWalking(moving);
+    // How far into the world it is, by distance from the dock: drives size and orientation smoothly.
+    const w = st.mode === "dock" ? 0 : THREE.MathUtils.smoothstep(st.pos.distanceTo(_dock), 0.4, 4);
+    g.position.copy(st.pos);
+    _q.copy(camera.quaternion);
+    if (st.mode === "dock" || w < 0.001) {
+      g.quaternion.copy(_q);
+      g.rotateY(0.4 + (hover ? 0.2 : 0) + (mood ? 0.55 : 0));
+    } else {
+      // Faces where it is going; at the work spot, faces the present while it works.
+      const look = moving ? _dir : _pt.set(GIFT_SPOT.x - st.pos.x, 0, GIFT_SPOT.z - st.pos.z);
+      _e.set(0, Math.atan2(look.x, look.z), 0);
+      g.quaternion.copy(_q).multiply(_qy.setFromAxisAngle(_yAxis, 0.4)).slerp(_qy.setFromEuler(_e), w);
+    }
+    st.scale = THREE.MathUtils.lerp(dockScale, WORLD_SCALE, w);
+    g.scale.setScalar(st.scale);
     const sc = glow.current;
     if (sc) {
       sc.visible = working || failed || hover || !!focused || hop > 0.02;
       const pulse = working ? 1 + 0.15 * Math.sin(t * 5 + slot) : 1;
-      sc.scale.setScalar((working ? 3.4 : 2.5) * pulse);
+      sc.scale.setScalar((working ? 2.0 : 1.5) * pulse);
       glowMat.opacity = working ? 0.7 : failed ? 0.55 : hover ? 0.4 : 0.45;
     }
   });
@@ -288,17 +364,20 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
 
   return (
     <group ref={group}>
-      <sprite ref={glow} material={glowMat} position={[0, 1.6, -0.6]} visible={false} />
+      <sprite ref={glow} material={glowMat} position={[0, 0.95, -0.35]} visible={false} />
+      {/* Role badge: a small coloured ring under its feet. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+        <ringGeometry args={[0.42, 0.56, 28]} />
+        <meshBasicMaterial color={tint} transparent opacity={0.85} depthWrite={false} toneMapped={false} />
+      </mesh>
       <Suspense fallback={null}>
-        <CouncilMember state={member} position={[0, 0, 0]} scale={2.3} animate={animate} clipOverride={mood ?? (hover && member.status === "idle" ? "wave" : member.status === "idle" ? gesture : undefined)} />
+        <StorybookAvatar avatar={COUNCIL_AVATAR[actor]} clip={clip} robot={{ tint: role, working }} castShadow={false} timeScale={animate ? 1 : 0} onClipFinished={(c) => { if (c === "Celebrate") setCelebrating(false); if (c === "Wave") setGesture(undefined); }} />
       </Suspense>
-      {/* A generous invisible target: hover for the name, click for the log, without disturbing the map under it. */}
-      <mesh position={[0, 1.8, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPick?.(actor); }}>
-        <sphereGeometry args={[2.0, 12, 10]} />
+      <mesh position={[0, 1.05, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPick?.(actor); }}>
+        <sphereGeometry args={[1.2, 12, 10]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      {/* Beside the companion, toward the world: its one bubble, or its name and status on hover. */}
-      <Html position={[2.2, 2.2, 0]} zIndexRange={[38, 30]} style={{ pointerEvents: "none", transform: "translateY(-50%)" }}>
+      <Html position={[1.3, 1.3, 0]} zIndexRange={[38, 30]} style={{ pointerEvents: "none", transform: "translateY(-50%)" }}>
         <div data-map-token className={s.dock}>
           {!quiet && hover && !gentle.mounted && (
             <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${s.gentleIn}`} style={{ ["--tint" as string]: tint }}>
@@ -315,14 +394,13 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
         </div>
       </Html>
       {!quiet && active && !speaking && !hover && (
-        <Html position={[1.6, 3.4, 0]} style={{ pointerEvents: "none" }}>
+        <Html position={[0.95, 2.0, 0]} style={{ pointerEvents: "none" }}>
           <i data-map-token className={s.statusDot} style={{ background: tint }} aria-hidden />
         </Html>
       )}
     </group>
   );
 }
-
 export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate: boolean }) {
   const revealing = useConvergenceActive();
   const conv = useConvergenceState();
@@ -342,12 +420,14 @@ export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate
   // A trail only follows a live event whose object is clear, and only for the one that is speaking.
   const trail = speaker && bubbles[speaker]!.at > 0 && bubbles[speaker]!.tone !== "failed" ? { actor: speaker, at: bubbles[speaker]!.at } : null;
   const target = trail ? trailTarget(trail.actor, rings) : null;
+  // Recomputed only when the map layout changes, so a walking robot keeps a stable destination.
+  const spots = useMemo(() => Object.fromEntries(COUNCIL_ACTORS.map((a) => [a, workSpot(a, rings)])) as Record<CouncilActor, THREE.Vector3 | null>, [rings]);
   return (
     <group>
       {COUNCIL_ACTORS.map((actor, i) => (
-        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={voices.includes(actor) && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
+        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={voices.includes(actor) && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} spot={spots[actor]} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
       ))}
-      {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={COUNCIL_TINT[trail.actor]} startedAt={trail.at} />}
+      {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={ROBOT_TINT[trail.actor]} startedAt={trail.at} />}
     </group>
   );
 }

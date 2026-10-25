@@ -69,7 +69,7 @@ export const state = query({
     const active = new Set(clues.filter(c => c.status === "active").map(c => `mem_${c._id}`));
     const decorations = await ctx.db.query("giftDecorations").withIndex("by_room_memory", q => q.eq("roomId", roomId)).collect();
     return ok({
-      run: run ? { runId: run.runId, status: run.status, updatedAt: run.updatedAt, startedAt: run.startedAt, error: run.error, cached: run.cached, excluded: run.excluded ?? [], stale: run.knowledgeRevision !== member.room.knowledgeRevision } : null,
+      run: run ? { runId: run.runId, status: run.status, updatedAt: run.updatedAt, startedAt: run.startedAt, error: run.error, cached: run.cached, excluded: run.excluded ?? [], agentAddress: run.agentAddress, stale: run.knowledgeRevision !== member.room.knowledgeRevision } : null,
       events: events.flatMap(({ _id, _creationTime, receivedAt, ...e }) => { const parsed = councilEventSchema.safeParse(e); return parsed.success ? [parsed.data] : []; }),
       decorations: decorations.filter(d => active.has(d.memoryId)).flatMap(({ memoryId, jar, assetId, color, placement, label }) => { const parsed = decorationSpecSchema.safeParse({ memoryId, jar, assetId, color, placement, label }); return parsed.success ? [parsed.data] : []; }),
     });
@@ -88,6 +88,15 @@ export const context = internalQuery({
     if (clues.length !== job.publishedClueIds.length) return null;
     const listings = await ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", job._id)).collect();
     return { run, room, job, clues, listings };
+  },
+});
+
+export const recordAgent = internalMutation({
+  args: { ...runArgs, agentAddress: v.string() },
+  handler: async (ctx, { runId, agentAddress }) => {
+    if (!/^agent1[0-9a-z]{20,90}$/.test(agentAddress)) return;
+    const run = await ctx.db.query("councilRuns").withIndex("by_run", q => q.eq("runId", runId)).unique();
+    if (run && run.agentAddress !== agentAddress) await ctx.db.patch(run._id, { agentAddress });
   },
 });
 
@@ -148,7 +157,8 @@ export const dispatch = internalAction({
         method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000),
         body: JSON.stringify({ secret, runId, roomRun: true, demoKey: "", budgetMinor: data.room.budgetMinor ?? null, memories: data.clues.map(c => ({ memoryId: `mem_${c._id}`, text: `${c.kind}: ${c.text}` })) }),
       });
-      const body = await response.json() as { ok?: boolean };
+      const body = await response.json() as { ok?: boolean; agentAddress?: string | null };
+      if (response.ok && body.ok && typeof body.agentAddress === "string") await ctx.runMutation(internal.councilRoom.recordAgent, { runId, agentAddress: body.agentAddress });
       if (!response.ok || !body.ok) await ctx.runMutation(internal.councilRoom.mark, { runId, status: "failed", error: "The council service rejected this request. Check service credentials and health." });
     } catch {
       await ctx.runMutation(internal.councilRoom.mark, { runId, status: "uncertain", error: "The council did not acknowledge in time. Resume this request; it may already be working." });

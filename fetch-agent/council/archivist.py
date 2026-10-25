@@ -10,13 +10,11 @@ override what the rules found.
 
 from __future__ import annotations
 
-import asyncio
-import json
-import os
 import re
 
 from pydantic import BaseModel, ValidationError
 
+from . import llm
 from .contracts import Analysis, Clue, Memory
 
 OCCASIONS = ("birthday", "anniversary", "graduation", "wedding", "housewarming", "christmas", "holiday", "retirement", "farewell", "valentine")
@@ -108,25 +106,18 @@ class _LlmAnalysis(BaseModel):
 
 async def enrich_with_model(analysis: Analysis, memories: list[Memory], timeout_s: float = 12.0) -> Analysis:
     """Optionally add clues the rules missed. Never removes rule findings; failures are ignored."""
-    key = os.getenv("ASI1_API_KEY")
-    if not key or os.getenv("COUNCIL_USE_LLM", "1") == "0":
+    if not llm.enabled():
+        return analysis
+    prompt = (
+        "Extract gift clues as JSON {\"clues\":[{\"kind\":\"interest|wish|preference|ownership|dislike\",\"phrase\":\"2-4 words\"}]}. "
+        "Only include facts stated in the text. Text:\n" + "\n".join(m.text for m in memories)[:3000]
+    )
+    raw = await llm.ask_json(prompt, max_tokens=400, timeout_s=timeout_s)
+    if raw is None:
         return analysis
     try:
-        from openai import AsyncOpenAI
-
-        client = AsyncOpenAI(base_url="https://api.asi1.ai/v1", api_key=key, timeout=timeout_s)
-        prompt = (
-            "Extract gift clues as JSON {\"clues\":[{\"kind\":\"interest|wish|preference|ownership|dislike\",\"phrase\":\"2-4 words\"}]}. "
-            "Only include facts stated in the text. Text:\n" + "\n".join(m.text for m in memories)[:3000]
-        )
-        resp = await asyncio.wait_for(
-            client.chat.completions.create(model="asi1", messages=[{"role": "user", "content": prompt}], max_tokens=400),
-            timeout=timeout_s,
-        )
-        content = resp.choices[0].message.content or ""
-        match = re.search(r"\{.*\}", content, re.S)
-        parsed = _LlmAnalysis.model_validate(json.loads(match.group(0))) if match else _LlmAnalysis()
-    except (Exception, ValidationError):  # model is optional; never fail the run because of it
+        parsed = _LlmAnalysis.model_validate(raw)
+    except ValidationError:  # model is optional; never fail the run because of it
         return analysis
     have = {(c.kind, c.phrase) for c in analysis.clues}
     extra: list[Clue] = []

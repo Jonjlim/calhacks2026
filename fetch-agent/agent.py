@@ -1,10 +1,16 @@
-"""Unwrap Gift Council — Fetch.ai coordinator (Agent Chat Protocol, ASI:One).
+"""Unwrap Gift Council — Fetch.ai multi-agent council (Agent Chat Protocol, ASI:One).
 
-One registered uAgent. Each chat request runs the five-role council
-(Archivist, Muse, Scout, Keeper, Courier) as real functions and replies with
-researched, constraint-checked gift recommendations. The Unwrap website can
-also start runs over the local REST endpoint; every run emits task events to
-Convex so the AI Council avatars animate from real execution.
+Five registered uAgents run in one process (a uAgents Bureau):
+
+  Courier   — public coordinator: ASI:One chat, the website's REST entry point
+  Archivist — memories → structured clues        (ASI:One-assisted)
+  Muse      — memory → approved charm             (ASI:One-assisted)
+  Scout     — real product research
+  Keeper    — budget / ownership / dislike checks (ASI:One-explained)
+
+The Courier orchestrates the specialists with typed messages
+(`council/messages.py`) and `ctx.send_and_receive`; every agent emits its
+own task events to Convex so the AI Council avatars animate from real work.
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
-from uagents import Agent, Context, Model, Protocol
+from uagents import Agent, Bureau, Context, Model, Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
     ChatMessage,
@@ -26,24 +32,25 @@ from uagents_core.contrib.protocols.chat import (
     chat_protocol_spec,
 )
 
+from council import agents as council_agents
 from council.contracts import Memory
 from council.coordinator import memory_id_for, run_council
-from council.events import sink_for
+from council.events import EventSink, sink_for
 from council.scout import research_room
 
 load_dotenv(Path(__file__).with_name(".env"))
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-SEED = os.getenv("AGENT_SEED")
-if not SEED:
+if not os.getenv("AGENT_SEED"):
     raise RuntimeError("AGENT_SEED is not set. Put a long, private random phrase in fetch-agent/.env (see .env.example).")
 
+# Hosts such as Render inject PORT; the Bureau's HTTP server (REST + inspector) binds to it.
 PORT = int(os.getenv("PORT", os.getenv("AGENT_PORT", "8001")))
 AGENT_SECRET = os.getenv("COUNCIL_AGENT_SECRET", "")
 
 agent = Agent(
     name=os.getenv("AGENT_NAME", "unwrap-gift-council"),
-    seed=SEED,
+    seed=council_agents.seed_for("courier"),
     port=PORT,
     mailbox=True,  # reachable from Agentverse / ASI:One through the mailbox
     publish_agent_details=True,
@@ -51,6 +58,36 @@ agent = Agent(
     description="Unwrap Gift Council: finds real, budget-checked gifts from what friends remember about someone.",
     handle_messages_concurrently=True,
 )
+courier = agent
+
+specialists = council_agents.build_specialists(port=PORT)
+ADDRESSES = {role: a.address for role, a in specialists.items()}
+
+# Until the Bureau has started the specialists' message loops, runs use the
+# in-process role functions (also the path unit tests exercise).
+_network = {"ready": False}
+
+
+def _use_agents() -> bool:
+    return _network["ready"] and os.getenv("COUNCIL_MODE", "agents") != "local"
+
+
+async def run_with_council(memories: list[Memory], sink: EventSink, **kwargs) -> object:
+    if not _use_agents():
+        return await run_council(memories, sink, **kwargs)
+    council_agents.register_run(sink)
+
+    def factory(s: EventSink) -> council_agents.AgentSpecialists:
+        return council_agents.AgentSpecialists(
+            courier._build_context, ADDRESSES, s,
+            source=getattr(s, "source", "asi1"), demo_key=getattr(s, "demo_key", None), room_run=kwargs.get("room_run", False),
+        )
+
+    try:
+        return await run_council(memories, sink, specialists=factory, **kwargs)
+    finally:
+        council_agents.finish_run(sink.run_id)
+
 
 chat_proto = Protocol(spec=chat_protocol_spec)
 
@@ -63,7 +100,7 @@ async def handle_chat(ctx: Context, sender: str, msg: ChatMessage):
         reply = "Tell me about the person and your budget, e.g. “Find a birthday gift for Maya. She loves pottery, already has a beginner kit, and our budget is $80.”"
     else:
         run_id = "run_" + uuid.uuid4().hex[:20]
-        outcome = await run_council([Memory(memory_id=memory_id_for(text), text=text[:2000])], sink_for(run_id, source="asi1"))
+        outcome = await run_with_council([Memory(memory_id=memory_id_for(text), text=text[:2000])], sink_for(run_id, source="asi1"))
         reply = outcome.reply
     await ctx.send(sender, ChatMessage(content=[TextContent(type="text", text=reply), EndSessionContent(type="end-session")]))
 
@@ -97,6 +134,7 @@ class RunAccepted(Model):
     ok: bool
     runId: str
     error: str | None = None
+    agentAddress: str | None = None
 
 
 _running: set[asyncio.Task] = set()
@@ -108,7 +146,7 @@ async def start_run(ctx: Context, req: RunRequest) -> RunAccepted:
     if not AGENT_SECRET or not hmac.compare_digest(req.secret, AGENT_SECRET):
         return RunAccepted(ok=False, runId=req.runId, error="unauthorized")
     if req.runId in _active_runs:
-        return RunAccepted(ok=True, runId=req.runId)
+        return RunAccepted(ok=True, runId=req.runId, agentAddress=agent.address)
     if not req.runId.startswith("run_") or len(req.runId) > 64 or len(req.memories) > 100:
         return RunAccepted(ok=False, runId=req.runId, error="invalid request")
     try:
@@ -123,12 +161,12 @@ async def start_run(ctx: Context, req: RunRequest) -> RunAccepted:
         sink.room_run = True
     async def room_research(_analysis):
         return await research_room(req.runId)
-    task = asyncio.create_task(run_council(memories, sink, research=room_research if req.roomRun else None, budget_minor=req.budgetMinor, room_run=req.roomRun))
+    task = asyncio.create_task(run_with_council(memories, sink, research=room_research if req.roomRun else None, budget_minor=req.budgetMinor, room_run=req.roomRun))
     _active_runs[req.runId] = task
     task.add_done_callback(lambda _: _active_runs.pop(req.runId, None))
     _running.add(task)
     task.add_done_callback(_running.discard)
-    return RunAccepted(ok=True, runId=req.runId)
+    return RunAccepted(ok=True, runId=req.runId, agentAddress=agent.address)
 
 
 class Health(Model):
@@ -140,6 +178,12 @@ async def health(ctx: Context) -> Health:
     return Health(ok=True)
 
 
+@agent.on_event("startup")
+async def startup(ctx: Context):
+    _network["ready"] = True
+    ctx.logger.info("Council agents: " + ", ".join(f"{role}={addr}" for role, addr in {"courier": agent.address, **ADDRESSES}.items()))
+
+
 @agent.on_event("shutdown")
 async def shutdown(ctx: Context):
     if _running:
@@ -149,5 +193,11 @@ async def shutdown(ctx: Context):
         await asyncio.gather(*pending, return_exceptions=True)
 
 
+def build_bureau() -> Bureau:
+    # REST handlers are copied into the Bureau's server when agents are added,
+    # so this must run after every on_rest_* decorator above.
+    return Bureau(agents=[agent, *specialists.values()], port=PORT)
+
+
 if __name__ == "__main__":
-    agent.run()
+    build_bureau().run()

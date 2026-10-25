@@ -491,6 +491,11 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
         <p className="mt-1 text-[14.5px] text-dusk/75">{poseFor(m).caption}</p>
         {m.summary && <p className="mt-3 rounded-xl bg-white/60 px-3 py-2 text-[14px] leading-snug">{m.summary}</p>}
         <CouncilLog actor={drawer.actor} events={data.council?.events ?? []} />
+        {data.council?.run?.agentAddress && (
+          <p className="mt-3 text-[12px] text-dusk/60">
+            Agentverse address <code className="block break-all rounded-lg bg-white/60 px-2 py-1 text-[11.5px] text-dusk/80">{data.council.run.agentAddress}</code>
+          </p>
+        )}
         <p className="mt-3 text-[12px] text-dusk/50">Status comes from the agent’s real task events{m.status === "idle" ? "; nothing has run yet" : ""}.</p>
       </section>
     );
