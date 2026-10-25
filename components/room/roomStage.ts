@@ -6,16 +6,25 @@ import { useSyncExternalStore } from "react";
  *            council's table while the five agents work.
  *   garden — back outside at the island's own present: friends carry the
  *            Muse's charms out and decorate it, and choose the gift.
+ *   map    — the gift map (D19): the camera pulls back from the present and
+ *            the rings of memories, themes and gifts float around it.
+ *
+ * Garden ↔ map is one continuous camera glide in the same sky, with no fade:
+ * the scene swaps at the start so the rings can rise while the camera moves.
  *
  * One clock owns the transition (glide → fade out → swap scene at the darkest
  * moment → fade in), so the camera, the fade overlay and the scenes can never
  * disagree. The intro and unwrap clocks own the camera on "/"; this one only
  * runs inside rooms.
  */
-export type RoomStage = "tower" | "garden";
+export type RoomStage = "tower" | "garden" | "map";
 
 /** Seconds: approach (camera glides toward the doorway), then fade out, then fade in. */
 export const STAGE_TIMES = { approach: 1.15, fadeOut: 0.45, fadeIn: 0.7 } as const;
+/** Seconds for the garden ↔ map pull-back. */
+export const GLIDE_TIME = 2.4;
+
+const isOutside = (stage: RoomStage | null) => stage === "garden" || stage === "map";
 
 type Listener = () => void;
 
@@ -28,6 +37,8 @@ class RoomStageClock {
   from: RoomStage | null = null;
   /** Seconds into the current transition; -1 when settled. */
   t = -1;
+  /** True while a garden ↔ map glide runs instead of the fade. */
+  glide = false;
   /** Bumped whenever a new scene is shown, so arrival animations restart cleanly. */
   arrival = 0;
   private listeners = new Set<Listener>();
@@ -55,8 +66,16 @@ class RoomStageClock {
     if (instant || stage === null) {
       this.shown = stage;
       this.t = -1;
+      this.glide = false;
+      this.arrival++;
+    } else if (isOutside(this.shown) && isOutside(stage)) {
+      // Same sky, same island: swap now and let the camera glide between the two framings.
+      this.shown = stage;
+      this.glide = true;
+      this.t = 0;
       this.arrival++;
     } else {
+      this.glide = false;
       // Entering from outside the room glides to the doorway first; tower ↔ garden just fades.
       this.t = this.from === null && stage === "tower" ? 0 : STAGE_TIMES.approach;
     }
@@ -65,7 +84,7 @@ class RoomStageClock {
 
   /** Fade overlay opacity, 0..1. */
   get fade(): number {
-    if (this.t < 0) return 0;
+    if (this.t < 0 || this.glide) return 0;
     const { approach, fadeOut, fadeIn } = STAGE_TIMES;
     if (this.t < approach) return 0;
     if (this.t < approach + fadeOut) return (this.t - approach) / fadeOut;
@@ -73,6 +92,11 @@ class RoomStageClock {
   }
 
   /** 0..1 progress of the approach glide (only on first entry to the tower). */
+  /** 0..1 progress of a garden ↔ map glide. */
+  get glideProgress(): number {
+    return this.t < 0 || !this.glide ? 1 : Math.min(1, this.t / GLIDE_TIME);
+  }
+
   get approachProgress(): number {
     return this.t < 0 ? 1 : Math.min(1, this.t / STAGE_TIMES.approach);
   }
@@ -80,6 +104,15 @@ class RoomStageClock {
   advance(dt: number) {
     if (this.t < 0) return;
     const { approach, fadeOut, fadeIn } = STAGE_TIMES;
+    if (this.glide) {
+      this.t += Math.min(dt, 0.05);
+      if (this.t >= GLIDE_TIME) {
+        this.t = -1;
+        this.glide = false;
+        this.emit();
+      }
+      return;
+    }
     const before = this.t;
     this.t += Math.min(dt, 0.05);
     if (before < approach + fadeOut && this.t >= approach + fadeOut) {

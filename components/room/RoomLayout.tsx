@@ -21,6 +21,7 @@ import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
 import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
+import { useGiftRings } from "./useGiftRings";
 import type { RoomActions, RoomData } from "./types";
 
 /**
@@ -31,7 +32,7 @@ import type { RoomActions, RoomData } from "./types";
  * their phones (/room/:id/phone).
  */
 
-type Stage = "tower" | "garden";
+type Stage = "tower" | "garden" | "map";
 type Drawer = { kind: "gifts" } | { kind: "shares" } | { kind: "notes" } | { kind: "jar"; jar: "wish" | "interest" | "moment" } | { kind: "agent"; actor: (typeof COUNCIL_ACTORS)[number] } | null;
 
 const JAR_KINDS: Record<"wish" | "interest" | "moment", { title: string; kinds: string[] }> = {
@@ -56,19 +57,23 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view");
     if (view === "garden" || view === "gifts" || view === "proposal") setStageState("garden");
+    if (view === "map") setStageState("map");
   }, []);
   const setStage = (next: Stage) => {
     setStageState(next);
     const url = new URL(window.location.href);
     if (next === "tower") url.searchParams.delete("view");
-    else url.searchParams.set("view", "garden");
+    else url.searchParams.set("view", next);
     window.history.replaceState(null, "", url);
   };
   useEffect(() => {
     // Arriving from the island glides into the tower; a deep link straight to the garden doesn't replay a walk-in.
-    roomStage.go(stage, reducedMotion || (firstStage.current && stage === "garden"));
+    roomStage.go(stage, reducedMotion || (firstStage.current && stage !== "tower"));
     firstStage.current = false;
   }, [stage, reducedMotion]);
+
+  // --- The gift map (D19): rings of memories, themes and gifts around the present.
+  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }) });
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {
@@ -86,8 +91,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       // Ids and kinds only; clue text stays in the DOM overlays.
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
+      rings: map.rings,
     });
-  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick, map.rings]);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {
@@ -183,14 +189,20 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{status ?? `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click empty sky to add a memory · drag gifts toward the present" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}
-          {!preview && <a className="btn-secondary h-11 px-4 text-[14px]" href={`/room/${room.id}/map`}>Gift map</a>}
-          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
-            {stage === "tower" ? "Garden" : "Tower"}
-          </button>
+          {stage === "map" ? (
+            <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("garden")}>Back to the present</button>
+          ) : (
+            <>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map <span aria-hidden>↗</span></button>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
+                {stage === "tower" ? "Garden" : "Tower"}
+              </button>
+            </>
+          )}
           {(phase === "review" || phase === "approve" || phase === "done") && stage === "tower" && (
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}

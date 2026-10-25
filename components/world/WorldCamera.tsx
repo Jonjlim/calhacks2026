@@ -9,7 +9,7 @@ import { CameraTour, TOUR_START } from "./cameraPath";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
 import { type InvitationFrame, invitationFrame } from "./unwrap/invitationLayout";
 import { roomStage } from "@/components/room/roomStage";
-import { doorPose, gardenPose, towerPose } from "./room/stageLayout";
+import { doorPose, gardenPose, mapPose, towerPose } from "./room/stageLayout";
 
 /** The same view, pulled back along its line of sight. */
 function pullBack(pose: CameraPose, k: number): CameraPose {
@@ -122,8 +122,13 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       smoothed.current.x = smoothed.current.y = 0;
       const w = size.width;
       const shown = roomStage.shown;
-      const scenePose = shown === "tower" ? towerPose(w) : shown === "garden" ? gardenPose(w) : p.landing;
-      if (!shown && roomStage.target === "tower" && roomStage.transitioning && !reducedMotion) {
+      const poseOf = (stage: typeof shown) => stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : stage === "map" ? mapPose(w, size.height) : p.landing;
+      const scenePose = poseOf(shown);
+      if (roomStage.glide && !reducedMotion) {
+        // Garden ↔ map: one continuous pull-back (or push-in) in the same sky.
+        const k = roomStage.glideProgress;
+        applyPose(poseOf(roomStage.from), scenePose, k * k * k * (k * (k * 6 - 15) + 10));
+      } else if (!shown && roomStage.target === "tower" && roomStage.transitioning && !reducedMotion) {
         // Outside, gliding up to the tower door before the fade.
         const k = roomStage.approachProgress;
         applyPose(p.landing, doorPose(), k * k * (3 - 2 * k));

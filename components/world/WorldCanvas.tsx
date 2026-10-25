@@ -6,6 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRoomStage } from "@/components/room/roomStage";
 import type { RoomWorld } from "./IslandWorldProvider";
 import { GardenDecorating } from "./room/GardenDecorating";
+import { GiftRings } from "./room/GiftRings";
 import { TowerInterior } from "./room/TowerInterior";
 import type { CouncilActor } from "@/lib/council/contracts";
 import { AtmosphericSky } from "./AtmosphericSky";
@@ -96,12 +97,13 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <Wind animate={animate} />
 
       <AtmosphericSky animate={animate} />
-      <DistantScenery animate={animate} />
+      <DistantScenery animate={animate} islets={stage.shown !== "map"} />
 
       <FloatingIsland />
       <IslandEnvironment animate={animate} quality={quality} showPlayers={!council} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
+      {council?.rings && stage.shown === "map" && <GiftRings rings={council.rings} animate={animate} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />
 
       {night ? (
@@ -113,7 +115,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
           <Birds animate={animate} />
         </>
       )}
-      <ForegroundFoliage animate={animate} />
+      {stage.shown !== "map" && <ForegroundFoliage animate={animate} />}
       </ScenePaletteContext.Provider>
     </Canvas>
   );
