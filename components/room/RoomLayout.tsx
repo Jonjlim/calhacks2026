@@ -1,5 +1,8 @@
 "use client";
 
+import { relevantResearchJob, roomResearchJobs, isResearchActive } from "@/lib/room/researchActivity";
+import { roomCouncilMembers } from "@/lib/room/councilActivity";
+import { addToGiftBox, giftIsInBox } from "@/lib/room/giftBox";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RoomAgentTools } from "./RoomAgentTools";
@@ -11,6 +14,8 @@ import { ProposalPanel } from "@/components/proposal/ProposalPanel";
 import { BookCorner } from "@/components/book/BookCorner";
 import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
 import { book, useBookOpen } from "@/components/book/bookStore";
+import { AgentDetails } from "@/components/council/AgentDetails";
+import { GiftFinale, useFinaleStep } from "@/components/finale/GiftFinale";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
@@ -125,7 +130,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   }, [resolvedStage, reducedMotion]);
 
   // --- The Great Gift Convergence: the organizer's reveal of the chosen gift (local presentation of Convex's persisted selection).
-  const engaged = useConvergenceActive();
+  // The last steps (plan, checkout, wrap) and the end of the game, which is shared: once the gift is wrapped everyone is taken to it.
+  const [finaleOpen, setFinaleOpen] = useState(false);
+  const finaleStep = useFinaleStep(data);
+  const ended = finaleStep === "end";
+  const engaged = useConvergenceActive() || ended;
   const convState = useConvergenceState();
   const selection = data.selection?.status === "active" ? data.selection : null;
   const revealedKey = selection ? `unwrap:revealed:${selection.id}` : null;
@@ -194,7 +203,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
     async (listingId: string): Promise<{ ok: true } | { ok: false; message: string }> => {
       if (!actions) return { ok: false, message: "Choosing needs a live room." };
       try {
-        const res = await actions.selectGift(listingId);
+        const res = await addToGiftBox(actions, data.selection, listingId);
         if (!res.ok) return { ok: false, message: res.error.message };
         pendingReveal.current = listingId;
         return { ok: true };
@@ -202,10 +211,10 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         return { ok: false, message: "That didn’t go through. Check the connection and try again." };
       }
     },
-    [actions],
+    [actions, data.selection],
   );
   useEffect(() => {
-    if (bookOpen || !pendingReveal.current || !selection || selection.listingId !== pendingReveal.current) return;
+    if (bookOpen || !pendingReveal.current || !selection || !giftIsInBox(selection, pendingReveal.current)) return;
     pendingReveal.current = null;
     const t = setTimeout(() => startReveal(false), 450);
     return () => clearTimeout(t);
@@ -214,15 +223,21 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      if ((e.key === "b" || e.key === "B") && !e.metaKey && !e.ctrlKey && !e.altKey && stage === "map" && !(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))) book.show();
+      if ((e.key === "b" || e.key === "B") && !e.metaKey && !e.ctrlKey && !e.altKey && stage === "map" && !ended && !(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))) book.show();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [stage]);
+  }, [stage, ended]);
 
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
-  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
+  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setFinaleOpen(true), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
   ringsRef.current = map.rings;
+
+  const members = useMemo(() => {
+    const current = roomCouncilMembers(data);
+    if (map.councilThinking) current.muse = { actor: "muse", status: "started", sequence: -2, summary: map.councilThinking };
+    return current;
+  }, [data.council, data.activity, data.researchJobs, data.latestResearch, data.trends, map.councilThinking]);
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {
@@ -235,13 +250,14 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       roomId: room.id,
       viewerId: me.id,
       events: data.council?.events ?? [],
+      members,
       decorations: data.council?.decorations ?? [],
       participants: participants.map((p) => ({ id: p.id, displayName: p.displayName, joinedAt: p.joinedAt })),
       // Ids and kinds only; clue text stays in the DOM overlays.
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
     });
-  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick, members]);
   // The map's data goes straight to the rings, so updates don't re-render the rest of the world.
   useEffect(() => ringsStore.set(map.rings), [map.rings]);
   useEffect(() => () => ringsStore.set(null), []);
@@ -258,8 +274,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const phase = roomPhase({ councilStatus: data.council?.run?.status ?? null, recommendationCount: data.recommendations.length, proposalStatus: data.proposal.revision?.status ?? null });
-  const members = useMemo(() => reduceCouncil(data.council?.events ?? []), [data.council?.events]);
+  const liveResearch = relevantResearchJob(roomResearchJobs(data));
+  const phase = roomPhase({ councilStatus: isResearchActive(liveResearch) ? "running" : data.council?.run?.status ?? null, recommendationCount: data.recommendations.length, proposalStatus: data.proposal.revision?.status ?? null });
   const working = COUNCIL_ACTORS.filter((a) => members[a].status === "started" && a !== "courier");
   const activeClues = data.publishedClues.filter((c) => c.status === "active");
   const ask = useResultAction(actions?.startResearch);
@@ -288,17 +304,17 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
     );
   } else if (phase === "approve" || phase === "done") {
     // "All approved" is a status, not something to press: it reads as a quiet badge, and the shares stay one tap away in the present or the menu.
-    primary = phase === "done" ? (
-      <span role="status" className="flex h-11 items-center gap-2 rounded-full bg-[#dcebdc] px-4 text-[14px] font-semibold text-[#3d6b4a]"><CheckIcon /> All approved</span>
-    ) : (
-      <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>Review shares</button>
+    primary = (
+      <button className="btn-primary h-11 px-5" onClick={() => setFinaleOpen(true)}>
+        {finaleStep === "checkout" ? "Checkout" : finaleStep === "wrap" ? (isOrganizer ? "Wrap the gift" : "Almost done") : phase === "done" ? "Everyone approved · continue" : "Plan contributions"}
+      </button>
     );
   }
 
   const status = !run
     ? null
     : run.status === "running" && working.length
-      ? working.map((a) => `${COUNCIL_LABEL[a]}: ${poseFor(members[a]).caption.toLowerCase()}`).join(" · ")
+      ? working.map((a) => `${COUNCIL_LABEL[a]}: ${(members[a].summary ?? poseFor(members[a]).caption).toLowerCase()}`).join(" · ")
       : run.status === "running"
         ? "The council is gathering"
         : run.status === "uncertain" || run.status === "failed" || run.status === "partial"
@@ -341,6 +357,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             </button>
           )}
         </div>
+        <a href={`/room/${room.id}/phone`} className={chip}>List view</a>
         {data.invitePath && <InviteCard path={data.invitePath} />}
         {actions && !preview && <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
           twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
@@ -408,7 +425,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} data-sfx="reveal" onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
-                {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => map.openBox()}>Review shares</button>}
+                {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => setFinaleOpen(true)}>Plan contributions</button>}
                 {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Backstage: notes, agents and sharing</button>}
               </div>
             )}
@@ -423,10 +440,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <ConvergenceOverlay
           gift={{ selection, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues, listings: data.listings, recommendations: data.recommendations, directions: data.directions, trail: data.trail }}
           isOrganizer={isOrganizer}
-          onPlan={() => setDrawer({ kind: "shares" })}
+          onPlan={() => setFinaleOpen(true)}
           onReplay={replayReveal}
         />
       )}
+
+      <GiftFinale data={data} actions={actions} isOrganizer={isOrganizer} open={finaleOpen && !preview} onClose={() => setFinaleOpen(false)} />
 
       <AnimatePresence>
         {drawer && !engaged && (
@@ -482,19 +501,7 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
       </section>
     );
   }
-  if (drawer.kind === "agent") {
-    const m = members[drawer.actor];
-    return (
-      <section>
-        <p className="text-[12px] font-semibold tracking-wide uppercase" style={{ color: COUNCIL_TINT[drawer.actor] }}>The council</p>
-        <h2 className="font-display text-[28px] leading-tight">{COUNCIL_LABEL[drawer.actor]}</h2>
-        <p className="mt-1 text-[14.5px] text-dusk/75">{poseFor(m).caption}</p>
-        {m.summary && <p className="mt-3 rounded-xl bg-white/60 px-3 py-2 text-[14px] leading-snug">{m.summary}</p>}
-        <CouncilLog actor={drawer.actor} events={data.council?.events ?? []} />
-        <p className="mt-3 text-[12px] text-dusk/50">Status comes from the agent’s real task events{m.status === "idle" ? "; nothing has run yet" : ""}.</p>
-      </section>
-    );
-  }
+  if (drawer.kind === "agent") return <AgentDetails actor={drawer.actor} member={members[drawer.actor]} data={data} />;
   // Notes and room tools: contextual text entry for the organizer, plus moderation of shared notes.
   return (
     <>
@@ -502,26 +509,6 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
       <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
       <RoomAgentTools data={data} actions={actions} />
     </>
-  );
-}
-
-/** Everything one council member did in the latest run, from the stored task events. */
-function CouncilLog({ actor, events }: { actor: (typeof COUNCIL_ACTORS)[number]; events: NonNullable<RoomData["council"]>["events"] }) {
-  const mine = events.filter((e) => e.actor === actor).sort((a, b) => a.sequence - b.sequence);
-  if (!mine.length) return null;
-  const mark = { started: "…", completed: "✓", failed: "✕" } as const;
-  return (
-    <ol className="mt-3 flex flex-col gap-1.5" aria-label={`${COUNCIL_LABEL[actor]} log`}>
-      {mine.map((e) => (
-        <li key={e.eventId} className="flex gap-2 rounded-xl bg-white/50 px-3 py-1.5 text-[13px] leading-snug">
-          <span aria-hidden className="w-4 shrink-0 text-center font-semibold" style={{ color: e.status === "failed" ? "#d95b4a" : COUNCIL_TINT[actor] }}>{mark[e.status]}</span>
-          <span className="min-w-0 flex-1">
-            {e.status === "started" ? poseFor({ actor, status: "started" }).caption : e.result?.summary ?? e.result?.error ?? poseFor({ actor, status: e.status }).caption}
-          </span>
-          <time className="shrink-0 text-[11.5px] text-dusk/45">{new Date(e.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</time>
-        </li>
-      ))}
-    </ol>
   );
 }
 

@@ -1,5 +1,11 @@
 "use client";
+import { GiftFinale, useFinaleStep } from "@/components/finale/GiftFinale";
 
+import { addToGiftBox, giftIsInBox } from "@/lib/room/giftBox";
+import { roomResearchJobs, relevantResearchJob, isResearchActive } from "@/lib/room/researchActivity";
+import { roomCouncilMembers } from "@/lib/room/councilActivity";
+import { COUNCIL_ACTORS } from "@/lib/council/contracts";
+import { COUNCIL_LABEL, poseFor } from "@/lib/council/animation";
 import { useConvexConnectionState } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -39,12 +45,25 @@ const swap = {
   transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
 } as const;
 
+/** On a phone the last steps (checkout, wrapping) and the end of the game come up over everything else, in step with the shared room. */
 export function MobileParticipantExperience({ data, actions }: { data: RoomData; actions: RoomActions }) {
+  const step = useFinaleStep(data);
+  return (
+    <>
+      <MobileParticipantScreens data={data} actions={actions} />
+      <GiftFinale data={data} actions={actions} isOrganizer={data.view.me.role === "organizer"} open={step === "checkout" || step === "wrap"} onClose={() => undefined} hideClose />
+    </>
+  );
+}
+
+function MobileParticipantScreens({ data, actions }: { data: RoomData; actions: RoomActions }) {
   const { room, participants, me } = data.view;
   const connection = useConvexConnectionState();
   const isOrganizer = me.role === "organizer";
+  const members = roomCouncilMembers(data);
+  const research = relevantResearchJob(roomResearchJobs(data));
   const phase = roomPhase({
-    councilStatus: data.council?.run?.status ?? null,
+    councilStatus: isResearchActive(research) ? "running" : data.council?.run?.status ?? null,
     recommendationCount: data.recommendations.length,
     proposalStatus: data.proposal.revision?.status ?? null,
   });
@@ -77,6 +96,16 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
           </p>
         )}
 
+        <nav aria-label="Room sections" className="my-4 flex flex-wrap gap-2">
+          {([['memories', 'Memories'], ['review', 'Gifts'], ['approve', 'Gift box']] as const).map(([target, label]) => (
+            <button key={target} type="button" className="btn-secondary" aria-pressed={screen === target || (target === 'memories' && screen === 'collect') || (target === 'approve' && screen === 'done')} onClick={() => setScreen(target)}>{label}</button>
+          ))}
+          <a className="self-center px-2 text-sm underline" href={`/room/${room.id}?surface=stage`}>Map view</a>
+          {data.invitePath && <a className="self-center px-2 text-sm underline" href={data.invitePath}>Invite a friend</a>}
+        </nav>
+        {COUNCIL_ACTORS.some((actor) => members[actor].status === "started" || members[actor].status === "failed") && <div role="status" className="mb-3 rounded-xl bg-white/70 p-3 text-sm">
+          {COUNCIL_ACTORS.filter((actor) => members[actor].status === "started" || members[actor].status === "failed").map((actor) => <p key={actor}><strong>{COUNCIL_LABEL[actor]}:</strong> {members[actor].summary ?? poseFor(members[actor]).caption}</p>)}
+        </div>}
         <AnimatePresence mode="wait" initial={false}>
           <motion.section key={screen} {...swap} className="mt-5 flex flex-1 flex-col gap-4" aria-live="polite">
             {screen === "memories" || screen === "collect" ? (
@@ -88,7 +117,10 @@ export function MobileParticipantExperience({ data, actions }: { data: RoomData;
             ) : screen === "approve" ? (
               <ProposalPanel proposal={data.proposal} participants={participants} me={me} selection={data.selection} isOrganizer={isOrganizer} actions={actions} />
             ) : (
-              <DoneScreen recipient={room.recipientDisplayName} title={data.selection?.listingSnapshot.title} />
+              <>
+                <DoneScreen recipient={room.recipientDisplayName} />
+                <ProposalPanel proposal={data.proposal} participants={participants} me={me} selection={data.selection} isOrganizer={isOrganizer} actions={actions} />
+              </>
             )}
           </motion.section>
         </AnimatePresence>
@@ -174,6 +206,7 @@ function WaitScreen({ data, actions, mine, onAddMore }: { data: RoomData; action
       </div>
       <RoomCouncilPanel data={data} actions={actions} compact />
       <MyNotes mine={mine} />
+      <p className="text-sm">Use Gifts to review directions and results while other searches continue.</p>
       <button onClick={onAddMore} className="btn-secondary h-14 text-[16px]">
         Add another memory
       </button>
@@ -185,20 +218,21 @@ function ReviewScreen({ data, actions, isOrganizer, onAddMore }: { data: RoomDat
   const listings = new Map(data.listings.map((l) => [l.id, l]));
   const vote = useResultAction(actions.castVote);
   const clear = useResultAction(actions.clearVote);
-  const choose = useResultAction(actions.selectGift);
+  const choose = useResultAction((listingId: string) => addToGiftBox(actions, data.selection, listingId));
   const recs = data.recommendations.filter((r) => listings.has(r.listingId));
   return (
     <>
       <div>
         <h2 className="font-display text-[30px] leading-tight">Gift ideas · {recs.length}</h2>
-        <p className="text-[14.5px] text-dusk/65">{isOrganizer ? "Vote with everyone, then choose the one to give." : "Vote for the ones that feel right. The organizer makes the final choice."}</p>
+        <p className="text-[14.5px] text-dusk/65">{isOrganizer ? "Vote with everyone, then add one or more gifts to the box." : "Vote for the ones that feel right. The organizer makes the final choice."}</p>
       </div>
       {data.council?.run?.cached && <p className="text-[12.5px] text-dusk/55">Cached research · each card shows when its price was observed.</p>}
+      <DirectionChoices data={data} actions={actions} isOrganizer={isOrganizer} />
       <ul className="flex flex-col gap-3">
         {recs.map((r) => {
           const listing = listings.get(r.listingId)!;
           const v = data.votes[r.listingId];
-          const chosen = data.selection?.listingId === r.listingId;
+          const chosen = giftIsInBox(data.selection, r.listingId);
           return (
             <li key={r.id}>
               <Card className={chosen ? "ring-2 ring-gold" : ""}>
@@ -224,7 +258,7 @@ function ReviewScreen({ data, actions, isOrganizer, onAddMore }: { data: RoomDat
                 </div>
                 {isOrganizer && (
                   <button onClick={() => choose.run(r.listingId)} disabled={choose.pending || chosen} className="btn-primary mt-2 h-12 w-full justify-center text-[15px] disabled:opacity-60">
-                    {chosen ? "Chosen ✓" : "Choose this gift"}
+                    {chosen ? "In the box ✓" : "Add to gift box"}
                   </button>
                 )}
               </Card>
@@ -238,6 +272,36 @@ function ReviewScreen({ data, actions, isOrganizer, onAddMore }: { data: RoomDat
       </button>
     </>
   );
+}
+
+function DirectionChoices({ data, actions, isOrganizer }: { data: RoomData; actions: RoomActions; isOrganizer: boolean }) {
+  const propose = useResultAction(actions.proposeDirections);
+  const search = useResultAction(actions.researchDirection);
+  const fallbackSearch = useResultAction(actions.startResearch);
+  const clueIds = data.publishedClues.filter((c) => c.status === "active").map((c) => c.id);
+  const jobs = roomResearchJobs(data);
+  const latest = relevantResearchJob(jobs);
+  return <Card className="flex flex-col gap-3">
+    <h3 className="font-display text-xl">Find gifts from your memories</h3>
+    {actions.proposeDirections ? <button type="button" className="btn-secondary" disabled={propose.pending || clueIds.length < 2} onClick={() => propose.run()}>
+      {propose.pending ? "Combining memories…" : data.directions?.length ? "Suggest new directions" : "Combine memories into directions"}
+    </button> : isOrganizer && <button type="button" className="btn-secondary" disabled={fallbackSearch.pending || !clueIds.length || isResearchActive(latest) || latest?.status === "uncertain"} onClick={() => fallbackSearch.run(clueIds)}>Find gifts</button>}
+    {clueIds.length < 2 && <p className="text-sm">Share at least two memories to combine them into gift directions.</p>}
+    {data.directions?.map((direction) => {
+      const job = relevantResearchJob(jobs.filter((j) => j.directionId === direction.id));
+      const busy = isResearchActive(job);
+      const uncertain = job?.status === "uncertain";
+      return <div key={direction.id} className="border-t border-dusk/10 pt-3">
+        <h4 className="font-semibold">{direction.label}</h4><p className="text-sm">{direction.why}</p>
+        {isOrganizer && actions.researchDirection && <button type="button" className="btn-secondary mt-2" disabled={search.pending || busy || uncertain} onClick={() => search.run(direction.id, clueIds)}>{busy ? "Searching…" : uncertain ? "Awaiting confirmation…" : "Find gifts for this"}</button>}
+        {!isOrganizer && <p className="text-sm text-dusk/60">The organizer can search this direction.</p>}
+        {job?.status === "failed" && <p role="alert" className="text-sm">This search failed. Try again.</p>}
+      </div>;
+    })}
+    {latest?.status === "uncertain" && <p role="status" className="text-sm">A search has not confirmed its result. It is not still actively searching; wait for recovery before starting it again.</p>}
+    {latest?.status === "succeeded" && !data.recommendations.length && <p className="text-sm">No matching gifts were found. Try a different direction or add more memories.</p>}
+    {(propose.error || search.error || fallbackSearch.error) && <p role="alert" className="text-sm">{(propose.error ?? search.error ?? fallbackSearch.error)?.message}</p>}
+  </Card>;
 }
 
 function DoneScreen({ recipient, title }: { recipient: string; title?: string }) {
