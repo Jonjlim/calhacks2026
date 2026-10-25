@@ -7,6 +7,7 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { BookCorner } from "@/components/book/BookCorner";
 import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
 import { book, useBookOpen } from "@/components/book/bookStore";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
@@ -77,9 +78,6 @@ function CompassIcon() {
 }
 function MoreIcon() {
   return <svg {...ICON}><circle cx="5.5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="18.5" cy="12" r="1.2" /></svg>;
-}
-function BookIcon() {
-  return <svg {...ICON}><path d="M4 5.5C4 5 4.5 4.5 5 4.5H11V19.5H5C4.5 19.5 4 19 4 18.5z" /><path d="M20 5.5C20 5 19.5 4.5 19 4.5H13V19.5H19C19.5 19.5 20 19 20 18.5z" /><path d="M7 8.5h2.5M7 11.5h2.5M14.5 8.5H17M14.5 11.5H17" /></svg>;
 }
 function CheckIcon() {
   return <svg {...ICON} width={18} height={18}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
@@ -333,7 +331,6 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <div className="flex gap-2">
           <button className={iconChip} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
           <button className={iconChip} onClick={() => setTimeOfDay(SKIES[(SKIES.findIndex((k) => k.id === time) + 1) % SKIES.length]!.id)} aria-label={`Change the sky. Now: ${SKIES.find((k) => k.id === time)?.label}`} title={`Sky: ${SKIES.find((k) => k.id === time)?.label}. Click for the next.`}><DayIcon day={!isDarkSky(time)} /></button>
-          {stage === "map" && !preview && <button className={iconChip} onClick={() => book.show()} aria-label="Open the Book of Possibilities" title="Book of Possibilities (B)"><BookIcon /></button>}
           {stage === "map" && (
             <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, 1 / 2 / 3 high, three-quarter and low views, + / - zoom, 0 returns.">
               <CompassIcon />
@@ -342,6 +339,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
+
+      {/* The shares board (components/room/BudgetBoard) is built but switched off for now. To bring it back, render <BudgetBoard data={data} actions={actions} /> here on the map stage. */}
+
+      {/* The Book of Possibilities lives in the bottom-left corner. */}
+      {stage === "map" && !preview && !engaged && <BookCorner count={data.listings.length} />}
 
       {/* In a branch: one way back, wherever the camera has wandered. */}
       {stage === "map" && !engaged && !bookOpen && map.rings?.selectedKey && map.rings.selectedKey !== "box" && (
@@ -387,7 +389,6 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className={`${iconChip} !h-11 !w-11`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" title="More" onClick={() => setMenuOpen((o) => !o)}><MoreIcon /></button>
             {menuOpen && (
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
-                {stage === "map" && !preview && <button role="menuitem" className={menuItem} onClick={() => book.show()}>Book of Possibilities</button>}
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}

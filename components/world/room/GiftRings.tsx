@@ -24,7 +24,7 @@ import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import { MagicTrail } from "./MagicTrail";
 import { buildBody } from "../convergence/GiftConvergence";
 import { paint } from "../painterly/materials";
-import { LOOKS, lookFor, NOTE_SHAPE, ThemeScenery } from "./ThemeScenery";
+import { LOOKS, lookFor, NOTE_SHAPE, ThemeIcon, ThemeScenery } from "./ThemeScenery";
 import s from "./gift-rings.module.css";
 
 /**
@@ -222,11 +222,16 @@ function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm
 function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; label: string; offset: [number, number, number]; dim: boolean }) {
   const selected = rings.selectedKey === k;
   const info = selected ? rings.actionsFor(k) : null;
+  // Three layers of floating content (memories, themes, gifts): only one is emphasized at a time. In the overview it is the themes; in a branch
+  // the focus itself decides, so the layers that are not in play step back.
+  const layer = k === "box" ? "box" : k.startsWith("theme:") ? "theme" : k.startsWith("gift:") || k.startsWith("idea:") ? "gift" : "memory";
+  const emphasized = rings.selectedKey ? (rings.selectedKey.startsWith("gift:") ? "gift" : "memory") : "theme";
+  const recede = !rings.highlight && layer !== "box" && layer !== emphasized;
   const votes = rings.votes?.[k];
   const pulse = rings.pulses?.[k];
   return (
     <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
-      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
         onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
         <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
           onPointerDown={(e) => drag.begin(k, from, e)}
@@ -533,7 +538,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             <ThemeScenery look={lookFor(t.label, t.jar)} animate={animate} />
             <Jar kind={t.jar} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
             <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} offset={[0, -0.8, 3]} label={`${t.label} theme`}
-              face={<span className={s.theme} style={{ ["--c" as string]: t.tint }}><b>{t.label}</b><small>{t.count} shared</small></span>} />
+              face={<span className={s.theme} style={{ ["--c" as string]: t.tint }}><span className={s.themeIcon} aria-hidden><ThemeIcon look={lookFor(t.label, t.jar)} /></span><b>{t.label}</b><small>{t.count} {t.count === 1 ? "clue" : "clues"}</small></span>} />
           </RingIsland>
         );
       })}

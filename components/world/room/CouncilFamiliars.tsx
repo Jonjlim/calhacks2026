@@ -95,6 +95,35 @@ function useCouncilBubbles(members: Record<CouncilActor, CouncilMemberState>): R
   return out;
 }
 
+/**
+ * What a companion says while its task really is running: a few short phrases
+ * for that role, taken in turn so a long task does not repeat one line. They are
+ * only ever shown while the stored event says the task is started.
+ */
+const WORKING_PHRASES: Record<CouncilActor, string[]> = {
+  scout: ["Scouting gift ideas…", "Looking for better matches…", "Checking real listings…"],
+  archivist: ["Sorting memories…", "Grouping shared clues…"],
+  muse: ["Finding patterns…", "Linking ideas together…"],
+  keeper: ["Balancing contributions…", "Checking the budget…"],
+  courier: ["Preparing the next step…", "Gathering the results…"],
+};
+
+/** Keeps a bubble mounted long enough to fade out, and lets it fade in; the text it last showed stays while it leaves. */
+function useGentle(text: string | null): { text: string; mounted: boolean; visible: boolean } {
+  const [state, setState] = useState({ text: text ?? "", mounted: !!text, visible: false });
+  useEffect(() => {
+    if (text) {
+      setState((s) => ({ ...s, text, mounted: true }));
+      const raf = requestAnimationFrame(() => setState((s) => ({ ...s, visible: true })));
+      return () => cancelAnimationFrame(raf);
+    }
+    setState((s) => ({ ...s, visible: false }));
+    const timer = setTimeout(() => setState((s) => ({ ...s, mounted: false })), 520);
+    return () => clearTimeout(timer);
+  }, [text]);
+  return state;
+}
+
 /** Each companion's own small, restrained idle gesture. Desynchronised by phase. */
 const IDLE_ACTION: Record<CouncilActor, CouncilClip> = { archivist: "read_scroll", muse: "wave", scout: "search", keeper: "approve", courier: "excited_hop" };
 
@@ -164,6 +193,17 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
   const glowMat = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: tint, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), [tint]);
   useEffect(() => () => glowMat.dispose(), [glowMat]);
   const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1 });
+  // While its task runs, its line changes every few seconds; a result or an error keeps its own words.
+  const [turn, setTurn] = useState(0);
+  const running = bubble?.tone === "working";
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setTurn((n) => n + 1), 3600);
+    return () => clearInterval(timer);
+  }, [running]);
+  const phrases = WORKING_PHRASES[actor];
+  const said = bubble ? (running ? phrases[turn % phrases.length]! : bubble.text) : null;
+  const gentle = useGentle(!quiet && speaking && said ? said : null);
   const narrow = size.width < NARROW;
   const active = !!bubble;
 
@@ -210,7 +250,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
     if (bubble && bubble.at > st.lastAt) {
       st.lastAt = bubble.at;
       st.react = t;
-      if (speaking) playCouncilTick();
+      if (speaking && bubble.tone !== "working") playCouncilTick();
     }
     const hop = Math.max(0, Math.sin((t - st.react) * 7)) * Math.exp(-(t - st.react) * 2.2) * (t - st.react < 1.4 ? 1 : 0);
     // Hugs the left edge of the window: a few pixels of margin plus half a companion, whatever the window size, and corrected for the
@@ -260,10 +300,16 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       {/* Beside the companion, toward the world: its one bubble, or its name and status on hover. */}
       <Html position={[2.2, 2.2, 0]} zIndexRange={[38, 30]} style={{ pointerEvents: "none", transform: "translateY(-50%)" }}>
         <div data-map-token className={s.dock}>
-          {!quiet && ((speaking && bubble) || hover) && (
-            <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${speaking && bubble ? s[bubble.tone] : ""}`} style={{ ["--tint" as string]: tint }}>
+          {!quiet && hover && !gentle.mounted && (
+            <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${s.gentleIn}`} style={{ ["--tint" as string]: tint }}>
+              <b className={s.dockName}>{COUNCIL_LABEL[actor]}</b>
+              {poseFor(member).caption}
+            </p>
+          )}
+          {!quiet && gentle.mounted && (
+            <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${s.gentle} ${gentle.visible ? s.gentleOn : ""} ${bubble ? s[bubble.tone] : ""}`} style={{ ["--tint" as string]: tint }}>
               {hover && <b className={s.dockName}>{COUNCIL_LABEL[actor]}</b>}
-              {speaking && bubble ? bubble.text : poseFor(member).caption}
+              {gentle.text}
             </p>
           )}
         </div>
@@ -291,14 +337,15 @@ export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate
   const groups = useRef<Partial<Record<CouncilActor, THREE.Group>>>({});
   const registered = useMemo(() => (actor: CouncilActor, group: THREE.Group) => void (groups.current[actor] = group), []);
   // One prominent voice at a time: whoever's task changed most recently.
-  const speaker = COUNCIL_ACTORS.filter((a) => bubbles[a]).sort((a, b) => bubbles[b]!.at - bubbles[a]!.at || (members[b].sequence - members[a].sequence))[0] ?? null;
+  const voices = COUNCIL_ACTORS.filter((a) => bubbles[a]).sort((a, b) => bubbles[b]!.at - bubbles[a]!.at || (members[b].sequence - members[a].sequence)).slice(0, 2);
+  const speaker = voices[0] ?? null;
   // A trail only follows a live event whose object is clear, and only for the one that is speaking.
   const trail = speaker && bubbles[speaker]!.at > 0 && bubbles[speaker]!.tone !== "failed" ? { actor: speaker, at: bubbles[speaker]!.at } : null;
   const target = trail ? trailTarget(trail.actor, rings) : null;
   return (
     <group>
       {COUNCIL_ACTORS.map((actor, i) => (
-        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={speaker === actor && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
+        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={voices.includes(actor) && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
       ))}
       {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={COUNCIL_TINT[trail.actor]} startedAt={trail.at} />}
     </group>

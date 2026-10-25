@@ -113,3 +113,23 @@
 /* Turning a page or changing a filter is quick: the leaf slides in from the spine, no full redraw. */
 .turn { animation: pageTurn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: left center; }
 @keyframes pageTurn { from { opacity: 0; transform: perspective(900px) rotateY(-14deg) translateX(1.5cqw); } }
+
+/* The book in the corner: drawn in pencil, washed in color, lifts and flutters when you reach for it. */
+.corner0 { position: absolute; left: 20px; bottom: 24px; display: flex; align-items: center; gap: 10px; pointer-events: auto; z-index: 20; }
+.cornerBook { position: relative; width: 64px; height: 64px; display: grid; place-items: center; border: none; border-radius: 18px; cursor: pointer; background: radial-gradient(circle at 50% 40%, rgb(255 246 224 / 0.9), rgb(255 238 208 / 0.55)); box-shadow: 0 10px 22px -12px rgb(60 36 40 / 0.6), inset 0 0 0 1.5px rgb(180 112 90 / 0.35); transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s; }
+.cornerBook:focus-visible { outline: 3px solid var(--color-gold, #e2bd6b); outline-offset: 3px; }
+.cornerActive { transform: translateY(-5px) rotate(-3deg); box-shadow: 0 16px 26px -12px rgb(60 36 40 / 0.6), 0 0 22px 4px rgb(255 214 130 / 0.7), inset 0 0 0 1.5px rgb(200 140 70 / 0.6); }
+.cornerStroke { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.cornerDrawn .cornerStroke { animation: cornerDraw 0.7s cubic-bezier(0.45, 0, 0.35, 1) forwards; animation-delay: calc(0.35s + var(--n, 0) * 0.28s); }
+.cornerFlutter .cornerStroke { animation-delay: 1.1s !important; }
+@keyframes cornerDraw { to { stroke-dashoffset: 0; } }
+.cornerColor { opacity: 0; mix-blend-mode: multiply; }
+.cornerDrawn .cornerColor { animation: cornerWash 1s ease-out 1.5s forwards; }
+@keyframes cornerWash { to { opacity: 0.8; } }
+.cornerFlutter { transform-box: view-box; transform-origin: 34px 36px; }
+.cornerActive .cornerFlutter { animation: flutter 0.9s ease-in-out infinite; }
+@keyframes flutter { 0%, 100% { transform: skewY(0) scaleX(1); } 30% { transform: skewY(-7deg) scaleX(0.82); } 60% { transform: skewY(4deg) scaleX(0.95); } }
+.cornerBadge { position: absolute; top: -5px; right: -5px; min-width: 20px; height: 20px; padding: 0 5px; display: grid; place-items: center; border-radius: 999px; font: 700 11px/1 var(--font-figtree, system-ui); color: #fff8ee; background: #4a3a58; box-shadow: 0 3px 8px -3px rgb(40 24 44 / 0.7); }
+.cornerLabel { opacity: 0; transform: translateX(-6px); transition: opacity 0.2s, transform 0.2s; white-space: nowrap; font: 600 13px/1 var(--font-figtree, system-ui); color: #4e2f42; background: #fff8e3; border: 1.5px solid #e2bd6b; border-radius: 999px; padding: 8px 14px; box-shadow: 0 8px 18px -10px rgb(40 24 44 / 0.6); pointer-events: none; }
+.cornerLabelOn { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .cornerActive .cornerFlutter { animation: none; } .cornerDrawn .cornerStroke, .cornerDrawn .cornerColor { animation-duration: 0.01s; animation-delay: 0s; } }

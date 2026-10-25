@@ -307,3 +307,19 @@
   .compact .bubble, .compact .idea { padding: 4px; max-width: none; }
   .compact:hover .bubble q, .compact:hover .idea b { display: inline; }
 }
+
+/* Council bubbles fade in and out gently; they are short and never stay. */
+.gentle { opacity: 0; transform: translateX(-6px); animation: none !important; transition: opacity 0.45s ease, transform 0.45s ease; }
+.gentleOn { opacity: 1; transform: none; }
+.gentleIn { animation: councilPop 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Calm by default: a memory or an idea in the overview is just a face (and its object); its words come on hover, focus or choice. */
+.compact .bubble q, .compact .idea b, .compact .idea small { display: none; }
+.compact .bubble, .compact .idea { padding: 4px; max-width: none; border-radius: 999px; }
+.compact:hover .bubble q, .compact:focus-within .bubble q { display: -webkit-box; -webkit-line-clamp: 4; }
+.compact:hover .idea b, .compact:focus-within .idea b, .compact:hover .idea small, .compact:focus-within .idea small { display: block; }
+.compact:hover .bubble, .compact:focus-within .bubble { padding: 6px 10px 6px 6px; max-width: 220px; border-radius: 16px 16px 16px 4px; }
+.compact:hover .idea, .compact:focus-within .idea { padding: 5px 12px 5px 5px; max-width: 220px; border-radius: 22px; }
+.recede { opacity: 0.62; filter: saturate(0.85); }
+.recede:hover, .recede:focus-within { opacity: 1; filter: none; }
+.themeIcon { display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 3px; border-radius: 50%; color: var(--color-plum, #4e2f42); background: rgb(255 255 255 / 0.6); box-shadow: inset 0 0 0 1.5px rgb(78 47 66 / 0.18); }
