@@ -269,7 +269,7 @@ export function StorybookIntro() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-40 overflow-hidden" role="dialog" aria-label="Storybook introduction">
+    <div className="pointer-events-auto fixed inset-0 z-40 overflow-hidden" role="dialog" aria-label="Storybook introduction">
       <div ref={deskRef} className="intro-desk absolute inset-0" aria-hidden>
         <div className="absolute inset-0 flex items-center justify-center" style={{ perspective: "2000px", perspectiveOrigin: "50% 40%" }}>
           <div ref={bookRef} className="relative" style={{ width: page.w * 2, height: page.h, transformStyle: "preserve-3d", transform: `translate3d(${-page.w / 2}px, 10px, 0) rotateX(24deg)` }}>
@@ -315,7 +315,7 @@ export function StorybookIntro() {
       <button
         type="button"
         onClick={() => introClock.finish()}
-        className="absolute right-6 bottom-6 z-10 rounded-full border border-white/30 bg-[#2a1f2c]/40 px-4 py-2 text-[13.5px] font-medium text-white/90 backdrop-blur-md transition hover:bg-[#2a1f2c]/60 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#d9b66f]"
+        className="pointer-events-auto absolute right-6 bottom-6 z-10 rounded-full border border-white/30 bg-[#2a1f2c]/40 px-4 py-2 text-[13.5px] font-medium text-white/90 backdrop-blur-md transition hover:bg-[#2a1f2c]/60 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-[#d9b66f]"
       >
         Skip intro
       </button>
