@@ -6,33 +6,42 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useConvergenceActive } from "@/components/convergence/convergenceClock";
 import { CouncilMember } from "@/components/council/CouncilMember";
-import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
+import { COUNCIL_LABEL, COUNCIL_TINT, type CouncilClip, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilMemberState, reduceCouncil } from "@/lib/council/contracts";
 import type { RoomWorld } from "../IslandWorldProvider";
-import { paint } from "../painterly/materials";
 import { sparkleTexture } from "../painterly/textures";
 import { platformTop } from "../props/Stonework";
 import { GIFT_SPOT } from "../sceneConfig";
+import { ringBase } from "./stageLayout";
+import { useRings } from "./ringsStore";
 import s from "./gift-rings.module.css";
 
 /**
- * The AI council on the gift map: five small familiars forming a Council Ring
- * above the present, each resting on a little cloud. They only ever show what
- * the council really did. State comes from the stored task events (the same
- * ones the tower uses): a familiar wakes, glows in its role colour and says what
- * it is doing while its task runs, says what it found when the task completes,
- * and shows the error if it fails. Only one of them speaks at a time (the most
- * recent); the rest show a small status dot. An idle familiar just hovers.
- * Click one for its log. Display only; nothing here writes to the room.
+ * The AI council as a dock of five small companions down the left edge of the
+ * map. They are real 3D models, placed in front of the camera at a fixed spot
+ * on the screen, so orbiting and tilting the world never moves, rotates or
+ * hides them, and no second canvas is needed. They only ever show what the
+ * council really did: state comes from the stored task events (the same ones the
+ * tower uses). A companion wakes and glows in its role colour while its task
+ * runs; when something real happens it steps out a little and says it in one
+ * small bubble (only one speaks at a time), and, where the event clearly
+ * concerns something in the world, a thin trail of light points to it. Hover
+ * for a name and status; click for the event log. Display only.
  */
 
 const FAILED = "#d95b4a";
 /** A finished task's result stays up this long, then fades. */
 const RESULT_MS = 7000;
-const SCALE = 2.3;
-/** Height of the ring's centre above the platform, and its half-width. */
-const RING_HEIGHT = 9.8;
-const RING_RADIUS = 9.2;
+/** Distance in front of the camera, and how tall a companion is on screen (share of the viewport height). */
+const DEPTH = 10;
+const HEIGHT_SHARE = 0.085;
+/** Model height per unit of `scale` (measured). */
+const MODEL_UNITS = 1.63;
+/** Screen position of the dock in normalised device coordinates. */
+const DOCK_TOP = 0.46;
+const DOCK_STEP = 0.235;
+/** Below this width only the companion that is speaking is shown. */
+const NARROW = 760;
 
 interface Bubble {
   text: string;
@@ -41,7 +50,7 @@ interface Bubble {
   at: number;
 }
 
-/** What each familiar says right now, from its real state. Completed results are shown only when they arrive live, never replayed on a refresh. */
+/** What each companion says right now, from its real state. Completed results are shown only when they arrive live, never replayed on a refresh. */
 function useCouncilBubbles(members: Record<CouncilActor, CouncilMemberState>): Record<CouncilActor, Bubble | null> {
   const seen = useRef<Record<string, number>>({});
   const first = useRef(true);
@@ -85,71 +94,141 @@ function useCouncilBubbles(members: Record<CouncilActor, CouncilMemberState>): R
   return out;
 }
 
-const _right = new THREE.Vector3();
-const _away = new THREE.Vector3();
+/** Each companion's own small, restrained idle gesture. Desynchronised by phase. */
+const IDLE_ACTION: Record<CouncilActor, CouncilClip> = { archivist: "read_scroll", muse: "wave", scout: "search", keeper: "approve", courier: "excited_hop" };
 
-/** A small painted cloud for a familiar to rest on. */
-function CloudSeat() {
-  const mat = useMemo(() => paint("council-cloud", { color: "#fffaf0", emissive: "#f3ecff", emissiveIntensity: 0.35 }), []);
-  const puffs: [number, number, number, number][] = [[0, 0, 0, 1.1], [0.85, -0.08, 0.1, 0.75], [-0.85, -0.05, -0.05, 0.8], [0.3, -0.05, 0.55, 0.7], [-0.35, -0.02, 0.5, 0.65]];
+/** What in the world an actor's real event concerns, where that is unambiguous. Archivist has no single object, so it gets no trail. */
+function trailTarget(actor: CouncilActor, rings: ReturnType<typeof useRings>): THREE.Vector3 | null {
+  const centre = new THREE.Vector3(GIFT_SPOT.x, platformTop() + 1.6, GIFT_SPOT.z);
+  if (actor === "muse" || actor === "keeper" || actor === "courier") return centre;
+  if (actor === "scout") {
+    const top = rings?.gifts[0];
+    return top ? new THREE.Vector3(GIFT_SPOT.x + top.x, ringBase() + 1.2, GIFT_SPOT.z + top.z) : null;
+  }
+  return null;
+}
+
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _p0 = new THREE.Vector3();
+const _p1 = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+
+/** A thin curve of drifting light from a companion to what its news is about. Grows, shimmers, fades. */
+function Trail({ from, to, tint, startedAt }: { from: THREE.Object3D; to: THREE.Vector3; tint: string; startedAt: number }) {
+  const N = 26;
+  const refs = useRef<(THREE.Sprite | null)[]>([]);
+  const mat = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: tint, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), [tint]);
+  useEffect(() => () => mat.dispose(), [mat]);
+  useFrame(({ clock }) => {
+    const age = (Date.now() - startedAt) / 1000;
+    const grow = THREE.MathUtils.smoothstep(age, 0, 1.3);
+    const fade = 1 - THREE.MathUtils.smoothstep(age, 2.3, 3.4);
+    from.getWorldPosition(_p0);
+    _p1.copy(_p0).lerp(to, 0.5).y += 2.6 + _p0.distanceTo(to) * 0.12;
+    for (let i = 0; i < N; i++) {
+      const sp = refs.current[i];
+      if (!sp) continue;
+      const u = (i / (N - 1)) * grow;
+      const a = 1 - u;
+      // Quadratic curve.
+      _pt.set(a * a * _p0.x + 2 * a * u * _p1.x + u * u * to.x, a * a * _p0.y + 2 * a * u * _p1.y + u * u * to.y, a * a * _p0.z + 2 * a * u * _p1.z + u * u * to.z);
+      sp.position.copy(_pt);
+      sp.visible = u > 0 && fade > 0.01 && i / (N - 1) <= grow + 0.001;
+      const tw = 0.65 + 0.35 * Math.sin(clock.elapsedTime * 7 + i * 1.7);
+      sp.scale.setScalar((0.16 + 0.1 * tw) * (0.7 + 0.3 * (1 - i / N)) * 2);
+      (sp.material as THREE.SpriteMaterial).opacity = fade * (0.35 + 0.6 * tw);
+    }
+  });
   return (
     <group>
-      {puffs.map(([x, y, z, r], i) => (
-        <mesh key={i} position={[x, y, z]} scale={[r, r * 0.55, r]} material={mat}>
-          <sphereGeometry args={[1, 12, 8]} />
-        </mesh>
+      {Array.from({ length: N }, (_, i) => (
+        <sprite key={i} ref={(el) => void (refs.current[i] = el)} material={mat.clone()} visible={false} />
       ))}
     </group>
   );
 }
 
-function Familiar({ actor, member, index, bubble, speaking, animate, onPick }: { actor: CouncilActor; member: CouncilMemberState; index: number; bubble: Bubble | null; speaking: boolean; animate: boolean; onPick?: (actor: CouncilActor) => void }) {
-  const camera = useThree((st) => st.camera);
+function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
+  const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
+  const size = useThree((st) => st.size);
   const group = useRef<THREE.Group>(null);
   const glow = useRef<THREE.Sprite>(null);
   const [hover, setHover] = useState(false);
+  const [gesture, setGesture] = useState<CouncilClip | undefined>(undefined);
   const working = member.status === "started";
   const failed = member.status === "failed";
   const tint = failed ? FAILED : COUNCIL_TINT[actor];
   const glowMat = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: tint, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), [tint]);
   useEffect(() => () => glowMat.dispose(), [glowMat]);
-  const base = useMemo(() => new THREE.Vector3(GIFT_SPOT.x, platformTop() + RING_HEIGHT, GIFT_SPOT.z), []);
-  const state = useRef({ forward: 0, lift: 0, react: -10, lastAt: bubble?.at ?? 0 });
+  const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1 });
+  const narrow = size.width < NARROW;
+  const active = !!bubble;
+
+  // A small, occasional gesture of its own while nothing is happening; desynchronised across the five.
+  useEffect(() => {
+    if (!animate || member.status !== "idle") return;
+    let timer = 0;
+    const loop = (delay: number) => {
+      timer = window.setTimeout(() => {
+        setGesture(IDLE_ACTION[actor]);
+        timer = window.setTimeout(() => {
+          setGesture(undefined);
+          loop(9000 + Math.random() * 9000);
+        }, 2200);
+      }, delay);
+    };
+    loop(2500 + COUNCIL_ACTORS.indexOf(actor) * 2300 + Math.random() * 3000);
+    return () => window.clearTimeout(timer);
+  }, [animate, actor, member.status]);
+
+  useEffect(() => {
+    if (group.current) onTrail(actor, group.current);
+  }, [actor, onTrail]);
+
+  // On narrow screens only the one that is speaking is shown, lower down.
+  const shown = !narrow || speaking;
+  const place = narrow ? 0.05 : DOCK_TOP - slot * DOCK_STEP;
 
   useFrame(({ clock }, dt) => {
     const g = group.current;
     if (!g) return;
     const st = state.current;
     const t = clock.elapsedTime;
-    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 4);
-    // The ring is camera-relative: a gentle arch across the screen, above the present, so it reads from every angle and never reaches the islands below.
-    _right.setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
-    _away.setFromMatrixColumn(camera.matrixWorld, 2).setY(0).normalize().negate(); // horizontal, from the camera into the scene
-    const u = (index - 2) / 2;
-    // From a low angle the ring sits closer to the present, so the familiars stay in frame; from above it rises clear of the island.
-    const groundY = base.y - RING_HEIGHT;
-    const camEl = Math.asin(THREE.MathUtils.clamp((camera.position.y - groundY) / Math.max(1, camera.position.distanceTo(base)), 0, 1));
-    const height = 5.2 + (RING_HEIGHT - 5.2) * THREE.MathUtils.smoothstep(camEl, 0.15, 0.9);
-    const forwardTarget = speaking ? 1.6 : 0;
-    st.forward += (forwardTarget - st.forward) * k;
-    st.lift += ((working ? 0.5 : failed ? -0.15 : 0) - st.lift) * k;
-    // A live result makes its familiar hop once.
+    const k = 1 - Math.exp(-Math.min(dt, 0.1) * 5);
+    g.visible = shown;
+    // Fixed on the screen: in front of the camera, aligned to it, so the world turning behind never turns them.
+    camera.getWorldDirection(_fwd);
+    _right.setFromMatrixColumn(camera.matrixWorld, 0);
+    _up.setFromMatrixColumn(camera.matrixWorld, 1);
+    const halfH = DEPTH * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    const halfW = halfH * camera.aspect;
+    // Steps out toward the world a little for news, or while hovered or working.
+    st.out += (((speaking ? 1 : 0) + (hover ? 0.8 : 0) + (working ? 0.4 : 0)) - st.out) * k;
     if (bubble && bubble.at > st.lastAt) {
       st.lastAt = bubble.at;
       st.react = t;
     }
     const hop = Math.max(0, Math.sin((t - st.react) * 7)) * Math.exp(-(t - st.react) * 2.2) * (t - st.react < 1.4 ? 1 : 0);
-    g.position.copy(base)
-      .addScaledVector(_right, u * RING_RADIUS)
-      .addScaledVector(_away, -u * u * 2.6 - st.forward)
-      .setY(groundY + height + (1 - u * u) * 2.2 + st.lift + hop * 0.7 + (animate ? Math.sin(t * 1.1 + index * 1.7) * 0.12 : 0));
-    g.rotation.y = Math.atan2(camera.position.x - g.position.x, camera.position.z - g.position.z);
+    // Hugs the left edge of the window: a few pixels of margin plus half a companion, whatever the window size, and corrected for the
+    // sideways shift the map's framing applies to the view.
+    const viewShift = camera.view?.enabled ? -camera.view.offsetX / size.width : 0;
+    const edgePx = 12 + HEIGHT_SHARE * size.height * 0.42;
+    const nx = -1 + (2 * (edgePx + st.out * 26)) / size.width - 2 * viewShift;
+    const ny = place + (animate ? Math.sin(t * 1.1 + slot * 1.9) * 0.012 : 0) + hop * 0.035;
+    g.position.copy(camera.position).addScaledVector(_fwd, DEPTH).addScaledVector(_right, nx * halfW).addScaledVector(_up, ny * halfH);
+    g.quaternion.copy(camera.quaternion);
+    g.rotateY(0.4 + (hover ? 0.2 : 0));
+    // Keeps its on-screen size whatever the field of view or window height.
+    st.scale = (HEIGHT_SHARE * 2 * halfH) / MODEL_UNITS * (narrow ? 1.15 : 1) * (1 + st.out * 0.12);
+    g.scale.setScalar(st.scale / 2.3);
     const sc = glow.current;
     if (sc) {
       sc.visible = working || failed || hover || hop > 0.02;
-      const pulse = working ? 1 + 0.18 * Math.sin(t * 5 + index) : 1;
-      sc.scale.setScalar((working ? 3.6 : 2.6) * pulse);
-      glowMat.opacity = working ? 0.75 : failed ? 0.6 : hover ? 0.35 : 0.5;
+      const pulse = working ? 1 + 0.15 * Math.sin(t * 5 + slot) : 1;
+      sc.scale.setScalar((working ? 3.4 : 2.5) * pulse);
+      glowMat.opacity = working ? 0.7 : failed ? 0.55 : hover ? 0.4 : 0.45;
     }
   });
 
@@ -163,53 +242,57 @@ function Familiar({ actor, member, index, bubble, speaking, animate, onPick }: {
     document.body.style.cursor = "";
   };
   useEffect(() => () => void (document.body.style.cursor = ""), []);
-  const dot = bubble && !speaking;
 
   return (
     <group ref={group}>
       <sprite ref={glow} material={glowMat} position={[0, 1.6, -0.6]} visible={false} />
-      <group position={[0, -0.55, 0]}><CloudSeat /></group>
       <Suspense fallback={null}>
-        <CouncilMember state={member} position={[0, 0, 0]} scale={SCALE} animate={animate} />
+        <CouncilMember state={member} position={[0, 0, 0]} scale={2.3} animate={animate} clipOverride={hover && member.status === "idle" ? "wave" : member.status === "idle" ? gesture : undefined} />
       </Suspense>
-      {/* A generous invisible target: clicking a familiar opens its log without disturbing the map under it. */}
+      {/* A generous invisible target: hover for the name, click for the log, without disturbing the map under it. */}
       <mesh position={[0, 1.8, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPick?.(actor); }}>
         <sphereGeometry args={[2.0, 12, 10]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
-      <Html position={[0, 4.3, 0]} center zIndexRange={[38, 30]} style={{ pointerEvents: "none" }}>
-        <div data-map-token className={s.familiar}>
+      {/* Beside the companion, toward the world: its one bubble, or its name and status on hover. */}
+      <Html position={[2.2, 2.2, 0]} zIndexRange={[38, 30]} style={{ pointerEvents: "none", transform: "translateY(-50%)" }}>
+        <div data-map-token className={s.dock}>
           {((speaking && bubble) || hover) && (
-            <p role="status" className={`${s.councilBubble} ${speaking && bubble ? s[bubble.tone] : ""}`} style={{ ["--tint" as string]: tint }}>
+            <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${speaking && bubble ? s[bubble.tone] : ""}`} style={{ ["--tint" as string]: tint }}>
+              {hover && <b className={s.dockName}>{COUNCIL_LABEL[actor]}</b>}
               {speaking && bubble ? bubble.text : poseFor(member).caption}
             </p>
           )}
         </div>
       </Html>
-      <Html position={[0, -1.15, 0]} center zIndexRange={[36, 30]} style={{ pointerEvents: "none" }}>
-        <div data-map-token className={s.familiar}>
-          <span className={s.familiarName} style={{ ["--tint" as string]: tint }}>
-            {dot && <i className={s.statusDot} style={{ background: tint }} aria-hidden />}
-            {COUNCIL_LABEL[actor]}
-          </span>
-        </div>
-      </Html>
+      {active && !speaking && !hover && (
+        <Html position={[1.6, 3.4, 0]} style={{ pointerEvents: "none" }}>
+          <i data-map-token className={s.statusDot} style={{ background: tint }} aria-hidden />
+        </Html>
+      )}
     </group>
   );
 }
 
 export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate: boolean }) {
   const revealing = useConvergenceActive();
+  const rings = useRings();
   const members = useMemo(() => reduceCouncil(world.events), [world.events]);
   const bubbles = useCouncilBubbles(members);
+  const groups = useRef<Partial<Record<CouncilActor, THREE.Group>>>({});
+  const registered = useMemo(() => (actor: CouncilActor, group: THREE.Group) => void (groups.current[actor] = group), []);
   // One prominent voice at a time: whoever's task changed most recently.
   const speaker = COUNCIL_ACTORS.filter((a) => bubbles[a]).sort((a, b) => bubbles[b]!.at - bubbles[a]!.at || (members[b].sequence - members[a].sequence))[0] ?? null;
+  // A trail only follows a live event whose object is clear, and only for the one that is speaking.
+  const trail = speaker && bubbles[speaker]!.at > 0 && bubbles[speaker]!.tone !== "failed" ? { actor: speaker, at: bubbles[speaker]!.at } : null;
+  const target = trail ? trailTarget(trail.actor, rings) : null;
   if (revealing) return null;
   return (
     <group>
       {COUNCIL_ACTORS.map((actor, i) => (
-        <Familiar key={actor} actor={actor} member={members[actor]} index={i} bubble={bubbles[actor]} speaking={speaker === actor} animate={animate} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
+        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={speaker === actor} animate={animate} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
       ))}
+      {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={COUNCIL_TINT[trail.actor]} startedAt={trail.at} />}
     </group>
   );
 }

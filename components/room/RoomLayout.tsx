@@ -7,6 +7,8 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
+import { book, useBookOpen } from "@/components/book/bookStore";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
@@ -73,6 +75,9 @@ function CompassIcon() {
 }
 function MoreIcon() {
   return <svg {...ICON}><circle cx="5.5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="18.5" cy="12" r="1.2" /></svg>;
+}
+function BookIcon() {
+  return <svg {...ICON}><path d="M4 5.5C4 5 4.5 4.5 5 4.5H11V19.5H5C4.5 19.5 4 19 4 18.5z" /><path d="M20 5.5C20 5 19.5 4.5 19 4.5H13V19.5H19C19.5 19.5 20 19 20 18.5z" /><path d="M7 8.5h2.5M7 11.5h2.5M14.5 8.5H17M14.5 11.5H17" /></svg>;
 }
 function EnvelopeIcon() {
   return <svg {...ICON}><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="M4 7l8 6 8-6" /></svg>;
@@ -171,6 +176,39 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       delete document.documentElement.dataset.convergence;
     };
   }, [engaged]);
+
+  // --- The Book of Possibilities: choosing a gift there uses the existing authorized action, then the reveal takes over once the book is shut.
+  const bookOpen = useBookOpen();
+  const pendingReveal = useRef<string | null>(null);
+  const chooseFromBook = useCallback(
+    async (listingId: string): Promise<{ ok: true } | { ok: false; message: string }> => {
+      if (!actions) return { ok: false, message: "Choosing needs a live room." };
+      try {
+        const res = await actions.selectGift(listingId);
+        if (!res.ok) return { ok: false, message: res.error.message };
+        pendingReveal.current = listingId;
+        return { ok: true };
+      } catch {
+        return { ok: false, message: "That didn’t go through. Check the connection and try again." };
+      }
+    },
+    [actions],
+  );
+  useEffect(() => {
+    if (bookOpen || !pendingReveal.current || !selection || selection.listingId !== pendingReveal.current) return;
+    pendingReveal.current = null;
+    const t = setTimeout(() => startReveal(false), 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookOpen, selection?.id, selection?.listingId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if ((e.key === "b" || e.key === "B") && !e.metaKey && !e.ctrlKey && !e.altKey && stage === "map" && !(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))) book.show();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stage]);
 
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
@@ -276,10 +314,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       </motion.div>
 
       {/* Invite + small toggles */}
-      <div className={`absolute top-5 right-5 flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      <div className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
           <button className={iconChip} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
           <button className={iconChip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")} aria-label={time === "day" ? "Switch to night" : "Switch to day"} title={time === "day" ? "Day" : "Night"}><DayIcon day={time === "day"} /></button>
+          {stage === "map" && !preview && <button className={iconChip} onClick={() => book.show()} aria-label="Open the Book of Possibilities" title="Book of Possibilities (B)"><BookIcon /></button>}
           {stage === "map" && (
             <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, + / - zoom, 0 returns.">
               <CompassIcon />
@@ -325,6 +364,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className={`${iconChip} !h-11 !w-11`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" title="More" onClick={() => setMenuOpen((o) => !o)}><MoreIcon /></button>
             {menuOpen && (
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
+                {stage === "map" && !preview && <button role="menuitem" className={menuItem} onClick={() => book.show()}>Book of Possibilities</button>}
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
@@ -335,6 +375,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
       </div>
       {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
+
+      {stage === "map" && !preview && !engaged && <BookOfPossibilities data={data} actions={actions} isOrganizer={isOrganizer} onChoose={chooseFromBook} />}
 
       {selection && (
         <ConvergenceOverlay

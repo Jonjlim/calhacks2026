@@ -12,6 +12,7 @@ import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RIN
 import { isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
+import { book } from "@/components/book/bookStore";
 import { mapView } from "@/components/world/room/mapView";
 import { BoxPanel } from "./BoxPanel";
 import type { RoomActions, RoomData } from "./types";
@@ -161,7 +162,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const allClueIds = allClues.map((c) => c.id);
   const findGifts: RingAction | null = isOrganizer && actions
-    ? { icon: "🌱", label: recs.length ? "Find more gifts" : "Find gifts", tone: "gold", disabled: !!pending || !allClueIds.length, run: () => void run(() => actions.startResearch(allClueIds), "The council is looking for real gifts from these memories.") }
+    ? { icon: "+", label: recs.length ? "Find more gifts" : "Find gifts", tone: "gold", disabled: !!pending || !allClueIds.length, run: () => void run(() => actions.startResearch(allClueIds), "The council is looking for real gifts from these memories.") }
     : null;
 
   // Theme colours and jars: the three clue groups keep their jar colours; council themes get their own.
@@ -259,11 +260,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         actions: actions ? [
           { icon: "♥", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
           { icon: "✕", label: "Pass for now", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
-          { icon: "🎁", label: isOrganizer ? (selection?.listingId === listingId ? "In the box" : "Put in the box") : "Vote for the box", tone: "gold", on: selection?.listingId === listingId, disabled: !!pending, run: () => choose(listingId) },
-          { icon: "🏠", label: "She has it", disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
-          { icon: "💸", label: "Too pricey for me", disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
+          { icon: "★", label: isOrganizer ? (selection?.listingId === listingId ? "In the box" : "Put in the box") : "Vote for the box", tone: "gold", on: selection?.listingId === listingId, disabled: !!pending, run: () => choose(listingId) },
+          { icon: "✓", label: "She has it", disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
+          { icon: "$", label: "Too pricey for me", disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
           { icon: "↗", label: "Open the listing", run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
-          ...(trendByListing.has(listingId) ? [{ icon: "📈", label: "See the trend", run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
+          ...(trendByListing.has(listingId) ? [{ icon: "↗", label: "See the trend", run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
       };
     }
@@ -275,7 +276,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       return {
         caption: <><b>{node.query}</b> · {node.signal}<br />A Google Trends search related to “{node.source.text}”. An idea to explore, not a fact about her.{pass && pass.count > 0 && <><br />✕ {pass.passerNames.join(", ") || `${pass.count} people`} passed on it.</>}</>,
         actions: [
-          ...(actions?.researchTrend ? [{ icon: "🌱", label: "Research this direction", tone: "gold" as const, disabled: !!pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
+          ...(actions?.researchTrend ? [{ icon: "+", label: "Research this direction", tone: "gold" as const, disabled: !!pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
           { icon: "↗", label: "See the source", run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
           ...(actions?.passTrend ? [{ icon: "✕", label: pass?.mine ? "Take back my pass" : "Doesn’t fit", tone: "pass" as const, on: !!pass?.mine, disabled: !!pending,
             run: () => void run(() => actions.passTrend!(jobId, node.query, !pass?.mine), pass?.mine ? "Pass taken back." : "Passed for the room. It stays faded on the map; her memories didn’t change.") }] : []),
@@ -306,7 +307,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
           </span>
         ) : <><b>{name(group.uploaderId)}’s photo{group.urls.length > 1 ? "s" : ""}</b>{group.clueIds.length ? ` · ${group.clueIds.length} ${group.clueIds.length === 1 ? "memory" : "memories"} from it` : ""}</>,
         actions: actions && mine ? [{
-          icon: "🗑", label: "Delete for everyone", disabled: !!pending,
+          icon: "✕", label: "Delete for everyone", disabled: !!pending,
           run: () => void run(async () => {
             for (const id of group.photoIds) {
               const gone = await actions.deletePhoto(id);
@@ -334,7 +335,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       actions: [
         ...voteActs("clue", clue.id),
         ...(findGifts ? [findGifts] : []),
-        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "📈", label: "Look for trends", disabled: !!pending, run: () => void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here.") }] : []),
+        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "↗", label: "Look for trends", disabled: !!pending, run: () => void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here.") }] : []),
         ...(actions && clue.publisherId === me.id ? [{ icon: "↩", label: "Take it back", disabled: !!pending, run: () => void run(() => actions.withdrawClue(clue.id), "Your memory was withdrawn from the room.").then((ok) => ok && setSelectedKey(null)) }] : []),
       ],
     };
@@ -365,10 +366,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     <div className={s.write} data-map-token>
       {composer.zone === "memory" && (
         <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-          {([["interest", "💭 Memory"], ["explicit_wish", "🎁 Wish"]] as const).map(([kind, label]) => (
+          {([["interest", "Memory"], ["explicit_wish", "Wish"]] as const).map(([kind, label]) => (
             <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} onClick={() => setComposer({ ...composer, kind })}>{label}</button>
           ))}
-          <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos privately">📷 Photo</button>
+          <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos privately">Photo</button>
         </div>
       )}
       <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
@@ -446,14 +447,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
       <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-        {([["interest", "💭 Memory"], ["explicit_wish", "🎁 Wish"]] as const).map(([kind, label]) => (
+        {([["interest", "Memory"], ["explicit_wish", "Wish"]] as const).map(([kind, label]) => (
           <button key={kind} type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, kind, photo: false })}>{label}</button>
         ))}
-        <button type="button" role="radio" aria-checked>📷 Photo</button>
+        <button type="button" role="radio" aria-checked>Photo</button>
       </div>
       {photoPick.length === 0 ? (
         <label className={s.photoPick}>
-          <span aria-hidden>📷</span>Choose up to 3 photos
+          Choose up to 3 photos
           <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(e) => { void pickPhotos(e.target.files); e.target.value = ""; }} />
         </label>
       ) : (
@@ -598,6 +599,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     selectedListingId: selection?.listingId,
     pledge,
     boxPanel,
+    onOpenBook: (listingId) => book.show({ listingId: listingId ?? null }),
     boxLabel: selection ? `${priceOf(selection.listingId)} · ${approved}/${participants.length} yes` : "Our gift box",
     selectedKey,
     highlight,

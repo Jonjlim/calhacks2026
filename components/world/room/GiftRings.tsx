@@ -5,7 +5,7 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { AVATAR_WORLD_SCALE, type AvatarId, StorybookAvatar } from "@/components/characters/StorybookAvatar";
-import { BOX_DROP_RADIUS, dragResult, RING_RADII, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
+import { BOX_DROP_RADIUS, dragResult, RING_RADII, ringPoint, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
 import { portraitUrl } from "@/lib/room/avatars";
 import { IslandMesh } from "../FloatingIsland";
 import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
@@ -20,6 +20,7 @@ import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
 import { PledgeRing, type PledgeWorld } from "./PledgeRing";
 import { platformTop } from "../props/Stonework";
+import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import s from "./gift-rings.module.css";
 
 /**
@@ -63,6 +64,8 @@ export interface RingsWorld {
   pledge?: PledgeWorld | null;
   /** Shares, limits and approvals, opened beside the present when the box is selected. */
   boxPanel?: ReactNode | null;
+  /** Opens the Book of Possibilities (every researched gift), optionally at one gift. */
+  onOpenBook?(listingId?: string): void;
   selectedKey: string | null;
   /** “Why this?”: keys on the path to the chosen gift. Everything else dims. */
   highlight?: ReadonlySet<string> | null;
@@ -440,6 +443,14 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const result = drag.preview?.result;
   const themeAt = new Map(rings.themes.map((t) => [t.theme, place(t.key, t.x, t.z)]));
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
+  // Never more than three gift candidates are prominent at once: the top ranked overall, or the best of the focused branch, plus the chosen one.
+  // The rest stay in the room's data and in the Book of Possibilities; here they are summed up in one marker.
+  const rankedGifts = [...rings.gifts].sort((a, b) => a.rank - b.rank);
+  const pool = rings.highlight ? rankedGifts.filter((g) => rings.highlight!.has(g.key)) : rankedGifts;
+  const shownGifts = pool.slice(0, 3);
+  const chosen = rankedGifts.find((g) => g.listingId === rings.selectedListingId);
+  if (chosen && !shownGifts.includes(chosen)) shownGifts.push(chosen);
+  const hiddenGifts = rings.gifts.length - shownGifts.length;
 
   // A theme island empties once every memory in it has flown into the box.
   const themeGone = (theme: string) => {
@@ -481,7 +492,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
               </Suspense>
               <Token k={c.key} rings={rings} from={[c.x, c.z]} drag={drag} dim={dim(c.key)} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory`}
-                face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q>{c.fromPhoto && <i className={s.photoBadge} title="From a photo, read privately">📷</i>}</span>} />
+                face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q>{c.fromPhoto && <i className={s.photoBadge} title="From a photo, read privately"><CameraIcon size={11} /></i>}</span>} />
             </RingIsland>
           </group>
         );
@@ -498,7 +509,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         );
       })}
 
-      {rings.gifts.map((g, i) => {
+      {shownGifts.map((g, i) => {
         const [x, z] = place(g.key, g.x, g.z);
         return (
           <group key={g.key}>
@@ -509,16 +520,24 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
-                face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
+                face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={26} /></i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
             </RingIsland>
           </group>
         );
       })}
 
+      {hiddenGifts > 0 && rings.onOpenBook && (
+        <Html position={world(6.2, 9.4, 0.4)} center zIndexRange={[24, 10]}>
+          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label={`${hiddenGifts} more researched gifts in the Book of Possibilities`}>
+            <b>+{hiddenGifts}</b> more in the book
+          </button>
+        </Html>
+      )}
+
       {(rings.photos ?? []).map((ph, i) => (
         <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate}>
           <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label={`${ph.author}'s photo`}
-            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden>📷</i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
+            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden><CameraIcon size={22} /></i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
         </RingIsland>
       ))}
 
@@ -531,7 +550,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
 
       <group position={[center.x, center.y, center.z]}>
         <Token k="box" rings={rings} from={[0, 0]} drag={{ ...drag, begin: () => undefined }} dim={dim("box")} offset={[0, 1.2, 9]} label="Our gift box"
-          face={<span className={s.box}>🎁 <b>{rings.boxLabel}</b></span>} />
+          face={<span className={s.box}><GiftIcon size={16} /> <b>{rings.boxLabel}</b></span>} />
       </group>
 
       {rings.pledge && !revealing && <PledgeRing pledge={rings.pledge} animate={animate} />}

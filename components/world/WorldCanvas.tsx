@@ -6,6 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRoomStage } from "@/components/room/roomStage";
 import type { RoomWorld } from "./IslandWorldProvider";
 import { GardenDecorating } from "./room/GardenDecorating";
+import { EnchantedBook } from "./book/EnchantedBook";
 import { CouncilFamiliars } from "./room/CouncilFamiliars";
 import { GiftRings } from "./room/GiftRings";
 import { TowerInterior } from "./room/TowerInterior";
@@ -107,6 +108,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
       {council && stage.shown === "map" && <MapSurround animate={animate} />}
       {council && stage.shown === "map" && <SurroundClouds animate={animate} />}
+      {council && stage.shown === "map" && <EnchantedBook animate={animate} />}
       {council && stage.shown === "map" && <GiftRings animate={animate} />}
       {council && stage.shown === "map" && <CouncilFamiliars world={council} animate={animate} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />

@@ -146,7 +146,8 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         const el = THREE.MathUtils.clamp(Math.asin(dy / Math.hypot(dx, dy, dz)) + view.pitch, 0.2, 1.42);
         const fx = tx + view.x;
         const fz = tz + view.z;
-        return { ...base, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
+        // On wide screens the world sits a little right of centre, leaving a clear gutter on the left for the council dock.
+        return { ...base, shiftX: w > 900 ? 0.055 : 0, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
       };
       const scenePose = poseOf(shown);
       if (convergence.active) {

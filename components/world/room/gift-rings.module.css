@@ -289,3 +289,21 @@
 .compact:hover .idea small { display: block; }
 .compact:hover { z-index: 5; }
 .statusDot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; animation: councilPulse 1s ease-in-out infinite; }
+
+/* The council dock: bubbles sit beside the companion, pointing back at it. */
+.dock { display: flex; align-items: center; pointer-events: none; }
+.dockBubble { margin-left: 4px; text-align: left; }
+.dockBubble::after { left: -6px; bottom: 50%; transform: translateY(50%) rotate(135deg); }
+.dockName { display: block; margin-bottom: 2px; font: 700 10.5px/1 var(--font-figtree, system-ui); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tint); }
+
+/* One calm marker stands in for the researched gifts that are not on show; the book holds them all. */
+.moreGifts { white-space: nowrap; font: 600 12.5px/1 var(--font-figtree, system-ui); color: var(--color-plum, #4e2f42); background: #fff8e3; border: 2px dashed var(--color-gold, #e2bd6b); border-radius: 999px; padding: 7px 14px; cursor: pointer; box-shadow: 0 10px 22px -10px rgb(40 24 44 / .55); }
+.moreGifts b { margin-right: 4px; }
+.moreGifts:hover { background: #fff2cc; }
+
+/* Small windows: the overview keeps only faces and prices; words wait for a tap. */
+@media (max-width: 700px) {
+  .compact .bubble q, .compact .idea b, .compact .idea small { display: none; }
+  .compact .bubble, .compact .idea { padding: 4px; max-width: none; }
+  .compact:hover .bubble q, .compact:hover .idea b { display: inline; }
+}

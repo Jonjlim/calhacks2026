@@ -7,6 +7,7 @@ import type { AppError, GiftSelection, Participant, ProductListing, ProposalView
 import { formatMinor, parseMajorToMinor } from "@/lib/money";
 import { portraitUrl } from "@/lib/room/avatars";
 import { useResultAction } from "@/lib/useResultAction";
+import { GiftIcon } from "@/components/ui/Icons";
 import type { RoomActions } from "./types";
 
 /**
@@ -83,7 +84,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
 
       {selection ? (
         <div className={s.boxGift}>
-          {listing?.imageUrl ? <img src={listing.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}
+          {listing?.imageUrl ? <img src={listing.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={30} /></i>}
           <div>
             <b>{selection.listingSnapshot.title}</b>
             <a href={selection.listingSnapshot.sourceUrl} target="_blank" rel="noreferrer">{revision ? formatMinor(revision.payableTotalMinor, revision.currency) : selection.listingSnapshot.priceMinor !== undefined ? formatMinor(selection.listingSnapshot.priceMinor) : "Price unknown"} · see listing ↗</a>
@@ -149,7 +150,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
       {selection && onReveal && <button type="button" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
 
       <footer>
-        {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "✨ Why this gift?"}</button>}
+        {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "Why this gift?"}</button>}
         {actions && isOrganizer && selection && <button type="button" className={s.boxGhost} disabled={clear.pending} onClick={() => clear.run()}>Change gift</button>}
       </footer>
       <small className={s.boxFine}>Approving is a pledge. No card is charged and no order is placed.</small>
