@@ -15,6 +15,7 @@ import { RoomCouncilPanel } from "@/components/council/RoomCouncilPanel";
 import { ProductCard } from "@/components/products/ProductCard";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
 import { RoomAgentTools } from "@/components/room/RoomAgentTools";
+import { BudgetTab, OPEN_BUDGET_EVENT } from "@/components/room/BudgetTab";
 import { MemoryQuest } from "@/components/room/MemoryQuest";
 import type { RoomActions, RoomData } from "@/components/room/types";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -98,8 +99,9 @@ function MobileParticipantScreens({ data, actions }: { data: RoomData; actions: 
 
         <nav aria-label="Room sections" className="my-4 flex flex-wrap gap-2">
           {([['memories', 'Memories'], ['review', 'Gifts'], ['approve', 'Gift box']] as const).map(([target, label]) => (
-            <button key={target} type="button" className="btn-secondary" aria-pressed={screen === target || (target === 'memories' && screen === 'collect') || (target === 'approve' && screen === 'done')} onClick={() => setScreen(target)}>{label}</button>
+            <button key={target} type="button" className="btn-secondary h-10 px-4 text-[14px]" aria-pressed={screen === target || (target === 'memories' && screen === 'collect') || (target === 'approve' && screen === 'done')} onClick={() => setScreen(target)}>{label}</button>
           ))}
+          {actions && /^[a-z0-9]{20,40}$/.test(room.id) && <button type="button" className="btn-secondary h-10 px-4 text-[14px]" onClick={() => window.dispatchEvent(new Event(OPEN_BUDGET_EVENT))}>Budget</button>}
           <a className="self-center px-2 text-sm underline" href={`/room/${room.id}?surface=stage`}>Map view</a>
           {data.invitePath && <a className="self-center px-2 text-sm underline" href={data.invitePath}>Invite a friend</a>}
         </nav>
@@ -127,7 +129,8 @@ function MobileParticipantScreens({ data, actions }: { data: RoomData; actions: 
 
         {actions && <div className="mt-5 flex justify-end"><GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
           twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
-          className="btn-secondary" /></div>}
+          className="btn-secondary h-10 px-4 text-[14px]" /></div>}
+        {actions && /^[a-z0-9]{20,40}$/.test(room.id) && <BudgetTab roomId={room.id} />}
         {!!data.agentCollaborators?.posts.length && <section className="mt-5 space-y-3" aria-label="AI collaborator insights and evaluations">
           <h2 className="font-display text-xl">Your Gift Twin collaborator</h2>
           <AgentCollaboratorFeed feed={data.agentCollaborators} />

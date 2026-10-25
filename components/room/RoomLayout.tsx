@@ -427,13 +427,16 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           <div className="relative">
             <button className={`${iconChip} !h-11 !w-11`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" title="More" onClick={() => setMenuOpen((o) => !o)}><MoreIcon /></button>
             {menuOpen && (
+              <>
+              <div aria-hidden className="fixed inset-0" onClick={() => setMenuOpen(false)} />
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} data-sfx="reveal" onClick={() => startReveal(false)}>Replay reveal</button>}
-                {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
+                {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!flex [&>button]:!w-full [&>button]:items-center [&>button]:gap-2.5 [&>button]:!rounded-xl [&>button]:!bg-none [&>button]:!px-3 [&>button]:!py-2 [&>button]:!text-left [&>button]:!text-[14px] [&>button]:!font-normal [&>button]:!shadow-none [&>button:hover]:!bg-dusk/5 [&>button>svg]:shrink-0">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
                 {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => setFinaleOpen(true)}>Plan contributions</button>}
-                {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Backstage: notes, agents and sharing</button>}
+                {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Notes, agents and sharing</button>}
               </div>
+              </>
             )}
           </div>
         </div>
@@ -531,7 +534,7 @@ function InviteCard({ path }: { path: string }) {
   const code = path.split("/").pop() ?? "";
   if (!open) return <button className={`${chip} flex items-center gap-2`} onClick={() => setOpen(true)} aria-label="Invite friends: show the QR code"><EnvelopeIcon /><span>Invite</span></button>;
   return (
-    <div className="paper-card w-[220px] rounded-[20px] p-3.5 text-center" data-invite-url={url}>
+    <div className="paper-card mr-7 w-[220px] rounded-[20px] p-3.5 text-center" data-invite-url={url}>
       <div className="flex items-baseline justify-between">
         <p className="font-display text-[19px]">Join on your phone</p>
         <button className="text-[12px] text-dusk/55 hover:text-dusk" onClick={() => setOpen(false)} aria-label="Hide invite">Hide</button>

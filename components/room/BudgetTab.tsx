@@ -20,6 +20,9 @@ import s from "./budget-tab.module.css";
 const STEP = 500;
 const TOP = 50_000;
 
+/** Dispatched on `window` to open the budget page from anywhere in the room. */
+export const OPEN_BUDGET_EVENT = "unwrap:open-budget";
+
 export function BudgetTab({ roomId }: { roomId: string }) {
   const res = useQuery(api.budgets.state, { roomId: roomId as Id<"rooms"> });
   const save = useMutation(api.budgets.setRange);
@@ -39,12 +42,19 @@ export function BudgetTab({ roomId }: { roomId: string }) {
     else setOpen(true);
   }, [view]);
 
+  // Other surfaces (the phone list) open the page from their own button.
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener(OPEN_BUDGET_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_BUDGET_EVENT, onOpen);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && view?.range && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, view?.range]);
+  }, [open]);
 
   if (!view) return null;
   const [lo, hi] = range;
@@ -65,7 +75,7 @@ export function BudgetTab({ roomId }: { roomId: string }) {
   const soft = view.guidance;
   return (
     <>
-      {open && <div className={s.veil} onClick={() => view.range && setOpen(false)} aria-hidden />}
+      {open && <div className={s.veil} onClick={() => setOpen(false)} aria-hidden />}
       <aside className={`${s.panel} ${open ? s.open : s.shut} ${!open && peek ? s.peek : ""}`} aria-label="Gift budget" onPointerEnter={() => setPeek(true)} onPointerLeave={() => setPeek(false)}>
         <button type="button" className={s.tab} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Tuck the budget away" : "Open the gift budget"}>
           <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden><path d={open ? "M5 3l6 5-6 5" : "M11 3L5 8l6 5"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -107,6 +117,7 @@ export function BudgetTab({ roomId }: { roomId: string }) {
           </div>
           {error && <p role="alert" className={s.err}>{error}</p>}
           <button type="button" className={s.go} onClick={confirm} disabled={pending || hi < STEP}>{pending ? "Saving…" : view.range ? "Update my budget" : "Confirm my budget"}</button>
+          {!view.range && <button type="button" className={s.skip} onClick={() => setOpen(false)}>Not now</button>}
         </div>
       </aside>
     </>

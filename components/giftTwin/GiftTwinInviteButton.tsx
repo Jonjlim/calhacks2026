@@ -133,7 +133,7 @@ export function GiftTwinInviteButton({ roomId, recipientName, twin, className, p
             </section>
           </div>
         )}
-        {pairing.error && <div className="paper-card pointer-events-auto absolute top-20 left-1/2 z-30 -translate-x-1/2 rounded-xl p-3"><ErrorText error={pairing.error} /></div>}
+        {pairing.error && <div className="paper-card pointer-events-auto absolute top-20 left-1/2 z-30 -translate-x-1/2 rounded-xl p-3"><ErrorText error={pairing.error} onDismiss={pairing.clearError} /></div>}
       </>
     );
   }
@@ -154,7 +154,7 @@ export function GiftTwinInviteButton({ roomId, recipientName, twin, className, p
           <button type="button" className="mt-3 text-[12px] text-dusk/65 underline underline-offset-2" onClick={create} disabled={pairing.pending}>Create a new invitation</button>
         </section>
       )}
-      {pairing.error && <div className="paper-card mt-2 rounded-xl p-3"><ErrorText error={pairing.error} /></div>}
+      {pairing.error && <div className="paper-card mt-2 rounded-xl p-3"><ErrorText error={pairing.error} onDismiss={pairing.clearError} /></div>}
     </div>
   );
 }

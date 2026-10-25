@@ -230,6 +230,16 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     else if (mapView.target.giftFocus === 1) mapView.returnFromGift();
   }, [selectedKey, focusedGift?.x, focusedGift?.z]);
 
+  // The view glides to the write box; once it closes (shared or cancelled) the map settles back home.
+  const wasWriting = useRef(false);
+  useEffect(() => {
+    if (composer) wasWriting.current = true;
+    else if (wasWriting.current) {
+      wasWriting.current = false;
+      if (!selectedKey) mapView.reset();
+    }
+  }, [composer, selectedKey]);
+
   const openBox = () => setSelectedKey("box");
   // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
   const startAdd = (what: "memory" | "wish" | "idea") => {
@@ -629,7 +639,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         <input type="checkbox" checked={composer.kind === "explicit_wish"} onChange={(e) => setComposer({ ...composer, kind: e.currentTarget.checked ? "explicit_wish" : "interest" })} />
         They asked for this <span>Wish</span>
       </label>}
-      <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
+      <div className={s.writeActions}>
+        <button type="button" className={s.writeShare} onClick={() => { const box = document.querySelector<HTMLTextAreaElement>("[data-map-token] textarea"); if (box) add(box.value); }}>Share</button>
+        <button type="button" className={s.writeCancel} onClick={() => setComposer(null)}>Cancel</button>
+      </div>
+      <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first"}</p>
     </div>
   );
 
@@ -701,7 +715,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
-      <button type="button" className={s.backToWriting} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
+      <div className={s.writeActions}>
+        <button type="button" className={s.writeCancel} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
+        <button type="button" className={s.writeCancel} onClick={() => { setPhotoPick([]); setComposer(null); }}>Cancel</button>
+      </div>
       {photoPick.length === 0 ? (
         <label className={s.photoPick}>
           <MapIcon name="camera" size={22} />Choose up to 3 photos
