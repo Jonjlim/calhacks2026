@@ -48,6 +48,8 @@ import type * as messages from "../messages.js";
 import type * as payments_checkout from "../payments/checkout.js";
 import type * as payments_read from "../payments/read.js";
 import type * as payments_reconcile from "../payments/reconcile.js";
+import type * as payments_simulation from "../payments/simulation.js";
+import type * as payments_simulationSchema from "../payments/simulationSchema.js";
 import type * as payments_state from "../payments/state.js";
 import type * as payments_stateMachine from "../payments/stateMachine.js";
 import type * as payments_stripe from "../payments/stripe.js";
@@ -68,6 +70,7 @@ import type * as research_provider from "../research/provider.js";
 import type * as research_research from "../research/research.js";
 import type * as research_score from "../research/score.js";
 import type * as research_text from "../research/text.js";
+import type * as research_themeLinks from "../research/themeLinks.js";
 import type * as research_trendJobs from "../research/trendJobs.js";
 import type * as research_trendPolicy from "../research/trendPolicy.js";
 import type * as research_trendProvider from "../research/trendProvider.js";
@@ -83,14 +86,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 
-import type * as payments_simulation from "../payments/simulation.js";
-import type * as payments_simulationSchema from "../payments/simulationSchema.js";
-import type * as research_themeLinks from "../research/themeLinks.js";
-
 declare const fullApi: ApiFromModules<{
-  "payments/simulation": typeof payments_simulation;
-  "payments/simulationSchema": typeof payments_simulationSchema;
-  "research/themeLinks": typeof research_themeLinks;
   "agents/buyer": typeof agents_buyer;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;
@@ -131,6 +127,8 @@ declare const fullApi: ApiFromModules<{
   "payments/checkout": typeof payments_checkout;
   "payments/read": typeof payments_read;
   "payments/reconcile": typeof payments_reconcile;
+  "payments/simulation": typeof payments_simulation;
+  "payments/simulationSchema": typeof payments_simulationSchema;
   "payments/state": typeof payments_state;
   "payments/stateMachine": typeof payments_stateMachine;
   "payments/stripe": typeof payments_stripe;
@@ -151,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   "research/research": typeof research_research;
   "research/score": typeof research_score;
   "research/text": typeof research_text;
+  "research/themeLinks": typeof research_themeLinks;
   "research/trendJobs": typeof research_trendJobs;
   "research/trendPolicy": typeof research_trendPolicy;
   "research/trendProvider": typeof research_trendProvider;
