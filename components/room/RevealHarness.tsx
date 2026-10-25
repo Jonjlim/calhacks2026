@@ -26,6 +26,8 @@ export function RevealHarness() {
   const [ready, setReady] = useState(false);
   // Stand-ins for the room's voting and choosing, so the Book of Possibilities can be used without a backend.
   const [votes, setVotes] = useState<Record<string, VoteValue | undefined>>({});
+  // `?finale=plan|checkout|wrap|end` starts the simulated checkout at that step, so the last screens can be walked without a backend.
+  const [simDone, setSimDone] = useState<{ completed: number; wrapped: boolean; start: string }>(() => ({ completed: 0, wrapped: false, start: typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("finale") ?? "" }));
   const [chosenId, setChosenId] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     // `?sky=sunrise|sunset|bluehour|day|night` previews a sky; the default is the room's own (sunrise).
@@ -38,7 +40,7 @@ export function RevealHarness() {
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("council") !== "live") return;
     const t0 = Date.now();
-    const timers = SAMPLE_SESSION.map(({ at, event }) => setTimeout(() => setEvents((e) => [...e, event]), at + 3000));
+    const timers = SAMPLE_SESSION.map(({ at, event }) => setTimeout(() => setEvents((e) => [...e, { ...event, timestamp: Date.now() }]), at + 3000));
     void t0;
     return () => timers.forEach(clearTimeout);
   }, []);
@@ -94,8 +96,22 @@ export function RevealHarness() {
       selection,
       evidence: [],
       council: { run: null, events, decorations: [], excluded: [] } as unknown as RoomData["council"],
+      simulation: (() => {
+        const payers = mockRevision.shares.filter((x) => x.amountMinor > 0);
+        const start = simDone.start;
+        if (!start) return undefined;
+        const base = start === "end" || simDone.wrapped ? "wrapped" : start === "wrap" ? "complete" : start === "checkout" ? "ready" : "waiting_for_approvals";
+        const completedCount = base === "wrapped" || base === "complete" ? payers.length : Math.min(payers.length, simDone.completed);
+        const status = base === "wrapped" ? "wrapped" : base === "complete" || (base === "ready" && completedCount === payers.length) ? "complete" : base === "ready" && completedCount > 0 ? "collecting" : base;
+        const mine = payers.find((x) => x.participantId === mockParticipants[0]!.id)?.amountMinor ?? payers[0]?.amountMinor ?? 0;
+        return {
+          view: { mode: "simulation" as const, revisionId: mockRevision.id, status, payerCount: payers.length, completedCount, myShareMinor: mine, myCompleted: simDone.completed > 0 || base === "complete" || base === "wrapped", canSimulate: base === "ready" && simDone.completed === 0, canWrap: status === "complete" },
+          simulate: async () => { setSimDone((s) => ({ ...s, completed: payers.length })); return { ok: true as const, value: {} }; },
+          wrap: async () => { setSimDone((s) => ({ ...s, wrapped: true })); return { ok: true as const, value: {} }; },
+        };
+      })(),
     };
-  }, [ready, events, votes, chosenId]);
+  }, [ready, events, votes, chosenId, simDone]);
   const actions = useMemo(() => {
     const ok = async () => ({ ok: true as const, value: {} });
     const own = {

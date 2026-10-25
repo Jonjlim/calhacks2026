@@ -1,5 +1,7 @@
 "use client";
 
+import { giftIsInBox } from "@/lib/room/giftBox";
+
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomActions, RoomData } from "@/components/room/types";
 import { useRings } from "@/components/world/room/ringsStore";
@@ -69,7 +71,7 @@ function useItems(data: RoomData): Item[] {
         myVote: data.votes[listing.id]?.myVote === "up" ? "up" : data.votes[listing.id]?.myVote === "down" ? "down" : undefined,
         saved: data.votes[listing.id]?.tally.up ?? 0,
         themes: themesOf.get(listing.id) ?? [],
-        selected: data.selection?.status === "active" && data.selection.listingId === listing.id,
+        selected: giftIsInBox(data.selection, listing.id),
       }));
     return items.sort((a, b) => (b.rec?.score ?? -1) - (a.rec?.score ?? -1));
   }, [data.listings, data.recommendations, data.votes, data.selection, rings]);
@@ -372,7 +374,7 @@ function Detail({ item, clues, isOrganizer, busy, canAct, onBack, onVote, onChoo
           <span className={s.fine}>No source link was saved.</span>
         )}
         {isOrganizer && canAct && (
-          <button type="button" className={`${s.act} ${s.primary}`} disabled={busy || item.selected} onClick={onChoose}>{item.selected ? "Already in our gift box" : busy ? "Choosing…" : "Put in our gift"}</button>
+          <button type="button" className={`${s.act} ${s.primary}`} disabled={busy || item.selected} onClick={onChoose}>{item.selected ? "Already in our gift box" : busy ? "Choosing…" : "Add to our gift box"}</button>
         )}
       </div>
       <p className={s.fine}>Choosing a gift is not buying it. Nothing is charged; the group agrees shares next.</p>

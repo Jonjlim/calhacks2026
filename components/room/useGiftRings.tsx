@@ -1,5 +1,8 @@
 "use client";
 
+import { relevantResearchJob, roomResearchJobs, isResearchActive } from "@/lib/room/researchActivity";
+import { addToGiftBox } from "@/lib/room/giftBox";
+
 import { QuestionPoll } from "./QuestionPoll";
 
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -66,7 +69,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null } {
+}): { councilThinking: string | null; rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -226,7 +229,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     setComposer({ x, z, zone: what === "idea" ? "gift" : "memory", kind: what === "wish" ? "explicit_wish" : "interest" });
     mapView.focus(x * 0.6, z * 0.6, 0.8);
   };
-  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null, story: null };
+  if (!active) return { councilThinking: null, rings: null, notice, error, openBox, startAdd, tools: null, story: null };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -316,9 +319,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   }
 
   // Research progress shows where it was started; a search someone else started shows at the present.
-  const job = data.latestResearch;
+  const researchJobs = roomResearchJobs(data);
+  const job = relevantResearchJob(researchJobs);
   const research: RingResearch = !job ? null
-    : job.status === "pending" || job.status === "running" || job.status === "uncertain" ? "running"
+    : isResearchActive(job) ? "running"
+    : job.status === "uncertain" ? "uncertain"
     : (job.status === "failed" || job.status === "stale") && now > 0 && now - job.createdAt < RESEARCH_FAIL_MS ? "failed"
     : null;
   const researchTheme = research && researchFrom && researchFrom !== "box" && layout.themes.some((t) => t.id === researchFrom) ? researchFrom : null;
@@ -373,7 +378,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       return;
     }
     void (isOrganizer
-      ? run(() => actions.addGiftToBox ? actions.addGiftToBox(listingId) : actions.selectGift(listingId), actions.addGiftToBox ? "Added to the box. Your other gifts stay; everyone approves the updated collection." : "Gift selected. Everyone approves this version.").then((ok) => ok && setSelectedKey("box"))
+      ? run(() => addToGiftBox(actions, selection, listingId), actions.addGiftToBox ? "Added to the box. Your other gifts stay; everyone approves the updated collection." : "Gift selected. Everyone approves this version.").then((ok) => ok && setSelectedKey("box"))
       : run(() => actions.castVote(listingId, "up"), "Your vote is in. The organizer puts the final gift in the box."));
   };
 
@@ -475,16 +480,20 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const d = directionNodes.find((n) => n.key === key);
       if (!d) return null;
       const found = recs.filter((r) => r.foundBy?.directionId === d.id).length;
-      const searching = research === "running" && researchFrom === key;
+      const directionJob = relevantResearchJob(researchJobs.filter((j) => j.directionId === d.id));
+      const searching = isResearchActive(directionJob);
+      const uncertain = directionJob?.status === "uncertain";
       const asking = sharpen?.status === "open" && sharpen.directionId === d.id;
       return {
         caption: <><b>{d.label}</b><small>{d.why}</small>
           <small>Joins {d.memories.map((m) => `“${m.text}”`).join(" + ")}{d.trend ? ` · with the caught trend “${d.trend.query}”` : ""}</small>
           {asking && <small>The council asked the room one question to sharpen this.</small>}
+          {uncertain && <small>The search is awaiting confirmation. Its results are not known yet.</small>}
+          {directionJob?.status === "failed" && <small>The search failed. You can try again.</small>}
           {d.stale && <small>Memories changed since. Ask the council again to refresh it.</small>}</>,
         actions: [
-          ...(isOrganizer && actions?.researchDirection ? [{ icon: "sprout" as const, label: searching ? "Searching…" : found ? "Search again" : "Find gifts for this", tone: "gold" as const, disabled: !!pending || searching,
-            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. Two gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
+          ...(isOrganizer && actions?.researchDirection ? [{ icon: "sprout" as const, label: uncertain ? "Awaiting confirmation…" : searching ? "Searching…" : found ? "Search again" : "Find gifts for this", tone: "gold" as const, disabled: !!pending || searching || uncertain,
+            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Search requested for “${d.query}”. Results will appear when available.`).then((ok) => ok && setResearchFrom(key)) }] : []),
           ...voteActs("direction", d.id),
         ],
       };
@@ -559,11 +568,20 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     if (composer.zone === "gift") {
       void run(async () => {
         const shared = await actions.addManualClue("interest", GIFT_IDEA_PREFIX + text);
-        const id = shared.ok ? (shared.value as { _id?: string; id?: string })._id ?? (shared.value as { id?: string }).id : undefined;
-        // The idea is saved either way; a busy council just means research starts on the next "Find gifts".
-        if (id && isOrganizer) void actions.startResearch([...allClueIds, id]).catch(() => undefined);
+        if (!shared.ok) return shared;
+        // Saving an idea and starting its search are separate outcomes.
+        setComposer(null);
+        const id = (shared.value as { _id?: string; id?: string })._id ?? (shared.value as { id?: string }).id;
+        if (id && isOrganizer) {
+          try {
+            const search = await actions.startResearch([...allClueIds, id]);
+            if (!search.ok) return { ok: false as const, error: { ...search.error, message: `Your idea was saved, but research did not start: ${search.error.message}` } };
+          } catch {
+            return { ok: false as const, error: { code: "unknown" as const, message: "Your idea was saved, but the search request could not be confirmed. Check its status before trying again." } };
+          }
+        }
         return shared;
-      }, isOrganizer ? "Gift idea shared. The council is looking for real listings." : "Gift idea shared with the room.").then(done);
+      }, isOrganizer ? "Gift idea shared. Research requested; watch Scout for progress." : "Gift idea shared with the room.");
       return;
     }
     if (looksPasted(text)) {
@@ -961,5 +979,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The council's reaction to the room's passes reaches everyone's status line as it happens.
   const reaction = (data.trail ?? []).findLast((e) => e.actor === "council" && now - e.at < REACTION_MS
     && (e.text.startsWith("Retired") || e.text.startsWith("Suggested") || e.text.startsWith("Couldn’t find")));
-  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
+  return { councilThinking: pending === "directions" ? "Combining memories…" : pending === "themes" ? "Grouping memories…" : pending === "sharpen" ? "Thinking of a question…" : null, rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
 }

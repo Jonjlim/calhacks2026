@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { RoomActions } from "@/components/room/types";
 import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/ErrorText";
@@ -34,7 +34,7 @@ export function ProposalPanel({
   me: Participant;
   selection: GiftSelection | null;
   isOrganizer: boolean;
-  actions?: Pick<RoomActions, "setLimit" | "approve" | "withdrawApproval" | "clearSelection">;
+  actions?: Pick<RoomActions, "setLimit" | "approve" | "withdrawApproval" | "clearSelection" | "removeGiftFromBox">;
 }) {
   const { revision, approvals, myLimit } = proposal;
   const nameOf = (id: string) => participants.find((p) => p.id === id)?.displayName ?? "Someone";
@@ -44,6 +44,17 @@ export function ProposalPanel({
   const approve = useResultAction(actions?.approve);
   const withdraw = useResultAction(actions?.withdrawApproval);
   const clear = useResultAction(actions?.clearSelection);
+  const remove = useResultAction(actions?.removeGiftFromBox);
+  const items = revision?.items ?? selection?.items ?? (selection ? [{ listingId: selection.listingId, quantity: 1, listingSnapshot: selection.listingSnapshot }] : []);
+  const currentApprovals = approvals.filter((a) => a.revisionId === revision?.id);
+  const previous = useRef({ id: revision?.id, approved: 0 });
+  const [reset, setReset] = useState(false);
+  const approvedCount = currentApprovals.filter((a) => a.status === "approved").length;
+  useEffect(() => {
+    if (previous.current.id && revision?.id !== previous.current.id && previous.current.approved > 0) setReset(true);
+    previous.current = { id: revision?.id, approved: approvedCount };
+  }, [revision?.id, approvedCount]);
+  useEffect(() => setLimitInput(myLimit ? (myLimit.amountMinor / 100).toFixed(2) : ""), [myLimit?.amountMinor]);
 
   async function submitLimit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -56,12 +67,12 @@ export function ProposalPanel({
     await saveLimit.run(amountMinor);
   }
 
-  const myApproval = revision ? approvals.find((a) => a.participantId === me.id) : undefined;
+  const myApproval = revision ? currentApprovals.find((a) => a.participantId === me.id) : undefined;
   const collecting = revision?.status === "awaiting_approval" || revision?.status === "approved_pledged";
-  const approvedCount = approvals.filter((a) => a.status === "approved").length;
 
   return (
-    <Panel title="Proposal">
+    <Panel title="Our gift box">
+      {reset && <p role="status" className="mb-3 rounded-lg bg-gold/20 p-3 text-sm">The gift or shares changed. Everyone needs to approve this version again. <button onClick={() => setReset(false)} className="underline">Dismiss</button></p>}
       {actions ? (
         <form onSubmit={submitLimit} className="mb-3 flex flex-col gap-1.5">
           <label className="text-[12px] text-plum-soft" htmlFor="my-limit">
@@ -93,20 +104,23 @@ export function ProposalPanel({
         </p>
       ) : (
         <div className="flex flex-col gap-2 text-sm">
-          {selection && (
-            <p>
-              Gift:{" "}
-              <a href={selection.listingSnapshot.sourceUrl} target="_blank" rel="noreferrer" className="font-medium underline">
-                {selection.listingSnapshot.title}
-              </a>
-            </p>
-          )}
+          {items.length > 0 && <div aria-label="Gifts in the box">
+            <p className="font-medium">{items.length} {items.length === 1 ? "gift" : "gifts"} in the box</p>
+            <ul className="mt-2 flex flex-col gap-3">
+              {items.map((item) => <li key={item.listingId}>
+                <a href={item.listingSnapshot.sourceUrl} target="_blank" rel="noreferrer" className="font-medium underline">{item.listingSnapshot.title}</a>
+                <p>{item.listingSnapshot.priceStatus === "observed" && item.listingSnapshot.priceMinor !== undefined ? formatMinor(item.listingSnapshot.priceMinor) : "Price unknown"}</p>
+                {isOrganizer && actions?.removeGiftFromBox && <Button disabled={remove.pending} onClick={() => remove.run(item.listingId)} aria-label={`Remove ${item.listingSnapshot.title} from box`}>Remove</Button>}
+              </li>)}
+            </ul>
+            <p className="mt-2 text-xs text-plum-soft">Includes observed shipping. Unknown shipping and tax are excluded.</p>
+          </div>}
           {revision && (
             <>
               <p>
                 Total {formatMinor(revision.payableTotalMinor, revision.currency)} ·{" "}
                 <span className="font-medium">{STATUS_LABELS[revision.status] ?? revision.status}</span>
-                {collecting && ` (${approvedCount}/${approvals.length})`}
+                {collecting && ` (${approvedCount}/${currentApprovals.length})`}
               </p>
               {revision.status === "infeasible" ? (
                 <p className="rounded-lg bg-gold/20 px-3 py-2 text-[13px]">
@@ -115,7 +129,7 @@ export function ProposalPanel({
               ) : (
                 <ul className="flex flex-col gap-0.5">
                   {revision.shares.map((s) => {
-                    const approval = approvals.find((a) => a.participantId === s.participantId);
+                    const approval = currentApprovals.find((a) => a.participantId === s.participantId);
                     return (
                       <li key={s.participantId} className={s.participantId === me.id ? "font-medium" : ""}>
                         {s.participantId === me.id ? "You" : nameOf(s.participantId)}: {formatMinor(s.amountMinor)} ·{" "}
@@ -148,12 +162,12 @@ export function ProposalPanel({
               )}
               {isOrganizer && selection && (
                 <Button variant="ghost" disabled={clear.pending} onClick={() => clear.run()}>
-                  Change gift
+                  Empty the box
                 </Button>
               )}
             </div>
           )}
-          <ErrorText error={approve.error ?? withdraw.error ?? clear.error} />
+          <ErrorText error={approve.error ?? withdraw.error ?? clear.error ?? remove.error} />
 
           <p className="text-xs text-plum-soft">
             Approving is a pledge. Unwrap has not charged cards and has not placed a merchant order.
