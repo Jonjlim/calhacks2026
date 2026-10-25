@@ -15,6 +15,12 @@ describe("shopping phrases from everyday memories", () => {
     ["Really into specialty coffee lately", "specialty coffee"],
     ["Wants to learn guitar", "guitar"],
     ["Makes sourdough on weekends", "sourdough"],
+    ["Loves to bowl", "bowling"],
+    ["Loves to hike", "hiking"],
+    ["Loves to swim", "swimming"],
+    ["Likes to cook", "cooking"],
+    ["Loves to read mystery novels", "read mystery novels"],
+    ["Goes bowling every Friday night", "bowling"],
   ])("%s -> %s", (text, phrase) => {
     expect(shoppingPhrase(text)).toBe(phrase);
   });

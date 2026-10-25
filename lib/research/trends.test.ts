@@ -101,13 +101,13 @@ describe("category-conditioned shopping discovery", () => {
 describe("gift-shaped trend ideas", () => {
   it.each([
     "tennis tournament", "hiking deaths", "hiking accident 2025", "us open tennis results", "matcha recall",
-    "tennis players", "vinyl news", "how to make matcha", "tennis near me", "hiking trails", "matcha meaning",
+    "tennis players", "vinyl news", "bowling score", "pba bowling", "bowling alley near me", "how to make matcha", "tennis near me", "hiking trails", "matcha meaning",
   ])("drops news, events and lookups: %s", (query) => {
     expect(isGiftShapedQuery(query)).toBe(false);
   });
   it.each([
     "tennis racket", "tennis skirt outfit", "tennis core aesthetic", "hiking boots", "hiking gear",
-    "matcha whisk set", "ceremonial matcha powder", "vinyl record player", "vinyl records", "tennis lessons",
+    "matcha whisk set", "ceremonial matcha powder", "bowling ball", "bowling gloves", "bowling party", "vinyl record player", "vinyl records", "tennis lessons",
     "us open tennis tickets 2026", "matcha tasting class", "pottery glaze", "pottery wheel",
   ])("keeps products, style and bookable experiences: %s", (query) => {
     expect(isGiftShapedQuery(query)).toBe(true);
