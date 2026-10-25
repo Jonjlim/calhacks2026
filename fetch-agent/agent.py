@@ -56,6 +56,7 @@ agent = Agent(
     publish_agent_details=True,
     readme_path=str(Path(__file__).with_name("README.md")),
     description="Unwrap Gift Council: finds real, budget-checked gifts from what friends remember about someone.",
+    avatar_url=council_agents.avatar_url("courier"),
     handle_messages_concurrently=True,
 )
 courier = agent
@@ -143,7 +144,8 @@ _active_runs: dict[str, asyncio.Task] = {}
 
 @agent.on_rest_post("/council/run", RunRequest, RunAccepted)
 async def start_run(ctx: Context, req: RunRequest) -> RunAccepted:
-    if not AGENT_SECRET or not hmac.compare_digest(req.secret, AGENT_SECRET):
+    # compare_digest rejects non-ASCII str; the deployed secret contains some.
+    if not AGENT_SECRET or not hmac.compare_digest(req.secret.encode(), AGENT_SECRET.encode()):
         return RunAccepted(ok=False, runId=req.runId, error="unauthorized")
     if req.runId in _active_runs:
         return RunAccepted(ok=True, runId=req.runId, agentAddress=agent.address)

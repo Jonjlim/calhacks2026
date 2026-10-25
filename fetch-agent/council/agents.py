@@ -190,6 +190,13 @@ HANDLERS = {
 }
 
 
+AVATAR_BASE = os.getenv("COUNCIL_AVATAR_BASE", "https://raw.githubusercontent.com/Jonjlim/calhacks2026/dev3/fetch-council/public/ai-council/avatars")
+
+
+def avatar_url(role: str) -> str:
+    return f"{AVATAR_BASE.rstrip('/')}/{role}.png"
+
+
 def build_specialist(role: str, port: int, base_seed: str | None = None) -> Agent:
     request, result, handler = HANDLERS[role]
     agent = Agent(
@@ -200,6 +207,7 @@ def build_specialist(role: str, port: int, base_seed: str | None = None) -> Agen
         publish_agent_details=True,
         readme_path=str(README_DIR / f"{role}.md"),
         description=DESCRIPTIONS[role],
+        avatar_url=avatar_url(role),
         handle_messages_concurrently=True,
     )
     proto = Protocol(name=f"unwrap-council-{role}", version="0.1.0")
