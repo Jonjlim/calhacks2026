@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Any
@@ -21,6 +22,45 @@ import httpx
 from .contracts import TASKS
 
 log = logging.getLogger("council.events")
+
+_SITE_SHAPE = re.compile(r"^https://[a-z0-9-]+\.convex\.site$")
+# Per-run Convex site, so one agent process can serve several deployments.
+# Keyed by run id because specialist agents handle a run in separate tasks.
+_run_sites: dict[str, str] = {}
+
+
+def allowed_sites() -> set[str]:
+    raw = os.getenv("COUNCIL_ALLOWED_SITES") or os.getenv("CONVEX_SITE_URL") or ""
+    return {s.strip().rstrip("/") for s in raw.split(",") if s.strip()}
+
+
+def check_callback_site(site: str | None) -> str | None:
+    """The run's site if allowed; None for no override. Raises ValueError when not allowed."""
+    if site is None:
+        return None
+    site = site.strip().rstrip("/")
+    if not _SITE_SHAPE.match(site) or site not in allowed_sites():
+        raise ValueError("callback not allowed")
+    return site
+
+
+def register_site(run_id: str, site: str | None) -> None:
+    if site:
+        _run_sites[run_id] = site
+
+
+def release_site(run_id: str) -> None:
+    _run_sites.pop(run_id, None)
+
+
+def run_site(run_id: str) -> str | None:
+    return _run_sites.get(run_id)
+
+
+def site_for(run_id: str | None) -> str | None:
+    """The run's callback site, else the default CONVEX_SITE_URL."""
+    site = _run_sites.get(run_id) if run_id else None
+    return site or (os.getenv("CONVEX_SITE_URL") or "").rstrip("/") or None
 
 
 class EventSink:
@@ -146,7 +186,7 @@ def sink_for(run_id: str, source: str = "asi1", demo_key: str | None = None) -> 
     events are mirrored under that demo key so a /council page can watch the
     council work live; no room id is ever invented.
     """
-    site, secret = os.getenv("CONVEX_SITE_URL"), os.getenv("COUNCIL_INGEST_SECRET")
+    site, secret = site_for(run_id), os.getenv("COUNCIL_INGEST_SECRET")
     if source == "asi1":
         demo_key = demo_key or os.getenv("COUNCIL_BROADCAST_KEY") or None
     return ConvexSink(run_id, site, secret, source, demo_key) if site and secret else EventSink(run_id)

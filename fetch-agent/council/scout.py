@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from .contracts import Analysis, Listing, ScoutReport
+from .events import run_site, site_for
 
 VERIFIED_ACTOR = "johnvc~google-shopping-api-google-shopping-products-prices-deals"
 VERIFIED_BUILD = "0.0.142"
@@ -161,8 +162,8 @@ class _Cache:
             pass
 
 
-async def _via_convex(client: httpx.AsyncClient, query: str, analysis: Analysis, exclude: list[str]) -> list[Listing]:
-    site = os.environ["CONVEX_SITE_URL"].rstrip("/")
+async def _via_convex(client: httpx.AsyncClient, query: str, analysis: Analysis, exclude: list[str], site: str | None = None) -> list[Listing]:
+    site = (site or os.environ["CONVEX_SITE_URL"]).rstrip("/")
     resp = await client.post(
         f"{site}/council/research",
         headers={"Authorization": f"Bearer {os.environ['COUNCIL_INGEST_SECRET']}"},
@@ -208,7 +209,7 @@ def backend() -> str:
     return "none"
 
 
-async def research(analysis: Analysis, cache: _Cache | None = None) -> ScoutReport:
+async def research(analysis: Analysis, cache: _Cache | None = None, site: str | None = None) -> ScoutReport:
     cache = cache or _Cache()
     queries = queries_for(analysis)
     if not queries:
@@ -233,7 +234,7 @@ async def research(analysis: Analysis, cache: _Cache | None = None) -> ScoutRepo
                 errors.append("No research backend configured (set CONVEX_SITE_URL + COUNCIL_INGEST_SECRET, or APIFY_TOKEN).")
                 return
             try:
-                rows = await (_via_convex(client, q, analysis, exclude) if which == "convex" else _via_apify(client, q, analysis))
+                rows = await (_via_convex(client, q, analysis, exclude, site) if which == "convex" else _via_apify(client, q, analysis))
             except httpx.TimeoutException:
                 errors.append(f"Research for “{q}” timed out.")
                 return
@@ -258,6 +259,14 @@ async def research(analysis: Analysis, cache: _Cache | None = None) -> ScoutRepo
     )
 
 
+def research_for(run_id: str):
+    """Researcher bound to the run's callback site. Looks up `research` at call time so patches apply."""
+    async def bound(analysis: Analysis) -> ScoutReport:
+        site = run_site(run_id)
+        return await (research(analysis, site=site) if site else research(analysis))
+    return bound
+
+
 async def research_room(run_id: str) -> ScoutReport:
     """The room's persisted Convex job is the only research source for web rooms.
 
@@ -266,7 +275,7 @@ async def research_room(run_id: str) -> ScoutReport:
     """
     async with httpx.AsyncClient(timeout=RESEARCH_TIMEOUT_S) as client:
         response = await client.post(
-            os.environ["CONVEX_SITE_URL"].rstrip("/") + "/council/room-research",
+            (site_for(run_id) or os.environ["CONVEX_SITE_URL"]) + "/council/room-research",
             headers={"Authorization": f"Bearer {os.environ['COUNCIL_INGEST_SECRET']}"},
             json={"runId": run_id},
         )

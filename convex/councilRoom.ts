@@ -141,6 +141,12 @@ export const resume = mutation({
   },
 });
 
+// Tells a shared agent which deployment to call back. A local backend's http:// site is never sent: the agent only accepts allowlisted https *.convex.site URLs and uses its default otherwise.
+function cloudSite(): { callbackSite?: string } {
+  const site = process.env.CONVEX_SITE_URL;
+  return site && /^https:\/\/[a-z0-9-]+\.convex\.site\/?$/.test(site) ? { callbackSite: site } : {};
+}
+
 export const dispatch = internalAction({
   args: runArgs,
   handler: async (ctx, { runId }): Promise<null> => {
@@ -155,7 +161,7 @@ export const dispatch = internalAction({
     try {
       const response = await fetch(`${url.replace(/\/$/, "")}/council/run`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({ secret, runId, roomRun: true, demoKey: "", budgetMinor: data.room.budgetMinor ?? null, memories: data.clues.map(c => ({ memoryId: `mem_${c._id}`, text: `${c.kind}: ${c.text}` })) }),
+        body: JSON.stringify({ secret, runId, roomRun: true, demoKey: "", budgetMinor: data.room.budgetMinor ?? null, ...cloudSite(), memories: data.clues.map(c => ({ memoryId: `mem_${c._id}`, text: `${c.kind}: ${c.text}` })) }),
       });
       const body = await response.json() as { ok?: boolean; agentAddress?: string | null };
       if (response.ok && body.ok && typeof body.agentAddress === "string") await ctx.runMutation(internal.councilRoom.recordAgent, { runId, agentAddress: body.agentAddress });

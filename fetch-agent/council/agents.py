@@ -165,7 +165,7 @@ async def handle_scout(ctx: Context, sender: str, req: ScoutRequest) -> None:
         return await scout_mod.research_room(req.run_id)
 
     async def work(rs: RoleSink) -> ScoutResult:
-        report = await scout_step(rs, analysis, room_research if req.room_run else scout_mod.research)
+        report = await scout_step(rs, analysis, room_research if req.room_run else scout_mod.research_for(req.run_id))
         return ScoutResult(run_id=req.run_id, ok=bool(report.listings), error=report.error, report=report.model_dump(mode="json"))
 
     await _serve(ctx, sender, req, "scout", work)

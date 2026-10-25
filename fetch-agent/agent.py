@@ -35,7 +35,7 @@ from uagents_core.contrib.protocols.chat import (
 from council import agents as council_agents
 from council.contracts import Memory
 from council.coordinator import memory_id_for, run_council
-from council.events import EventSink, sink_for
+from council.events import EventSink, check_callback_site, register_site, release_site, sink_for
 from council.scout import research_room
 
 load_dotenv(Path(__file__).with_name(".env"))
@@ -128,6 +128,8 @@ class RunRequest(Model):
     demoKey: str = ""
     roomRun: bool = False
     budgetMinor: int | None = None
+    # The calling Convex deployment's .convex.site URL; must be in COUNCIL_ALLOWED_SITES.
+    callbackSite: str | None = None
     memories: list[MemoryIn]
 
 
@@ -157,6 +159,11 @@ async def start_run(ctx: Context, req: RunRequest) -> RunAccepted:
         return RunAccepted(ok=False, runId=req.runId, error=f"invalid memories: {err}"[:160])
     if not memories:
         return RunAccepted(ok=False, runId=req.runId, error="no memories")
+    try:
+        site = check_callback_site(req.callbackSite)
+    except ValueError:
+        return RunAccepted(ok=False, runId=req.runId, error="callback not allowed")
+    register_site(req.runId, site)
     # Return immediately; progress arrives through Convex events.
     sink = sink_for(req.runId, source="web", demo_key=None if req.roomRun else req.demoKey)
     if req.roomRun:
@@ -166,6 +173,7 @@ async def start_run(ctx: Context, req: RunRequest) -> RunAccepted:
     task = asyncio.create_task(run_with_council(memories, sink, research=room_research if req.roomRun else None, budget_minor=req.budgetMinor, room_run=req.roomRun))
     _active_runs[req.runId] = task
     task.add_done_callback(lambda _: _active_runs.pop(req.runId, None))
+    task.add_done_callback(lambda _: release_site(req.runId))
     _running.add(task)
     task.add_done_callback(_running.discard)
     return RunAccepted(ok=True, runId=req.runId, agentAddress=agent.address)

@@ -105,7 +105,17 @@ export function shoppingPhrase(text: string): string {
   const verb = /^to ([a-z]+)$/.exec(phrase);
   if (verb) return activity(verb[1]!);
   phrase = phrase.replace(/^to\s+/, "");
-  return narrativeActivity(phrase) ?? storyObject(phrase) ?? phrase.replace(ENTHUSIAST_SUFFIX, "");
+  return hobbyIdiom(phrase) ?? narrativeActivity(phrase) ?? storyObject(phrase) ?? phrase.replace(ENTHUSIAST_SUFFIX, "");
+}
+
+// Reviewed idioms whose literal words search badly: Google Shopping returns
+// nothing for "she throws pots at the community studio every sunday".
+const HOBBY_IDIOMS: [RegExp, string][] = [
+  [/\b(?:throws?|threw|throwing)\s+pots\b/, "pottery"],
+];
+
+function hobbyIdiom(phrase: string): string | undefined {
+  return HOBBY_IDIOMS.find(([pattern]) => pattern.test(phrase))?.[1];
 }
 
 // "Matcha drinker", "coffee lover": the thing, not the person. ("Fan" stays: ceiling fans are things.)
@@ -190,6 +200,22 @@ export function shoppingPhrases(text: string): string[] {
   if (!phrase || JOINED.test(phrase)) return phrase ? [phrase] : [];
   const parts = phrase.split(/\s*(?:,|&|\band\b)\s*/).map(p => p.replace(LEADING_ARTICLE, "").trim()).filter(Boolean);
   return parts.length > 1 && parts.length <= 3 ? parts : [phrase];
+}
+
+const MONEY = /(?:[$€£]\s*\d[\d,]*(?:\.\d+)?k?|\b\d[\d,]*(?:\.\d+)?\s*(?:k\b|dollars?\b|bucks\b|usd\b)?)/g;
+// Budget and occasion wording: words that say how much or why, never what. Stemmed forms ("christma").
+const BUDGET_OCCASION_WORDS = new Set([
+  "budget", "around", "about", "roughly", "approximately", "under", "below", "less", "than", "max", "maximum",
+  "most", "up", "spend", "spending", "price", "cost", "dollar", "buck", "usd", "our", "my", "we", "us", "are",
+  "can", "be", "was", "at", "per", "person", "each", "total", "gift", "present", "birthday", "bday", "anniversary",
+  "christma", "xmas", "holiday", "graduation", "wedding", "valentine", "valentines", "mother", "father", "day",
+  "occasion", "upcoming", "coming", "next", "this", "year",
+]);
+
+/** True when a phrase only states a budget or occasion ("budget is around $80 for her birthday gift"). */
+export function isBudgetOrOccasionOnly(phrase: string): boolean {
+  const rest = phrase.toLowerCase().replace(MONEY, " ").replace(/'s\b/g, "");
+  return contentTokens(rest).every((token) => BUDGET_OCCASION_WORDS.has(token));
 }
 
 // Words that start a listing's variant detail ("… Jean Women's Black 10 Regular") rather than name the product.

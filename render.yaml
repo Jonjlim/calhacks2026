@@ -18,6 +18,9 @@ services:
         sync: false
       - key: CONVEX_SITE_URL   # https://<cloud-deployment>.convex.site
         sync: false
+      # Comma-separated .convex.site URLs allowed as per-run callbackSite (default: CONVEX_SITE_URL).
+      - key: COUNCIL_ALLOWED_SITES
+        sync: false
       - key: COUNCIL_INGEST_SECRET
         sync: false
       - key: COUNCIL_AGENT_SECRET

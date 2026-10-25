@@ -112,7 +112,7 @@ class LocalSpecialists:
 
     async def scout(self, analysis: Analysis) -> ScoutReport:
         # Looked up at call time so a patched scout.research is honoured.
-        return await scout_step(RoleSink(self.sink, "scout"), analysis, self.research or scout_mod.research)
+        return await scout_step(RoleSink(self.sink, "scout"), analysis, self.research or scout_mod.research_for(self.sink.run_id))
 
     async def keeper(self, analysis: Analysis, listings: list[Listing]) -> KeeperReport:
         return await keeper_step(RoleSink(self.sink, "keeper"), analysis, listings)
