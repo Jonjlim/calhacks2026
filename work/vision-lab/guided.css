@@ -102,3 +102,23 @@
 .node-pulse b{margin-right:5px}
 .node-pulse.yes{background:#79ab5b}.node-pulse.pass{background:#d77d78}
 @keyframes pulse-up{0%{opacity:0;transform:translateY(10px) scale(.85)}12%{opacity:1;transform:translateY(0) scale(1.05)}20%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}
+
+/* Rings view */
+.ring-label{font:16px Caveat,cursive;color:#d9cfe6aa;white-space:nowrap;pointer-events:none}
+.mini{display:block;width:26px;height:26px;border-radius:50%;border:2px solid var(--c);background:#f6f1fb;box-shadow:0 4px 10px #0005;overflow:hidden}
+.mini img{width:100%;height:100%;object-fit:cover}
+.tok-mini .tok-face:hover{transform:scale(1.15)}
+.theme-pill{display:flex;flex-direction:column;align-items:center;gap:4px;width:max-content;max-width:180px;background:linear-gradient(#d6cef0,#b4a8d6);border-radius:30px 30px 24px 24px;padding:8px 16px 9px;box-shadow:0 12px 24px #1b1a3a66,inset 0 -5px 0 #9a8dc0;text-align:center}
+.theme-pill b{font:600 15px/1.1 'Cormorant Garamond',serif;color:#33284a;text-wrap:balance}
+.theme-pill small{display:flex;align-items:center;gap:2px}
+.theme-pill img{width:18px;height:18px;border-radius:50%;border:1.5px solid #fff;margin-left:-5px;object-fit:cover}
+.theme-pill img:first-child{margin-left:0}
+.theme-pill em{font:700 8.5px Figtree,sans-serif;font-style:normal;letter-spacing:.8px;text-transform:uppercase;color:#4f4470;margin-left:5px}
+.tok-dim{opacity:.22;filter:grayscale(.6);transition:opacity .4s}
+.tok-tag{display:inline-block;margin-left:6px;font:700 8.5px Figtree,sans-serif;letter-spacing:.6px;text-transform:uppercase;color:#33284a;background:#bdb3da;padding:2px 6px;border-radius:8px;vertical-align:1px}
+.ask{width:280px;background:#fcf6ea;color:#493d50;border-radius:16px;padding:12px 14px;box-shadow:0 18px 40px #0008;text-align:center;font-family:Figtree,sans-serif;animation:bloom .3s ease-out both}
+.ask small{display:block;font:700 9px Figtree,sans-serif;letter-spacing:1.2px;text-transform:uppercase;color:#a08770}
+.ask p{margin:5px 0 9px;font:500 17px/1.2 'Cormorant Garamond',serif}
+.ask div{display:flex;gap:6px}
+.ask button{flex:1;border:1px solid #e3d3bd;background:#fffaf2;border-radius:16px;padding:7px;font:600 11px Figtree,sans-serif;color:#493d50}
+.ask button:hover{background:#86b766;border-color:#86b766;color:#fff}

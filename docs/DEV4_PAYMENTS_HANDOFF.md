@@ -76,3 +76,120 @@ key. No public payment action or webhook route has been enabled by this work.
 - Exercise explicit capture, expired sessions, provider timeouts, partial capture, failed/pending refunds and old revisions against real sandbox objects.
 - Verify post-authorization cancellation behavior for the chosen Checkout flow before offering multi-person holds. Open-session expiry alone is not cancellation of a completed authorization.
 - Multi-contributor orchestration and group recovery remain joint Dev 2/Dev 4 work, not completed by the adapter tests.
+
+
+## Phase 2 update — contributor worker and offline rehearsal
+
+On `dev4/phase2-payments` (base `origin/refactor` at `9550a1a`):
+
+- `runContributorCheckout` accepts only a revision-bound manual authorization
+  claim for the contributor's approved share. The existing organizer collection
+  function keeps its behavior. Both validate returned amount/binding, retrieve
+  saved sessions instead of recreating, and withhold URLs until claim settlement.
+- `node scripts/payment-rehearsal.mts` runs four deterministic simulated payment
+  scenarios. The real Stripe adapter/reader/group-state functions run against an
+  injected fake transport and in-memory store. No keys, network, Convex writes,
+  actual card entry, funds or orders. It is suitable for engineering rehearsal;
+  a product demo must visibly say simulation if it renders these outcomes.
+- All 130 payment tests pass. Frontend and Convex TypeScript checks pass.
+  The combined branch suite passes 617 tests; 3 live tests are skipped.
+
+This does not implement BE-015's missing durable claim bridge, organizer-total
+policy, webhook HTTP route, capture-operation claims or UI. Do not enable or
+advertise end-to-end payment based on the offline result. Organizer Checkout is
+still the smallest first live integration; per-contributor orchestration follows.
+
+The checkout port contract is appended to CONTRACTS.md. Shared changes are
+additive types only; there are no payment schema/state-machine changes. No deploy,
+environment change or paid request is included.
+
+## Demo scope selected — shared contribution simulation
+
+Alex explicitly chose a labelled simulation and stopped further refund/partial-
+capture work. New code on `dev4/phase2-payments`:
+
+- `convex/payments/simulation.ts` provides `getState`, `simulateContribution`,
+  `wrapGift`. Membership, current revision, all current approvals, own positive
+  share and organizer-only wrapping are enforced in Convex. Concurrent/repeated
+  clicks do not duplicate or lose marks. Changed revisions/approval fingerprints
+  reset displayed progress. Zero shares need no simulation.
+- `simulationSchema.ts` owns a separate `paymentSimulations` table. The shared
+  schema adds its fragment; room purge adds one indexed cleanup phase. Real
+  payment attempts, provider events, proposal statuses and merchant orders are
+  untouched. No Stripe key or flag is needed for simulation.
+- `components/payments/ContributionSimulation.tsx` is the reusable ring-box UI;
+  `ConnectedContributionSimulation.tsx` subscribes to the new member endpoints.
+  Dev 1 can mount `<ConnectedContributionSimulation roomId={roomId}
+  giftTitle={selectedTitle} />` in the new map's box after the backend is reviewed
+  and deployed. Do not add it to the retired tower/drawer path.
+- `/demo/contributions` is an isolated, clearly labelled **local fixture preview**
+  of that same UI. It lets one person play both sample roles; this is not two-user
+  browser acceptance of the connected backend. No backend/provider writes occur.
+
+Start the preview in this worktree with `npm run dev -- --webpack --port 4183`,
+then open `http://localhost:4183/demo/contributions`. No production environment or
+secret changes were made. Font fetching is unavailable on this host, so the
+browser preview uses existing font fallbacks; no typography source was changed.
+
+Validation: **633 tests passed, 3 live skipped**, frontend and Convex typechecks
+passed. Browser-tested fixture contributions 0→1→2, disabled wrapping for Sam,
+organizer wrapping, changed-share reset and fresh approvals; phone width 390px
+has no horizontal overflow. Backend tests cover auth, stale revision, approval
+withdrawal, exact own-share view, zero shares, concurrent clicks and room purge.
+No live deployment, real-room two-browser simulation or live Stripe test occurred.
+
+Before integration, Dev 2 reviews the additive schema/purge changes and deploys
+with the team's normal backend workflow. Then Dev 1 mounts the connected box
+component and the team repeats the same flow with two actual room members.
+Existing Stripe orchestration code remains dormant; no new refund/recovery
+feature or enabled real payment action was added.
+
+
+## Multi-gift box integration for Ally and Jonathon
+
+Alex requested single or multiple gifts. This feature branch now provides:
+
+- `proposals.setGiftBox({roomId, listingIds})`: organizer replaces the complete
+  ordered box with 1–12 distinct sourced listing IDs; one unit each. Use `[]` to
+  clear. For add/remove UI, submit the complete resulting list. Existing
+  `selectGift` deliberately still **replaces the whole box with one gift**.
+- `proposals.getSelection({roomId})`: `Result<selection | null>`; read `items`
+  for every chosen gift, its snapshot photo/title/price/shipping/source link.
+  Old rows without `items` still represent their single legacy `listingId`.
+- Existing private-cap APIs, `createProposal`, `getProposal`, `approveRevision`
+  and `withdrawApproval` continue to work. Render `revision.items` for the exact
+  approval summary and `revision.payableTotalMinor` for the whole estimate;
+  legacy `revision.listingId` is the first item, never the combined box.
+- Existing `ConnectedContributionSimulation` follows the combined approved
+  proposal. Or style your own surface using `payments.simulation.getState`,
+  `simulateContribution({roomId, revisionId})`, and `wrapGift` with the same args.
+  Use server `canSimulate`/`canWrap`; show only the caller's cap and simulation
+  share plus group completion counts. Real payment/order APIs are not called.
+- Any gift membership, item snapshot or share change produces fresh approvals
+  and resets simulation. Approving, contributing and wrapping also recheck the
+  listing observations, so a changed second item cannot sneak into an old deal.
+- Invalidating any selected item conservatively clears the whole box. Unknown
+  item prices block the proposal; unknown shipping/tax are excluded visibly.
+  Separately observed shipping is summed, without assuming bundled discounts.
+
+Buying-screen sequence: box summary and individual source links → private maxima
+→ combined estimate and own allocated share → everyone approves that revision
+→ labelled simulated contributions with shared count → organizer wraps → keep
+individual source links accessible. Never claim the products were ordered.
+The local `/demo/contributions` page is still the original one-gift UI fixture;
+this change adds the real backend basket support for Ally's buying screen.
+
+Shared changes needing Dev 2 review before the team's normal deployment:
+optional `items` arrays on selections/revisions (old rows remain schema-valid),
+shared snapshot validator, bounded selection mutation, item-aware revision
+comparison and invalidation. No new service or migration job. No backend was
+deployed by this change. Two-user browser acceptance awaits the buying-screen
+integration; offline tests do not establish deployed/browser success.
+
+
+Verification for the multi-gift change: frontend and Convex TypeScript checks;
+full offline Vitest suite; dedicated gift-box integration coverage for totals,
+unknown/invalid prices, separately observed shipping, same-total item changes,
+second-item price changes at approve/contribute/wrap, caps, authorization,
+idempotency, empty-box clearing, invalidation, frozen payment state, legacy rows
+and the 12-item bound. No paid provider calls or live deployment tests.

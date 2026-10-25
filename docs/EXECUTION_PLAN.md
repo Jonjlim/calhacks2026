@@ -92,6 +92,8 @@ Each milestone is demoable on its own. Do them in order; M2 and M3 can overlap o
 
 **Done when:** two people add memories on the map and see each other's published memories and cursors live, and a pasted conversation stays visible only to its owner.
 
+**Status (2026-10-24):** a first version runs in the live room. “Open the gift map” glides from the garden to a `map` stage in the shared world canvas (`components/world/room/GiftRings.tsx`, layout in `lib/map/rings.ts`). It shows published clues on the outer ring, the jar groups (Loves, Wishes, Moments) as interim themes, and recommended listings placed between the themes they cite. Clicking empty sky adds a memory or wish. Dragging a gift toward or away from the present casts or clears a vote, and dropping it on the present selects it (organizer) or votes for it. Not done yet: cursors on the map, private items with an “only you” marker, and votes on memories and themes.
+
 ### M3 — Themes and gifts on the map
 
 **Owners:** Dev 3 (theme grouping, council wiring), Dev 4 (listings placed by theme).
@@ -180,7 +182,7 @@ If C3 slips, ship M5 with listings on the inner ring sorted by score and no them
 
 The team should settle these before M2 starts:
 
-1. **Shared photos.** Today a dropped photo is private and only its reviewed clues are shared. Should a contributor be able to share the photo itself as a polaroid node? That is a new consent step and needs a [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md) change first.
+1. ~~**Shared photos.**~~ Decided (D20): photos added on the map are shared with the whole room; AI guesses from them stay private until published. See [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md).
 2. **Theme confirmation.** Do themes appear as soon as the council suggests them, or after one tap to accept?
 3. **The council characters.** Do the five robots appear on the map next to the node they are working on, or only in the lobby?
 4. **Chat.** The plan has no separate chat panel: messages are nodes and the council speaks in one notes line. Confirm, or keep a collapsible chat.

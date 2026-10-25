@@ -30,6 +30,8 @@ Phase 1 is complete. Phase 2 moves the whole room onto the gift map: lobby in fr
 | MAP-018 | Retire the tower, Backstage drawer, Gifts drawer, `/map` page, and arrange view from navigation; delete after two clean demo runs | Dev 1 | M6 | MAP-015 | No link reaches them; tests updated |
 | MAP-019 | Privacy retest on the map: private items, caps, themes, signals | Dev 2 | M6 | MAP-015 | [DEV2_PRIVACY_RETEST.md](DEV2_PRIVACY_RETEST.md) rerun and updated |
 | MAP-020 | Demo rehearsal twice from a cold start; backup recording | Everyone | M6 | MAP-018 | Script in [EXECUTION_PLAN.md](EXECUTION_PLAN.md) runs twice without a rebuild |
+| MAP-021 | Replace the `Gift idea: ` text prefix with a `gift_idea` clue kind (schema, validators, contracts, research query) | Dev 2 + Dev 3 | M3 | — | Ideas keep working on the map; no prefix parsing left |
+| MAP-022 | Quiet map: memories rest as face dots by their theme and fan out on click or zoom; hover previews; one attached card per node with a ⋯ menu; “Why?” on any gift; top six gifts plus “+N more”; council tools live at the present (one suggested next step under it, all tools when it is clicked); on the map, room settings fold into an invite button and one ⋯ menu, and the phase bar becomes a status line | Dev 3 | M5 | MAP-016 | Built on `dev3/rings-prototype`; Dev 1 to review the map-stage header and bottom bar |
 
 Open decisions that block specific tasks are listed in [EXECUTION_PLAN.md](EXECUTION_PLAN.md#open-decisions): shared photos (MAP-004), theme confirmation (MAP-008), council characters on the map (MAP-010), chat (MAP-006), and deployments (MAP-020).
 

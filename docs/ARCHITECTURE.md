@@ -6,6 +6,14 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D22 — Model screen for Google Trends ideas (2026-10-24)
+
+Related Google searches include news, scores and lookups ("hiking deaths", "tennis results"). After a trend run succeeds, `convex/research/trendScreen.ts` sends up to 40 candidate phrases and the seed term to the **existing** configurable model adapter (Dev 3's `LLM_*` settings, `extractor` role, Zod-validated). The model only labels each phrase `product`, `style`, `experience` or `not_gift`. It cannot add or reword searches: only exact phrases from the scraped data are kept, and the deterministic news/lookup floor still applies on top. If the model is unset, fails or returns invalid JSON, the word filter is used instead; each stored sample records which (`screen: "model" | "words"`). `TREND_AI_SCREEN=off` disables the call. Cost: one model call per completed trend lookup. No new provider, SDK, table or service; Dev 3 owns the adapter and should review the prompt. When a check yields nothing, the map says why (`emptyTrendNote`) instead of staying silent.
+
+### D20 — Room photos are shared with the room (2026-10-24)
+
+Photos added on the gift map are visible to every room member. This changes the P0 rule that uploaded photos were owner-only and deleted after reading, for photos added on the map only. The private read is unchanged: each photo is uploaded twice, a shared copy in `roomPhotos` (`convex/photos.ts`) and a private copy that the extractor reads once and deletes. AI guesses from the photo stay private until published. Shared copies use the same upload grants, type and size checks as evidence uploads, are kept by the stale-upload sweep, cannot be claimed by the read-once pipeline, can be deleted only by their uploader, and are purged with the room. Safeguards and wording: [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Decided by the team lead on request; owners: Dev 3 (map, photos), Dev 2 (media hardening, review requested).
+
 ### D19 — Map-first room (2026-10-24)
 
 The gift map becomes the room. The app opens in a lobby in front of the present (the garden view); when the organizer starts the room, the camera zooms out and the map opens around the present, which becomes the box at its center. The tower step, the Backstage drawer, the Gifts drawer, the separate `/room/[id]/map` page, and the React Flow arrange view leave the main path. Imports, photos, research, votes, selection, and approvals all happen on the map.
@@ -447,3 +455,46 @@ reliability or platform-wide trends. No new product
 source, AI provider or database is added. The fixed Stripe adapter additionally
 supports canceling a zero-capture manual hold, per current official API docs;
 actual hosted-Checkout hold cancellation remains **unverified live**.
+
+
+### D20 — Explicit contribution simulation for the demo (2026-10-24)
+
+Alex chose a small simulated payment ending rather than further live refunds,
+partial captures or recovery work. Convex stores revision-bound simulation marks
+in a separate `paymentSimulations` table. Current membership, exact own shares
+and full proposal approvals are checked deterministically. Only the organizer
+can mark the demo wrapped after every simulated contribution. A revision or
+approval change invalidates displayed progress. Neither simulation nor animation
+changes Stripe attempts, real funding, proposal approvals or merchant orders.
+The UI displays “Payment simulation” and “No money charged or gift purchased.”
+No external service or secret is added. Existing sandbox primitives remain dormant.
+The reusable box component is integrated by Dev 1 into the new map, with a
+separate labelled local fixture preview for browser review. Actual shared runtime
+acceptance remains pending deployment of the additive schema/functions.
+
+### D21 — Evaluate Bitdeer as a replacement model provider (unverified)
+
+Alex requested testing Model Studio with GLM-5.3-Flash. Dev 4 adds only the
+standalone `scripts/bitdeer-check.mts` candidate-provider spike (documented in
+DEV4_BITDEER_SPIKE.md). It targets the official HTTPS inference endpoint, uses
+synthetic text and generated test images, and requires an explicit `--run` plus
+privately configured key for at most three paid calls with no retries. The
+existing app provider/adapter, deployment and environment files are unchanged.
+Bitdeer is an **unverified alternative**, not an added active LLM service. Dev 3
+must verify API parameters, application schemas, photo behavior and timing before
+switching the existing configurable provider. No new SDK, database or service is
+introduced. Offline fixture checks do not establish live model capability or
+prize eligibility.
+
+
+## Bounded multi-gift box — Alex-authorized integration
+
+Alex requested both single and multiple gifts in the buying flow. Keep one
+Convex selection and one versioned proposal per room; add optional item snapshots
+rather than a second cart/payment engine. One to twelve distinct products, one
+unit each; no optimization, merchant checkout, currency conversion or inferred
+shipping bundling. Allocation and approval operate on the combined estimate.
+Legacy single-gift fields remain first-item compatibility projections. Simulation
+continues to use the approved revision, never a client-calculated amount.
+Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
+rows remain valid without a data migration. No deployment accompanies this change.

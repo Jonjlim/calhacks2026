@@ -9,45 +9,46 @@ const giftsAt = { kit: [7.2, 3.6, -3.8], mug: [4.9, .7, .6], wheel: [5.8, -1.4, 
 const rootAt = [0, -1.8, 3];
 const trunkAt = [0, 1.1, .1];
 
-// A camera-facing plane makes island dragging feel like moving a map card.
+// Islands slide on a flat plane. Releasing closer to the box supports, farther away passes; a gift dropped on the box selects it.
 const DragContext = createContext(null);
-function DragLayer({children, onMove, onDragging, controller, onToss, onHold, onRelease, canHold, onHover}) {
+const BOX_RADIUS = 1.9, VOTE_DISTANCE = .9;
+const ringDistance = v => Math.hypot(v.x/1.8, v.z);
+function DragLayer({children, onMove, onDragging, controller, onToss, onHold, onRelease, canHold, onHover, onDropBox}) {
   const {camera, gl} = useThree();
   const controls = useRef(), drag = useRef(null), blockedClick = useRef(null);
-  const move = useRef(onMove); move.current = onMove;
-  const status = useRef(onDragging); status.current = onDragging;
-  const callbacks=useRef({});callbacks.current={onToss,onHold,onRelease,canHold,onHover};
+  const callbacks=useRef({});callbacks.current={onMove,onDragging,onToss,onHold,onRelease,canHold,onHover,onDropBox};
   const intersect = (x,y,plane) => {
     const rect=gl.domElement.getBoundingClientRect();
     const ray=new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((x-rect.left)/rect.width*2-1,-(y-rect.top)/rect.height*2+1),camera);
     return ray.ray.intersectPlane(plane,new THREE.Vector3());
   };
+  const intent=(d,at)=>{const rs=ringDistance(d.at),re=ringDistance(at);if(d.id.startsWith('gift:')&&re<BOX_RADIUS)return 'box';return re-rs<-VOTE_DISTANCE?1:re-rs>VOTE_DISTANCE?-1:0;};
   const finish = () => {
     const d=drag.current; if(!d)return;
+    const cb=callbacks.current;
     if(d.moved){
       blockedClick.current={id:d.id,until:performance.now()+400};
-      const rect=gl.domElement.getBoundingClientRect(),dx=d.lastX-d.x,dy=d.lastY-d.y;
-      const horizontal=Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.25;
-      const lane=d.lastX<rect.left+rect.width*.18?-1:d.lastX>rect.right-rect.width*.18?1:0;
-      const flick=performance.now()-d.lastTime<120&&Math.abs(d.velocity)>.7?Math.sign(d.velocity):0;
-      if(d.id!=='box'&&horizontal&&(lane||flick)){move.current?.(d.id,d.at.toArray());callbacks.current.onToss?.(d.id,lane||flick);}
+      const result=intent(d,d.last);
+      if(result==='box')cb.onDropBox?.(d.id);else if(result)cb.onToss?.(d.id,result);
+      cb.onHover?.('node');
     }
-    callbacks.current.onRelease?.();
+    cb.onMove?.(null);cb.onRelease?.();
     drag.current=null; if(controls.current)controls.current.enabled=true;
-    status.current?.(null);if(d.moved)callbacks.current.onHover?.('node');
+    cb.onDragging?.(null);
   };
   useEffect(()=>{
     const pointerMove=e=>{
       const d=drag.current;if(!d||e.pointerId!==d.pointerId)return;
       if(!d.moved&&Math.hypot(e.clientX-d.x,e.clientY-d.y)<6)return;
-      if(callbacks.current.canHold&&!callbacks.current.canHold(d.id)){finish();return;}
-      const now=performance.now();d.velocity=(e.clientX-d.lastX)/Math.max(1,now-d.lastTime);d.lastX=e.clientX;d.lastY=e.clientY;d.lastTime=now;
-      if(!d.moved)callbacks.current.onHover?.('drag');d.moved=true;e.preventDefault();status.current?.(d.id);
+      const cb=callbacks.current;
+      if(cb.canHold&&!cb.canHold(d.id)){finish();return;}
+      if(!d.moved)cb.onHover?.('drag');
+      d.moved=true;e.preventDefault();
       const point=intersect(e.clientX,e.clientY,d.plane);if(!point)return;
       const next=d.at.clone().add(point.sub(d.hit));
-      next.x=THREE.MathUtils.clamp(next.x,-9,9);next.y=THREE.MathUtils.clamp(next.y,-3,6);next.z=THREE.MathUtils.clamp(next.z,-7,5);
-      move.current?.(d.id,next.toArray());
+      const r=ringDistance(next);if(r>9.5){next.x*=9.5/r;next.z*=9.5/r;}
+      d.last=next;cb.onMove?.(d.id,next.toArray());cb.onDragging?.({id:d.id,dir:intent(d,next)});
     };
     const pointerUp=e=>{if(drag.current?.pointerId===e.pointerId)finish();};
     window.addEventListener('pointermove',pointerMove,{passive:false});
@@ -56,19 +57,19 @@ function DragLayer({children, onMove, onDragging, controller, onToss, onHold, on
   },[camera,gl]);
   const api={
     begin(id,at,event){
-      const e=event.nativeEvent??event;if(e.button!==0)return;
+      const e=event.nativeEvent??event;if(!id||e.button!==0)return;
       event.stopPropagation();event.preventDefault?.();
       if(callbacks.current.onHold?.(id)===false)return;
-      const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()),new THREE.Vector3(...at));
+      const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-at[1]);
       const hit=intersect(e.clientX,e.clientY,plane);if(!hit)return;
-      drag.current={id,at:new THREE.Vector3(...at),plane,hit,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false,lastX:e.clientX,lastY:e.clientY,lastTime:performance.now(),velocity:0};
+      drag.current={id,at:new THREE.Vector3(...at),last:new THREE.Vector3(...at),plane,hit,x:e.clientX,y:e.clientY,pointerId:e.pointerId,moved:false};
       if(controls.current)controls.current.enabled=false;
     },
     hover(mode){callbacks.current.onHover?.(drag.current?.moved?'drag':mode);},
     activate(id,fn){if(blockedClick.current?.id===id&&performance.now()<blockedClick.current.until)return;fn?.();},
   };
   controller.current=api;
-  return <DragContext.Provider value={api}>{children}<OrbitControls ref={controls} enablePan={false} enableZoom minDistance={13} maxDistance={23} minPolarAngle={.85} maxPolarAngle={1.35} minAzimuthAngle={-.3} maxAzimuthAngle={.3} target={[0,-.35,0]} enableDamping/></DragContext.Provider>;
+  return <DragContext.Provider value={api}>{children}<OrbitControls ref={controls} enablePan={false} enableZoom minDistance={18} maxDistance={34} minPolarAngle={.2} maxPolarAngle={.85} minAzimuthAngle={-.35} maxAzimuthAngle={.35} target={[0,-1,1.1]} enableDamping/></DragContext.Provider>;
 }
 function DragLabel({id,at,onClick,children,controller,...props}) {
   const context=useContext(DragContext);
@@ -168,11 +169,16 @@ function StarField({reduce}) {
 }
 const models={You:'curious',Jon:'explorer',Ally:'kind'};
 const stop=e=>e.stopPropagation();
-// Invisible backdrop far behind the islands: a click on empty sky reports a point on the mid-depth plane.
+export const RINGS={input:8.2,theme:5.5,gift:3.2};
+export const SX=1.8; // rings are stretched sideways to fill a wide stage
+// Invisible floor under the rings: a click on empty space reports where it landed on the map plane.
 function Backdrop({onEmpty,hover}) {
-  const ref=useRef();const {camera}=useThree();
-  useEffect(()=>{ref.current?.lookAt(camera.position);},[camera]);
-  return <mesh ref={ref} position={[0,.4,-9]} onPointerOver={()=>hover?.('empty')} onPointerMove={()=>hover?.('empty')} onClick={e=>{if(e.delta>5)return;e.stopPropagation();const n=camera.getWorldDirection(new THREE.Vector3());const p=e.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(n,new THREE.Vector3(0,.6,0)),new THREE.Vector3());if(!p)return;onEmpty?.([THREE.MathUtils.clamp(p.x,-8.5,8.5),THREE.MathUtils.clamp(p.y,-2.5,5.5),THREE.MathUtils.clamp(p.z,-6,4.5)]);}}><planeGeometry args={[120,70]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/></mesh>;
+  return <mesh rotation={[-Math.PI/2,0,0]} position={[0,-1.2,0]} onPointerOver={()=>hover?.('empty')} onPointerMove={()=>hover?.('empty')} onClick={e=>{if(e.delta>5)return;e.stopPropagation();const p=e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),0),new THREE.Vector3());if(p)onEmpty?.([p.x,0,p.z]);}}><planeGeometry args={[80,80]}/><meshBasicMaterial transparent opacity={0} depthWrite={false}/></mesh>;
+}
+function Ring({r,color,glow,label,reduce}) {
+  const m=useRef();
+  useFrame(({clock})=>{if(m.current)m.current.material.opacity=glow?(reduce?.7:.45+Math.sin(clock.elapsedTime*5)*.25):.22;});
+  return <group><mesh ref={m} rotation={[-Math.PI/2,0,0]} scale={[1.8,1,1]} position={[0,-.72,0]}><ringGeometry args={[r-(glow?.07:.03),r+(glow?.07:.03),160]}/><meshBasicMaterial color={glow??color} transparent opacity={.22} depthWrite={false}/></mesh>{label&&<Html position={[r*1.8*Math.cos(.35),-.7,r*Math.sin(.35)]} center zIndexRange={[5,0]}><span className="ring-label">{label}</span></Html>}</group>;
 }
 // One visual token per node: the face is the content itself; selecting it blooms round actions underneath.
 function Token({controller,id,at,type,color,selected,onSelect,face,caption,actions=[],badges,label,editing}) {
@@ -184,29 +190,35 @@ function Token({controller,id,at,type,color,selected,onSelect,face,caption,actio
     {selected&&actions.length>0&&<div className="tok-actions">{actions.map((a,i)=><button key={a.label} style={{'--i':i}} className={'tok-act'+(a.tone?' '+a.tone:'')} aria-pressed={a.on} disabled={a.disabled} onClick={e=>{e.stopPropagation();a.run();}} aria-label={a.label}><span aria-hidden>{a.icon}</span><small>{a.label}</small></button>)}</div>}
   </div>;
 }
-export function SkyTree({items=[],gifts=[],products,art,rank,excluded={},vibe,growing,reduce,layout={},selectedGift,approved,boxInfo,selectedKey,onSelect,actionsFor,editor,composer,onEmpty,onHover,onMove,onResetLayout,onToss,onHold,onRelease,canHold,signals={},holds={},pulses={},viewers={},votes={},colors={}}) {
+export function SkyTree({items=[],themes=[],gifts=[],products,art,rank,excluded={},growing,reduce,selectedGift,approved,boxInfo,selectedKey,onSelect,actionsFor,editor,overlays=[],onEmpty,onHover,onToss,onDropBox,onHold,onRelease,canHold,signals={},holds={},pulses={},viewers={},votes={},colors={},why=null,stage=0}) {
   const controller=useRef(null);
-  const [dragging,setDragging]=useState(null);
-  const boxAt=layout.box??rootAt;
-  const itemAt=Object.fromEntries(items.map(it=>[it.key,layout[it.key]??it.at]));
-  const giftAt=Object.fromEntries(gifts.map(id=>{const at=id==='mug'&&vibe?[3.8,1.35,.3]:giftsAt[id];return [id,layout['gift:'+id]??[at[0],at[1]+.28*(signals['gift:'+id]??0)+.13*(signals['memory:'+products[id].memory]??0),at[2]]];}));
-  const sources=id=>['memory:'+products[id].memory,...(id==='mug'?['memory:pottery']:[])].filter(k=>itemAt[k]);
+  const [dragging,setDragging]=useState(null), [dragAt,setDragAt]=useState(null);
+  const onMove=(id,at)=>setDragAt(id?{id,at}:null);
+  const place=(key,at)=>dragAt?.id===key?dragAt.at:at;
+  const themeAt=Object.fromEntries(themes.map(t=>[t.key,place(t.key,t.at)]));
+  const itemAt=Object.fromEntries(items.map(it=>[it.key,place(it.key,it.at)]));
+  const giftAt=Object.fromEntries(gifts.map(g=>[g.id,place('gift:'+g.id,g.at)]));
   const glowFor=key=>{const p=pulses[key];if(p)return {color:p.value>0?SUPPORT:PASS,strong:true};const s=signals[key]??0;return s>0?{color:SUPPORT}:s<0?{color:PASS}:null;};
-  const lit=(src,id)=>selectedKey==='gift:'+id||selectedKey===src;
+  const lit=key=>why?.has(key);
+  const dim=key=>why&&!why.has(key);
   const badges=key=><>{votes[key]?.length>0&&<span className="tok-votes">{votes[key].map(v=><i key={v.name} className={v.value>0?'yes':'pass'} style={{'--who':colors[v.name]}} title={`${v.name} ${v.value>0?'feels like Maya':'passed'}`}>{v.value>0?'♥':'✕'}</i>)}</span>}{(viewers[key]?.length>0||holds[key])&&<span className="tok-viewers">{(viewers[key]??[holds[key]]).map(n=><i key={n} style={{'--who':colors[n]}} title={`${n} is here`}>{n[0]}</i>)}</span>}</>;
-  const token=(key,type,at,face,label,color)=>{const sel=selectedKey===key,info=sel?actionsFor?.(key):null;return <Html position={type==='gift'?[0,-.95,1]:[0,-1.05,1]} center zIndexRange={sel?[90,80]:[30,0]}><Token controller={controller} id={key} at={at} type={type} color={color} selected={sel} onSelect={onSelect} face={editor?.key===key?editor.node:face} editing={editor?.key===key} caption={info?.caption} actions={info?.actions} badges={badges(key)} label={label}/></Html>;};
-  const faceFor=it=>it.type==='photo'?<span className="polaroid"><img src={it.image} alt=""/>{it.text&&<em>{it.text}</em>}</span>:it.type==='idea'?<span className="idea"><b aria-hidden>💡</b>{it.text}</span>:<span className="bubble"><img src={`./${it.face}.png`} alt=""/><q>{it.text}</q></span>;
-  return <div className="sky-tree"><Canvas shadows dpr={[1,1.5]} camera={{position:[0,5.6,16.6],fov:44,near:.1,far:100}} gl={{antialias:true,alpha:true}} onPointerMissed={()=>onEmpty?.(null)}><fog attach="fog" args={['#373653',23,55]}/><ambientLight intensity={.9}/><hemisphereLight args={['#e3dced','#756681',.85]}/><directionalLight position={[-5,12,8]} intensity={2.2} color="#ffdfb4" castShadow shadow-mapSize={[1024,1024]}/><directionalLight position={[7,4,-6]} intensity={1.8} color="#aaa9e3"/>
+  const token=(key,type,at,face,label,color,offset=[0,-1,1])=>{const sel=selectedKey===key,info=sel?actionsFor?.(key):null;return <Html position={offset} center zIndexRange={sel?[90,80]:[30,0]}><div className={dim(key)?'tok-dim':''}><Token controller={controller} id={key} at={at} type={type} color={color} selected={sel} onSelect={onSelect} face={editor?.key===key?editor.node:face} editing={editor?.key===key} caption={info?.caption} actions={info?.actions} badges={badges(key)} label={label}/></div></Html>;};
+  const faceFor=it=>it.small?<span className="mini" title={it.text}><img src={`./${it.face}.png`} alt=""/></span>:it.type==='photo'?<span className="polaroid"><img src={it.image} alt=""/>{it.text&&<em>{it.text}</em>}</span>:it.type==='idea'?<span className="idea"><b aria-hidden>💡</b>{it.text}</span>:<span className="bubble"><img src={`./${it.face}.png`} alt=""/><q>{it.text}</q></span>;
+  const dir=dragging?.dir;
+  return <div className="sky-tree"><Canvas shadows dpr={[1,1.5]} camera={{position:[0,23,8.5],fov:38,near:.1,far:140}} gl={{antialias:true,alpha:true}} onPointerMissed={()=>onEmpty?.(null)}><fog attach="fog" args={['#373653',34,70]}/><ambientLight intensity={.95}/><hemisphereLight args={['#e3dced','#756681',.85]}/><directionalLight position={[-6,16,8]} intensity={2.1} color="#ffdfb4" castShadow shadow-mapSize={[1024,1024]}/><directionalLight position={[8,6,-8]} intensity={1.6} color="#aaa9e3"/>
     <Suspense fallback={null}>
-      <DragLayer onMove={onMove} onDragging={setDragging} controller={controller} onToss={onToss} onHold={onHold} onRelease={onRelease} canHold={canHold} onHover={onHover}><Backdrop onEmpty={onEmpty} hover={onHover}/><Clouds reduce={reduce}/><StarField reduce={reduce}/>
-      <Branch from={boxAt} to={trunkAt} reduce={reduce} warm/>
-      {selectedGift&&giftAt[selectedGift]&&<Branch from={giftAt[selectedGift]} to={boxAt} reduce={reduce} warm/>}
-      {items.map(it=>{const at=itemAt[it.key],c=colors[it.author];return <React.Fragment key={it.key}><Branch from={trunkAt} to={at} reduce={reduce} color={c}/><Island dragId={it.key} at={at} radius={it.radius??.8} reduce={reduce} top="#bdb3da" rock="#a395b8" ring={c} glow={glowFor(it.key)} pulse={pulses[it.key]} onClick={()=>onSelect(it.key)} active={selectedKey===it.key||!!holds[it.key]||growing&&it.key==='memory:pottery'}><Spirit avatar={it.model??models[it.author]??'dreamer'} position={[.3,.07,0]} rotation={[0,.25,0]} scale={it.radius>1?1:.75} active={!!pulses[it.key]||!!holds[it.key]||growing&&it.key==='memory:pottery'} reduce={reduce}/>{token(it.key,it.type,at,faceFor(it),`${it.author}'s ${it.type}`,c)}</Island></React.Fragment>;})}
-      {gifts.map((id,i)=>{const key='gift:'+id,at=giftAt[id],p=products[id];return <React.Fragment key={id}>{sources(id).map(src=><Branch key={src} from={itemAt[src]} to={at} reduce={reduce} removed={!!excluded[id]} color={colors[items.find(it=>it.key===src)?.author]} warm={vibe&&id==='mug'||lit(src,id)}/>)}<Island dragId={key} at={at} radius={id==='class'?.75:.85} delay={i*.12} reduce={reduce} muted={!!excluded[id]} glow={excluded[id]?null:glowFor(key)} pulse={pulses[key]} active={selectedGift===id||selectedKey===key||!!holds[key]} onClick={()=>onSelect(key)}><GiftProp kind={id} muted={!!excluded[id]}/>{token(key,'gift',at,<span className={'gift-pic'+(excluded[id]?' resting':'')}>{art(id)}<b>${p.price}</b>{!excluded[id]&&<i>#{rank(id)}</i>}<em>{p.title}</em></span>,p.title,'#e2b86d')}</Island></React.Fragment>;})}
-      <Island dragId="box" at={boxAt} radius={1.5} active={!!selectedGift||selectedKey==='box'} reduce={reduce} onClick={()=>onSelect('box')}><Present approved={approved} selected={selectedGift}/><Spirit avatar="curious" position={[-.9,.08,.05]} active={approved} reduce={reduce}/><Tree position={[.8,.08,-.7]} scale={1.2}/>{token('box','box',boxAt,<span className="box-chip">🎁 <b>{boxInfo}</b></span>,'Our gift box','#e2b86d')}</Island>
-      {composer&&<Html position={composer.at} center zIndexRange={[99,95]}><div onPointerDown={stop} onPointerUp={stop} onClick={stop} onPointerEnter={()=>onHover?.('node')}>{composer.node}</div></Html>}
-      {growing&&<Html position={[.2,2.3,0]} center><div className="tree-status">✦ Following this memory…</div></Html>}
+      <DragLayer onMove={onMove} onDragging={setDragging} controller={controller} onToss={onToss} onDropBox={onDropBox} onHold={onHold} onRelease={onRelease} canHold={canHold} onHover={onHover}><Backdrop onEmpty={onEmpty} hover={onHover}/><StarField reduce={reduce}/>
+      <Ring r={RINGS.input} color="#d9cfe6" label="everything shared" glow={dir===-1?PASS:null} reduce={reduce}/>
+      <Ring r={RINGS.theme} color="#bdb3da" label={themes.length?'themes':null} reduce={reduce}/>
+      <Ring r={RINGS.gift} color="#e2b86d" label={gifts.length?'gift ideas':null} glow={dir===1?SUPPORT:null} reduce={reduce}/>
+      <Ring r={BOX_RADIUS} color="#e2b86d" glow={dir==='box'?'#ffd98a':null} reduce={reduce}/>
+      {items.map(it=>{const at=itemAt[it.key],c=colors[it.author],t=it.theme&&themeAt[it.theme];return <React.Fragment key={it.key}>{t&&<Branch from={at} to={t} reduce={reduce} color={c} warm={lit(it.key)} removed={dim(it.key)}/>}<Island dragId={it.key} at={at} radius={it.small?.45:.75} reduce={reduce} top="#bdb3da" rock="#a395b8" ring={c} glow={glowFor(it.key)} pulse={pulses[it.key]} onClick={()=>onSelect(it.key)} active={selectedKey===it.key||!!holds[it.key]}>{!it.small&&<Spirit avatar={it.model??models[it.author]??'dreamer'} position={[.28,.07,0]} rotation={[0,.25,0]} scale={.7} active={!!pulses[it.key]||!!holds[it.key]} reduce={reduce}/>}{token(it.key,it.small?'mini':it.type,at,faceFor(it),`${it.author}'s ${it.type}`,c,it.small?[0,-.4,.7]:[0,-1,1])}</Island></React.Fragment>;})}
+      {themes.map(t=>{const at=themeAt[t.key];return <Island key={t.key} dragId={t.key} at={at} radius={1} reduce={reduce} top="#d3cbec" rock="#a99dcb" glow={glowFor(t.key)} pulse={pulses[t.key]} active={selectedKey===t.key||lit(t.key)||growing} onClick={()=>onSelect(t.key)}><Tree position={[.45,.05,-.3]} scale={.7} shade="#9db58a"/>{token(t.key,'theme',at,<span className="theme-pill"><b>{t.label}</b><small>{t.faces.map((f,i)=><img key={i} src={`./${f}.png`} alt=""/>)}<em>{t.count} shared</em></small></span>,t.label,'#bdb3da',[0,-1.05,1])}</Island>;})}
+      {gifts.map((g,i)=>{const key='gift:'+g.id,at=giftAt[g.id],p=products[g.id];return <React.Fragment key={g.id}>{g.themes.map(tk=>themeAt[tk]&&<Branch key={tk} from={themeAt[tk]} to={at} reduce={reduce} color="#e2c48d" removed={!!excluded[g.id]||g.faded||dim(key)} warm={lit(key)}/>)}<Island dragId={key} at={at} radius={.8} delay={i*.12} reduce={reduce} muted={!!excluded[g.id]||g.faded} glow={excluded[g.id]||g.faded?null:glowFor(key)} pulse={pulses[key]} active={selectedGift===g.id||selectedKey===key||!!holds[key]} onClick={()=>onSelect(key)}><GiftProp kind={g.id==='beans'?'mug':g.id} muted={!!excluded[g.id]||g.faded}/>{token(key,'gift',at,<span className={'gift-pic'+(excluded[g.id]||g.faded?' resting':'')}>{art(g.id)}<b>${p.price}</b>{!excluded[g.id]&&!g.faded&&<i>#{rank(g.id)}</i>}<em>{g.title}</em></span>,g.title,'#e2b86d',[0,-.95,1])}</Island></React.Fragment>;})}
+      {selectedGift&&giftAt[selectedGift]&&<Branch from={giftAt[selectedGift]} to={[0,0,0]} reduce={reduce} warm/>}
+      <Island at={[0,0,0]} radius={1.5} active={!!selectedGift||selectedKey==='box'} reduce={reduce} onClick={()=>onSelect('box')}><Present approved={approved} selected={selectedGift}/><Spirit avatar="curious" position={[-.9,.08,.05]} active={approved} reduce={reduce}/><Tree position={[.8,.08,-.7]} scale={1.1}/>{token('box','box',[0,0,0],<span className="box-chip">🎁 <b>{boxInfo}</b></span>,'Our gift box','#e2b86d',[0,-.9,1.4])}</Island>
+      {overlays.map(o=><Html key={o.key} position={o.at} center zIndexRange={[99,95]}><div onPointerDown={stop} onPointerUp={stop} onClick={stop} onPointerEnter={()=>onHover?.('node')}>{o.node}</div></Html>)}
       </DragLayer>
     </Suspense>
-  </Canvas>{dragging&&dragging!=="box"&&<div className="toss-zones" aria-hidden="true"><span>← Pass for me<small>release here</small></span><span>Feels like Maya →<small>release here</small></span></div>}<div className="tree-instruction">{dragging?'Release left to pass · right to support':'Click empty sky to add · click a node to act'}<span>Drag to arrange · toss left or right to vote</span></div>{onResetLayout&&<button className="tree-reset-layout" onClick={onResetLayout}>Reset layout ↺</button>}</div>;
+  </Canvas><div className="tree-instruction">{dragging?(dir==='box'?'Release to put it in the box':dir===1?'Release: ♥ feels like Maya':dir===-1?'Release: ✕ pass for now':'Toward the box supports · away passes'):stage===0?'Click empty space to add a memory, photo or idea':'Drag toward the box to support · away to pass'}<span>Click a node to act · drop a gift on the box to choose it</span></div></div>;
 }

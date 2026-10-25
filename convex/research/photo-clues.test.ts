@@ -75,7 +75,7 @@ describe("confirmed visual preferences → gift candidates", () => {
       clue("style", "Likes vintage denim"),
       clue("palette", "Likes earth tones"),
     ], [
-      item("both", "Vintage Brown Denim Jacket"), item("style", "Vintage Blue Denim Jacket"),
+      item("both", "Vintage Brown Denim Jacket"), item("style", "Vintage Denim Trucker Jacket"),
       item("neither", "Generic Gift Card"),
     ]);
     expect(results[0]?.listingId).toBe("both");
@@ -83,6 +83,13 @@ describe("confirmed visual preferences → gift candidates", () => {
     expect(results[0]?.explanation).toContain("Likes vintage denim");
     expect(results[0]?.explanation).toContain("Likes earth tones");
     expect(results.find(row => row.listingId === "style")?.publishedClueIds).toEqual(["style"]);
+  });
+
+  it("shows one colour of a jacket: the colour that fits the clues", () => {
+    const results = rank([clue("style", "Likes vintage denim"), clue("palette", "Likes earth tones")], [
+      item("blue", "Vintage Blue Denim Jacket"), item("brown", "Vintage Brown Denim Jacket"),
+    ]);
+    expect(results.map(row => row.listingId)).toEqual(["brown"]);
   });
 
   it.each([

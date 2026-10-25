@@ -1,13 +1,15 @@
 import * as THREE from "three";
 import { INTRO_TIMES } from "@/components/intro/introTimeline";
+import { isWideLayout, WORLD_SHARE } from "@/components/unwrap/parchmentLayout";
 import { platformTop } from "./props/Stonework";
 import { type CameraPose, GIFT_SPOT, type Vec3 } from "./sceneConfig";
 
 /**
- * Authored live-camera tour, from the storybook framing to the landing view.
- * Position and look-at each follow a centripetal Catmull-Rom spline; time maps
- * onto the knots through a monotone cubic so the camera eases out of rest,
- * never stalls at a knot, and eases into the landing pose.
+ * Authored live-camera approach, from the storybook framing to the close-up
+ * on the present where the opening ends. Position and look-at each follow a
+ * centripetal Catmull-Rom spline; time maps onto the knots through a monotone
+ * cubic so the camera eases out of rest, never stalls at a knot, and comes to
+ * a complete stop on the close-up.
  */
 
 interface Key {
@@ -20,21 +22,44 @@ interface Key {
 /** Camera starts moving a beat after the painting begins to fade. */
 export const TOUR_START = INTRO_TIMES.enteringWorld + 0.3;
 
-function tourKeys(): Key[] {
+/**
+ * The opening's resting view: close on the present, its bow and the hanging
+ * "Begin" tag, with the tower, spirits and distant islands framing it.
+ * Authored at ~16:9; narrower windows step back along the same line of sight
+ * so the box and tag never clip.
+ */
+export function giftClosePose(width: number, height: number): CameraPose {
+  const aspect = width / Math.max(1, height);
   const gy = platformTop() + 1.1;
-  const gift: Vec3 = [GIFT_SPOT.x, gy, GIFT_SPOT.z];
-  return [
-    // Shot A — the push into the painting ends close on the present...
-    { t: INTRO_TIMES.giftReveal, position: [2.6, gy + 1.2, 5.6], target: gift, fov: 34 },
-    // ...and pulls back to show the platform, parcels and flowers.
-    { t: 9.9, position: [4.4, gy + 2.1, 8.6], target: [0.5, gy - 0.5, -0.4], fov: 34 },
-    // Shot B — glide left across the garden, past the spirits and the tower.
-    { t: 11.0, position: [-3.2, gy + 2.4, 9.4], target: [-1.8, gy - 0.6, -1.2], fov: 36 },
-    // Shot C — rise over the tower's shoulder and look out at the wider world.
-    { t: 12.2, position: [-10.5, gy + 6.2, 6.5], target: [4, 3.5, -30], fov: 42 },
-    { t: 13.3, position: [-3.5, gy + 8.5, 19], target: [6, 1.5, -22], fov: 38 },
-  ];
+  const target: Vec3 = [GIFT_SPOT.x, gy, GIFT_SPOT.z];
+  const position: Vec3 = [2.6, gy + 1.2, 5.6];
+  const pull = Math.min(2.6, Math.max(1, Math.pow(1.75 / aspect, 0.85)));
+  return {
+    position: [target[0] + (position[0] - target[0]) * pull, target[1] + (position[1] - target[1]) * pull, target[2] + (position[2] - target[2]) * pull],
+    target,
+    fov: 34,
+    shiftX: 0,
+    shiftY: aspect < 1 ? 0.06 : 0,
+  };
 }
+
+/**
+ * The close-up the Great Gift Convergence ends on: the approved gift close-up,
+ * with the present in the left share of the screen so the gift's story can sit
+ * on the right, the same composition as the invitation.
+ */
+export function convergencePose(width: number, height: number): CameraPose {
+  const close = giftClosePose(width, height);
+  const wide = isWideLayout(width, height);
+  // Stepped back along the same line of sight so the present can rise and the gift has room above the pedestal.
+  const k = 1.38;
+  const [px, py, pz] = close.position;
+  const [tx, ty, tz] = close.target;
+  const pose = { ...close, position: [tx + (px - tx) * k, ty + (py - ty) * k, tz + (pz - tz) * k] as [number, number, number] };
+  return { ...pose, shiftX: wide ? -(1 - WORLD_SHARE) / 2 : 0, shiftY: wide ? 0 : -0.14 };
+}
+
+const lerp3 = (a: Vec3, b: Vec3, k: number): Vec3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
 function monotoneTangents(xs: number[], ys: number[]): number[] {
   const n = xs.length;
@@ -78,9 +103,12 @@ export class CameraTour {
   constructor(start: CameraPose, end: CameraPose) {
     this.start = start;
     this.end = end;
+    // Most of the distance is covered by the time the camera starts settling;
+    // the last few percent are a long, gentle ease into the close-up.
+    const near = 0.93;
     const keys: Key[] = [
       { t: TOUR_START, position: start.position, target: start.target, fov: start.fov },
-      ...tourKeys(),
+      { t: INTRO_TIMES.cameraSettling, position: lerp3(start.position, end.position, near), target: lerp3(start.target, end.target, near), fov: start.fov + (end.fov - start.fov) * near },
       { t: INTRO_TIMES.end, position: end.position, target: end.target, fov: end.fov },
     ];
     this.positions = new THREE.CatmullRomCurve3(keys.map((k) => v(k.position)), false, "centripetal");
@@ -98,8 +126,7 @@ export class CameraTour {
     this.positions.getPoint(u, out.position);
     this.targets.getPoint(u, out.target);
     out.fov = hermite(this.times, this.fovs, this.fovTangents, t);
-    // The editorial offset only arrives as the camera returns to the landing view.
-    const k = THREE.MathUtils.smoothstep(t, INTRO_TIMES.returningToLanding, INTRO_TIMES.end);
+    const k = THREE.MathUtils.smoothstep(t, TOUR_START, INTRO_TIMES.end);
     out.shiftX = THREE.MathUtils.lerp(this.start.shiftX, this.end.shiftX, k);
     out.shiftY = THREE.MathUtils.lerp(this.start.shiftY, this.end.shiftY, k);
   }

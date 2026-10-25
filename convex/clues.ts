@@ -13,6 +13,7 @@ import { requireMember } from "./lib/auth";
 import { withdrawEvidenceSource } from "./lib/evidence";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
+import { scheduleAutoTrend } from "./research/trendJobs";
 import { err, memberError, ok } from "./lib/result";
 import * as V from "./validators";
 
@@ -371,6 +372,7 @@ export const publishClue = mutation({
     });
     await ctx.db.patch(clue._id, { status: "published" });
     await bumpKnowledgeRevision(ctx, clue.roomId);
+    await scheduleAutoTrend(ctx, publishedId);
     return ok((await ctx.db.get(publishedId))!);
   },
 });
@@ -428,6 +430,7 @@ export const upsertManualPreference = mutation({
       publishedAt: Date.now(),
     });
     await bumpKnowledgeRevision(ctx, args.roomId);
+    await scheduleAutoTrend(ctx, id);
     return ok((await ctx.db.get(id))!);
   },
 });

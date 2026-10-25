@@ -20,7 +20,8 @@ The map is a shared view, so every node on it must pass the same checks as the d
 | On the map | Who sees it |
 | --- | --- |
 | Published clues (memories, messages, ideas the contributor confirmed) | Room members |
-| Pasted conversations, imported exports, photos, screenshots, and their proposed clues | Only the contributor, marked “only you,” until they publish a clue. The raw item never reaches other members. |
+| Photos a member adds on the map | Room members (D20). The member sees a clear “everyone in the room will see these photos” notice before choosing them. |
+| Pasted conversations, imported exports, screenshots, and every proposed clue (including what the AI guesses from a photo) | Only the contributor until they publish a clue. The raw text never reaches other members. |
 | Suggested themes and their clue lists | Room members. A theme only lists published clue IDs. |
 | Direction signals and listing votes | Room members, attributed |
 | Listings and recommendation explanations | Room members |
@@ -29,7 +30,15 @@ The map is a shared view, so every node on it must pass the same checks as the d
 
 - The map projection (`getMapState`) is membership-scoped and returns private items only to their owner. A client never filters out another member’s private data; the server never sends it.
 - Click-to-add messages and ideas are published clues and need an explicit confirm, as they do today.
-- A dropped photo keeps the P0 rule: owner-only, location data stripped, deleted after reading. Showing the photo itself to the room would be a new consent step. That is an open decision in [EXECUTION_PLAN.md](EXECUTION_PLAN.md) and needs a change to this document before any code shares an image.
+- **Room photos (D20, 2026-10-24).** A photo added on the gift map is shared with everyone in the room. Adding it is the consent: the add box says so before a file is chosen. Safeguards:
+  - Two separate uploads per photo: the shared copy (`roomPhotos`) and a private copy that the extractor reads once and deletes, as before. The shared copy can never enter the read-once pipeline, and the stale-upload sweep keeps it.
+  - Location data (EXIF/GPS) is removed by re-encoding in the browser before upload. The server checks type (JPEG, PNG, WebP) and size (under 2 MB) and claims files only against the uploader's own upload grants.
+  - Only room members can list photos or get their URLs. Storage URLs are unguessable but work for anyone holding one, so they are never put in agent snapshots, gift worlds, recipient-agent tools, or logs.
+  - The recipient tap stays private: it lives on the uploader's evidence source, not on the shared photo.
+  - What the AI guesses from a photo stays private to the uploader until they publish it, exactly like pasted text.
+  - Only the uploader can delete a photo, and it disappears for everyone. Room deletion purges the files.
+  - At most 60 photos per room.
+  - Photos added through the older Backstage photo panel keep the previous rule (owner-only, deleted after reading).
 - Themes and sharpen directions come from the model. They are suggestions, are validated before insert, and never become confirmed knowledge without a person acting on them.
 
 ## Data classification

@@ -10,7 +10,16 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ### Map-first room (proposed, D19, 2026-10-24)
 
-**Status: proposed, not implemented.** Agree on these shapes at the next integration checkpoint before building MAP-007 onward ([TEAM_TASKS.md](TEAM_TASKS.md)).
+**Status (2026-10-24): partly built.** Implemented with tests (`convex/mapAi.test.ts`), differing from the sketch below as follows:
+
+- Direction signals: `mapSignals.setDirection({ roomId, targetKind: "clue" | "theme", targetId, value: 1 | -1 | 0 })` and `mapSignals.listSignals({ roomId })` → `{ targetKind, targetId, up, down, voters: { participantId, value, at }[] }[]`. Theme ids are council theme ids or the interim groups `interest | wish | moment`.
+- Themes: `agents/themes.suggestThemes({ roomId })` (model with preset fallback, needs ≥3 memories, `stale_job` if knowledge changed) and `agents/themes.listThemes({ roomId })` → `{ id, label, clueIds, source, stale }[]`. Rename, merge and dismiss are not built.
+- Sharpen: `agents/themes.sharpen({ roomId })` picks the two leading gifts from `readCatalog`, `getSharpen({ roomId })`, `answerSharpen({ sharpenId, option })` (publishes the option's clue as the answering member and bumps knowledge), `dismissSharpen({ sharpenId })`. Options carry `listingIds` instead of theme ids. Uses `AskedSlot`: no.
+- Cursors: `map.moveCursor` accepts `space: "rings"` for map-plane coordinates (x, z stored as x, y).
+- Room deletion purges all map tables, including the earlier cursor, sprout, feedback, position and idea-call tables.
+- Room photos (D20): `photos.sharePhotos({ roomId, files: { storageId }[], sourceId? })` claims 1–3 fresh uploads against the caller's upload grants; `photos.listRoomPhotos({ roomId })` → `{ id, uploaderId, url, sourceId?, clueIds, createdAt }[]` for members, where `clueIds` are published clues read from the same pictures; `photos.deletePhoto({ photoId })` is uploader-only. The client uploads a second, private copy through `importMediaEvidence` for the read-once extractor.
+
+Still proposed: theme rename/merge/dismiss, `getMapState` consolidation, and `themeIds` on recommendations (the client derives theme placement from cited clue ids).
 
 Owners: Dev 2 (tables, projection, signals), Dev 3 (theme suggestion, sharpen), Dev 4 (theme links on recommendations). Consumers: Dev 1 and Ally (map and lobby UI).
 
@@ -62,6 +71,8 @@ Rules:
 - A theme is an interpretation, not room knowledge. Recommendations may cite theme IDs only through the clue IDs they already cite: `themeIds` is derived server-side from cited clue IDs and theme `clueIds` (Dev 4).
 - Sharpen directions behave like sprouts: labelled agent ideas until research returns sourced listings for them.
 - Errors: `unauthorized`, `not_found`, `validation_failed`, `stale_job`, `refused`.
+
+Interim (built in the live map, 2026-10-24): a friend's typed **gift idea** is stored as a manual published clue of kind `interest` whose text starts with `Gift idea: ` (`GIFT_IDEA_PREFIX` in `lib/map/rings.ts`). The map shows these on the inner ring and research can use them immediately. MAP-021 replaces the prefix with a proper `gift_idea` clue kind; until then, do not rely on the prefix outside the map.
 
 Migration: additive tables for themes and signals. Existing `map.*`, `castVote`, `setFeedback`, cursor, and proposal functions keep their endpoints. `moveNode` and the arrange view leave the main path and can be removed after MAP-018.
 
@@ -573,6 +584,13 @@ interface Recommendation {
   trendSignal: number; // 0 unless sourced
   explanation: string;
   createdAt: number;
+  foundBy?: SearchOrigin; // provenance only; see "Search provenance and variety" below
+}
+
+interface SearchOrigin {
+  query: string;
+  source: "memory" | "trend" | "discovery";
+  publishedClueId?: string;
 }
 ```
 
@@ -1479,6 +1497,7 @@ interface TrendSuggestion { query: string; sourceUrl: string; signals: TrendSign
 interface TrendDiscoverySample {
   mode: "live_sample"; label: string; actor: string; build: string; providerRunId: string;
   context: TrendContext; publishedClueId: string; suggestions: TrendSuggestion[];
+  screen?: "model" | "words"; // model = LLM kept only product/style/experience searches; words = fallback filter
   evidenceSummary: { returnedRows: number; observations: number };
 }
 interface TrendDiscoveryView { latestJob: FashionDiscoveryJobView | null; sample: (TrendDiscoverySample & { jobId: string }) | null }
@@ -1602,3 +1621,223 @@ interface OrganizerCheckoutStore {
   settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
 }
 ```
+
+
+### Contributor Checkout worker port (RC-011, Dev 4 → Dev 2)
+
+Additive transport integration; no new public endpoint or schema. The organizer
+runner remains `collect` only. `runContributorCheckout(store, adapter)` requires
+`authorize` mode, reserving one contributor's frozen approved share rather than
+collecting the organizer total. Stripe manual capture is specified on the hosted
+session; returning from Checkout never establishes authorization or capture.
+
+```ts
+type ContributorCheckoutClaim = OrganizerCheckoutClaim & {
+  input: StripeCheckoutInput & { mode: "authorize" };
+};
+interface ContributorCheckoutStore {
+  claim(): Promise<StripeAdapterResult<ContributorCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+```
+
+Owner: Dev 4 transport. Consumer/implementation owner: Dev 2 durable store. No
+existing caller migrates. The store must authorize the human attempt owner,
+require the current fully approved revision and exact USD share, and persist the
+operation key plus exclusive claim before returning it. It must not reissue a
+create claim after an unresolved start without a session ID. Repeated known
+sessions use GET only. Settlement persists session/intent references and checks
+membership/current revision plus its operation fence before releasing a URL.
+A rejected/failed settlement withholds the URL and must retain enough references
+for later recovery. An open session is not an `authorized` payment attempt.
+
+The offline rehearsal injects a fake HTTP transport into the real Stripe adapter
+and exercises existing state-machine functions. Its in-memory claim store is a
+test double, not an implementation of Dev 2's durable port or webhook receipt.
+It creates no Convex records, reads no keys and calls no external service.
+
+
+### Choose a sourced discovery direction (Dev 4, Phase 2)
+
+`research/research.startResearch` accepts additive optional `discoveryQuery` with
+`trendJobId` or `fashionJobId`. Existing callers keep the first-direction behavior.
+The value must be 1–200 characters after trimming and exactly match one query in
+that current same-room discovery's suggestions/directions. Arbitrary model text,
+queries without a discovery job, empty samples with an explicit selection,
+withdrawn support, expired samples and foreign jobs are refused before research
+is created. A different selected query needs a new request key; selecting the
+first query explicitly deduplicates with the old default call.
+
+Owner: Dev 4. Consumers: Dev 1 ring actions, Dev 3 discovery planning. No schema
+migration or agent/UI changes. The existing research job stores the selected
+phrase in `brief.queryTerms`; its fingerprint binds the discovery job and query.
+This records a search direction, not a new recipient clue or popularity score.
+Show source context as “found while researching [query]”, never as proof that
+an individual returned product is trending. Dismissing an idea on the map must
+use Dev 2's agreed theme/signal semantics; this endpoint does not persist passes.
+
+
+### Trend sprouts on the gift map (Dev 4, Phase 2)
+
+`research/trendJobs.getDiscovery` adds optional `listingLinks: TrendListingLink[]`
+(`{ listingId, query, sourceUrl }`): active listings from succeeded research jobs
+bound to the current usable trend sample (fingerprint) whose shopping query is one
+of its suggestions. Membership-checked, last 10 research jobs, no schema change.
+
+On the map (`lib/map/trendIdeas.ts`, `useGiftRings`): a memory's **Look for trends**
+calls `startDiscovery`; its suggestions sprout between the theme and gift rings at that
+memory's angle, labelled by observed signal ("breakout search", "searches +N%").
+**Research this direction** calls `startResearch` with `trendJobId` + `discoveryQuery`.
+Gifts with a link say "found while researching [query]" and can open the Trends
+source; "Why this?" lights the sprout. Never a per-product trending claim. Optional
+`RoomData.trends` and `RoomActions.findTrends` / `researchTrend` / `passTrend` keep preview mode unchanged.
+
+**Several memories.** `getDiscovery` adds `samples` (newest usable sample per memory, at
+most 6; `sample` is the first). Trend jobs are no longer fenced on room
+`knowledgeRevision`: a new memory keeps other memories' ideas. A job still goes stale
+when its own memory is withdrawn or its seed changes, or the requester leaves.
+
+**Shared passes.** Additive table `trendPasses {roomId, trendJobId, query, participantId,
+createdAt}` (indexes `by_room`, `by_job_query_participant`; purged with the room).
+`research/trendJobs.setTrendPass({roomId, trendJobId, query, passed})` is a member
+mutation, one row per member per suggestion, idempotent; `passed: false` takes it back.
+The query must be one of that job's suggestions. `getDiscovery.passes:
+TrendPassSummary[]` (`{trendJobId, query, count, mine, passerNames}`). A pass fades the
+idea and shows "✕ N passed" for everyone; it never hides or deletes the idea or any memory.
+This is interim until MAP-012 direction signals cover trend ideas.
+
+**Automatic lookup.** After `publishClue`, `upsertManualPreference` and `map.plantSprout`
+insert a memory, they call `scheduleAutoTrend` (one line each in Dev 2/Dev 3 files).
+`internal.research.trendJobs.autoDiscover` then runs the normal `startDiscovery` path
+with key `auto:<clueId>` for a confirmed interest/wish with a safe seed. At most
+`AUTO_TRENDS_PER_ROOM = 3` automatic jobs per room (about $0.60 worst case); cached
+24 h samples and open jobs are reused and do not count. Clients cannot use `auto:` keys.
+Set Convex env `TREND_AUTO_DISCOVERY=off` to disable.
+
+**Gift-shaped filter.** `isGiftShapedQuery` (`lib/research/trends.ts`) keeps a related
+search only if it names a product, a style, or a bookable experience (tickets, classes,
+lessons, workshops, tours, tastings) and is not news, an event result, or a lookup
+(deaths, accidents, results, schedules, tournaments, how to, near me, names…). Years are
+dropped unless paired with an experience word. The filter also applies when reading
+stored samples, so older samples never resurface filtered queries, and
+`startResearch`/`setTrendPass` refuse them.
+
+**Buyer agent.** `BuyerSnapshot.trendDiscovery?: TrendAgentContext`
+(`{mode, label, ideas: {publishedClueId, query, signal, retrievedAt}[]}`) lists current
+ideas minus any with a pass; it participates in the buyer input version. The prompt lets
+the agent put one supplied query first in a search or mention one idea as a related
+search, never as a preference, popularity claim or invented query.
+
+`emptyTrendNote(sample)` in `lib/map/trendIdeas.ts` returns a plain sentence when a
+finished sample has no suggestions: "no related US searches" when Google returned no
+observations, or "none for something to buy or book" when every related search was
+news or a lookup. Null when ideas exist. The map shows it in the memory's caption.
+Pure; reads only fields already in `TrendDiscoverySample`.
+
+### Shared contribution simulation (Dev 4, demo only)
+
+Alex selected a visibly labelled simulation instead of expanding live payment
+orchestration. Convex owns shared demo state in `paymentSimulations`, separate
+from Stripe attempts and proposal status. No payment/provider API is called.
+
+```ts
+interface ContributionSimulationView {
+  mode: "simulation";
+  revisionId: string | null;
+  status: "no_proposal" | "waiting_for_approvals" | "ready" | "collecting" | "complete" | "wrapped" | "unavailable";
+  payerCount: number;
+  completedCount: number;
+  myShareMinor: number;
+  myCompleted: boolean;
+  canSimulate: boolean;
+  canWrap: boolean;
+}
+```
+
+`payments.simulation.getState({roomId})` is a member query. `simulateContribution`
+and `wrapGift` take `{roomId, revisionId}` and return `Result<ContributionSimulationView>`.
+A contributor can simulate only their own positive share on the current fully
+approved pledged revision; only the organizer can wrap, after every payer has
+simulated. Duplicate clicks are idempotent. Revision changes or changed approval
+fingerprints hide prior progress. Zero shares require no simulated payment.
+The view shows only group counts and the caller's own share, never private caps.
+
+Additive table: `paymentSimulations {roomId, revisionId, approvalFingerprint,
+completedParticipantIds, wrappedAt?, createdAt}` with room/revision indexes.
+The fingerprint binds current approval IDs, participant IDs, statuses and update
+times. Room purge deletes this table. It contains no card/provider objects,
+Checkout URLs or real payment statuses. Wrapping affects only this demo row,
+never `proposalRevisions`, `paymentAttempts`, `giftWorlds` or merchant orders.
+Amounts remain the current proposal estimate; unresolved tax/shipping must stay
+visible. UI always says simulation and no money/order. No live-payment action,
+refund/recovery expansion, deployment or environment change is part of this work.
+
+Owners/consumers: Dev 4 backend + reusable payment component; Dev 1 mounts it in
+the new ring map's box. Small shared edits: table fragment import/spread and purge
+entry only. This does not add features to the retired tower/drawer paths.
+
+
+### MAP-011 pure projection seam (Dev 4)
+
+`recommendationThemeIds({roomId, knowledgeRevision, recommendation, themes, clues})`
+consumes the proposed `MapTheme` shape above against mocks, returning sorted unique
+IDs. It links only current same-room suggested/accepted themes, whose clue IDs
+are all still active, through the recommendation's own active published-clue
+citations. Dismissed/stale/foreign themes and withdrawn/foreign citations do not
+link. No label matching or model-provided theme references are trusted. No theme
+schema, signal mutation, ranking change or new map query is implemented here.
+Dev 2 can use the helper in MAP-007 once the proposed contract is accepted.
+
+
+### Gift box with one or multiple gifts (Alex-authorized integration)
+
+Owners: Dev 2 selection/proposal state, Dev 4 simulation integration. Consumer:
+Dev 1 buying screen. This is a bounded basket, not an optimizer or merchant order.
+
+`proposals.setGiftBox({roomId, listingIds})` atomically replaces the box with
+1–12 distinct same-room USD listings (one unit each). An empty array clears it.
+Only the organizer may change it; payment-frozen proposals remain frozen.
+Input order is retained for display; an identical ordered box is idempotent.
+`selectGift` remains the backward-compatible replace-with-one operation.
+`getSelection` returns the existing selection plus optional `items`.
+
+```ts
+interface GiftBoxItem {
+  listingId: string;
+  quantity: 1;
+  listingSnapshot: Pick<ProductListing,
+    "title" | "sourceUrl" | "priceMinor" | "priceStatus" | "retrievedAt"
+    | "currency" | "shippingMinor" | "shippingStatus" | "imageUrl">;
+}
+// Additive fields on GiftSelection and ProposalRevision:
+// items?: GiftBoxItem[];
+```
+
+When present, `items` is the complete box, including the first item. Legacy
+`listingId`, `quantity` and selection `listingSnapshot` describe only that first
+item for old clients; they must never be used as the multi-gift total. Legacy
+rows without `items` are interpreted as one gift. No existing-data migration is
+required. New revisions freeze every item's observed snapshot, combined estimate,
+shares and conditions. Sum each observed price and separately observed shipping;
+unknown shipping/tax remain explicitly excluded, with no inferred combined
+shipping discount. Unknown/nonpositive/unsafe prices, unsafe totals, unavailable
+or invalid items make the whole proposal infeasible. No partial box funding.
+
+Any material item snapshot change (including a second item's price or shipping),
+box membership/order change, or changed shares supersedes the revision and its
+approvals. Invalidating any selected item clears the entire box and its revision,
+matching the existing conservative invalidation behavior. The organizer can then
+reselect the remaining valid items. Simulation follows the combined revision and
+therefore resets with it; a real charge/order is never created. Each item keeps
+its own source link. Dev 1 must render `revision.items` for approval and
+`selection.items` for the current box, with the one-item fallback for old rows.
+
+
+### Search provenance and variety (Dev 4, Phase 2)
+
+Owner: Dev 4. Consumers: Dev 1 (gift captions, "Why this?" MAP-016), Dev 3 (catalog reads). Additive: one optional `Recommendation.foundBy` field; no schema, endpoint or validator change. Migration: none.
+
+- **`foundBy`.** Each research pool comes from exactly one provider search (the first query term), so every recommendation in it carries that `query`. `source: "memory"` names the active published clue whose search phrase it was, or, for a query written around a memory (the buyer agent writes "hiking gifts"), the most specific clue whose every search word the query contains, ignoring generic words like "gifts" or "ideas"; `"trend"` names the chosen Google Trends suggestion and its clue; `"discovery"` is any other sourced direction, or a memory since withdrawn (no `publishedClueId` then). It says how a listing was **found**. It is never a clue citation: `publishedClueIds`, scores and exclusions are unchanged, and the buyer agent's citation rules still read only `publishedClueIds`.
+- **Explanation.** A listing that no clue matches, found by a memory search, now reads `Found by searching "hiking" from "we hiked mt hood". No published clue matches this directly`. Matched listings and trend finds keep their existing wording (the map already captions trend finds).
+- **Variety.** `rankListings` keeps the best-ranked listing of each product and at most `MAX_PER_SELLER` (3) per seller before other sellers' products. A product is its title before any `|`, without size, fit, colour, pure-number or catalog-code words; titles match when equal or when one extends the other by at least three leading words. Men's and women's versions stay separate. A seller's further distinct products fill only slots nobody else can. This changes which rows are shown and their order, never a score or citation. It applies everywhere ranking runs (room catalog, council, agents).
+- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`) drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.

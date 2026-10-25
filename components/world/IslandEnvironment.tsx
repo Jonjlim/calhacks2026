@@ -95,14 +95,15 @@ export function IslandEnvironment({ animate, quality, showPlayers = true }: { an
       ))}
       <Mushrooms spots={MUSHROOMS} seed={9} />
 
-      <Lantern x={1.3} z={1.7} rotationY={-0.6} light animate={animate} />
+      {/* Beside the pedestal rather than in front of it, so it never stands between the camera and the present. */}
+      <Lantern x={3.2} z={0.25} rotationY={-1.1} light animate={animate} />
       <Lantern x={3.6} z={4.25} rotationY={2.6} animate={animate} />
       <Lantern x={-1.7} z={1.35} rotationY={0.4} animate={animate} />
 
       <FlowerMeadow count={quality === "high" ? 420 : 220} />
       <MeadowGrass count={quality === "high" ? 460 : 220} />
 
-      {showPlayers && <AvatarCast animate={animate} />}
+      <AvatarCast animate={animate} cast={showPlayers} />
     </group>
   );
 }

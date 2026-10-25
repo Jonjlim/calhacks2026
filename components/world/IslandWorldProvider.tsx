@@ -123,7 +123,7 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
     <WorldContext.Provider value={value}>
       {visible && <div className="fixed inset-0 z-0 world-fallback" aria-hidden="true">
         {webgl && <ErrorBoundary key={retry} fallback={<div className="world-fallback h-full" />}>
-          <div className={`h-full transition-opacity duration-[1400ms] ${ready ? "opacity-100" : "opacity-0"} ${phase !== "landingReady" || unwrap !== "landing" ? "pointer-events-none" : ""}`}>
+          <div className={`h-full transition-opacity duration-[1400ms] ${ready ? "opacity-100" : "opacity-0"} ${phase !== "landingReady" ? "pointer-events-none" : ""}`}>
             <WorldCanvas reducedMotion={reducedMotion} soundEnabled={soundEnabled} painterlyStrength={painterlyStrength} introActive={phase !== "landingReady"} onReady={markReady} council={activeCouncil} roomActive={!!roomId} onAssetStatus={assetStatus} />
           </div>
         </ErrorBoundary>}

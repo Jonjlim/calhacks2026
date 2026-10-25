@@ -2,7 +2,9 @@
  * Photo and screenshot uploads. Owner: Dev 2 (BE-018); first implementation by Dev 3 to unblock AI-018.
  *
  * Files are owner-only, validated on arrival, read once by the extractor, and
- * deleted afterwards (or on failure, timeout, or withdrawal). EXIF/GPS is
+ * deleted afterwards (or on failure, timeout, or withdrawal). Photos shared with
+ * the room on the gift map are separate uploads in `roomPhotos` (D20, convex/photos.ts)
+ * and can never be claimed here. EXIF/GPS is
  * stripped in the browser by re-encoding; this endpoint never trusts that.
  *
  * Convex cannot bind an upload URL to the storage id it produces, so every
@@ -126,7 +128,9 @@ export const importMediaEvidence = mutation({
               .withIndex("by_storage", (q) => q.eq("storageId", file.storageId))
               .first()
           : null;
-        return { ...file, meta, claimed: claimed !== null };
+        // A shared room photo must never enter the read-once pipeline, which deletes its file.
+        const shared = meta ? await ctx.db.query("roomPhotos").withIndex("by_storage", (q) => q.eq("storageId", file.storageId)).first() : null;
+        return { ...file, meta, claimed: claimed !== null || shared !== null };
       }),
     );
 

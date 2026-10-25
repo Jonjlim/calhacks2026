@@ -43,6 +43,7 @@ export function toParticipant(d: Doc<"participants">): Participant {
 
 export function toRevision(d: Doc<"proposalRevisions">): ProposalRevision {
   return {
+    items: d.items,
     id: d._id,
     roomId: d.roomId,
     selectionId: d.selectionId,
