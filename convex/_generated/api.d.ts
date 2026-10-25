@@ -40,6 +40,7 @@ import type * as giftTwin_lib from "../giftTwin/lib.js";
 import type * as giftTwin_purge from "../giftTwin/purge.js";
 import type * as giftTwin_review from "../giftTwin/review.js";
 import type * as giftTwin_room from "../giftTwin/room.js";
+import type * as giftTwin_text from "../giftTwin/text.js";
 import type * as giftTwin_vote from "../giftTwin/vote.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
@@ -125,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   "giftTwin/purge": typeof giftTwin_purge;
   "giftTwin/review": typeof giftTwin_review;
   "giftTwin/room": typeof giftTwin_room;
+  "giftTwin/text": typeof giftTwin_text;
   "giftTwin/vote": typeof giftTwin_vote;
   http: typeof http;
   jobs: typeof jobs;

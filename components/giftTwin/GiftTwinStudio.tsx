@@ -97,7 +97,7 @@ function vaultLine(twin: AgentCollaboratorView, recipientName: string): string {
 
 function vaultHint(twin: AgentCollaboratorView, recipientName: string): string {
   const vault = twin.vault;
-  if (!vault) return `On ${recipientName}'s Mac: npm run twin -- share`;
+  if (!vault) return `${recipientName} can choose and share messages on their recipient page.`;
   if (vault.status === "ready")
     return `Add ideas to the room and the twin votes on them until ${vault.expiresAt ? new Date(vault.expiresAt).toLocaleString() : "the vault closes"}. Nothing to approve; the gift agent adds what matters.`;
   if (vault.status === "expired") return "The twin's notes and votes stay in the room. It can be shared again to vote on newer ideas.";
@@ -118,11 +118,17 @@ function ConnectCard({
   const createPairing = useResultAction(useAction(api.giftTwin.room.createPairing));
   const revoke = useResultAction(useMutation(api.giftTwin.room.revokeCollaborator));
   const [code, setCode] = useState<{ value: string; expiresAt: number } | null>(null);
+  const [link, setLink] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   const countdown = useCountdown(twin?.status === "pending_pairing" ? (code?.expiresAt ?? twin.pairingExpiresAt) : undefined);
 
   async function issue() {
     const res = await createPairing.run({ roomId });
-    if (res.ok) setCode({ value: res.value.pairingCode, expiresAt: res.value.expiresAt });
+    if (res.ok) {
+      setCode({ value: res.value.pairingCode, expiresAt: res.value.expiresAt });
+      setLink(`${window.location.origin}/twin#invite=${encodeURIComponent(res.value.pairingCode)}`);
+      setCopyMessage("");
+    }
   }
 
   return (
@@ -135,34 +141,32 @@ function ConnectCard({
             A Gift Twin is an AI agent acting for {recipientName}. With their one-time permission, their Mac uploads the messages they sent to a private
             24-hour vault. The twin joins this room as a collaborator: nobody here can read the messages, only the short notes and votes it posts.
           </p>
-          {isOrganizer ? (
-            <button type="button" className="btn-primary self-start" onClick={issue} disabled={createPairing.pending}>
-              {createPairing.pending ? "Creating a code…" : `Invite ${recipientName}'s Gift Twin`}
-            </button>
-          ) : (
-            <p className="text-[13.5px] text-dusk/65">The organizer can invite the Gift Twin.</p>
-          )}
+          <button type="button" className="btn-primary self-start" onClick={issue} disabled={createPairing.pending}>
+            {createPairing.pending ? "Creating a link…" : `Invite ${recipientName}'s Gift Twin`}
+          </button>
         </>
       )}
 
       {twin?.status === "pending_pairing" && (
         <>
-          <p className="text-[14px] text-dusk/75">Waiting for {recipientName}&apos;s Mac to connect.</p>
+          <p className="text-[14px] text-dusk/75">Send this private invitation to {recipientName}. They will read the privacy terms and choose whether to share their messages.</p>
           {code ? (
             <div className="rounded-xl bg-white/70 p-3">
-              <p className="text-[12.5px] font-semibold uppercase tracking-wide text-dusk/60">Pairing code · expires in {countdown}</p>
-              <p className="font-mono text-[26px] tracking-[0.2em] text-dusk">{code.value}</p>
-              <p className="mt-2 text-[12.5px] text-dusk/70">On {recipientName}&apos;s Mac, in the Unwrap folder:</p>
-              <code className="mt-1 block rounded-lg bg-dusk/90 px-3 py-2 text-[12.5px] text-paper">npm run twin -- pair {code.value}</code>
+              <p className="text-[12.5px] font-semibold uppercase tracking-wide text-dusk/60">Recipient link · expires in {countdown}</p>
+              <input aria-label="Recipient invitation link" readOnly value={link} onFocus={(event) => event.target.select()} className="mt-2 w-full rounded-lg border border-dusk/15 bg-white p-2 text-sm" />
+              <button type="button" className="btn-secondary mt-3" onClick={async () => {
+                try { await navigator.clipboard.writeText(link); setCopyMessage("Link copied"); }
+                catch { setCopyMessage("Select the link above and copy it manually."); }
+              }}>Copy recipient link</button>
+              <p role="status" className="mt-2 text-sm">{copyMessage}</p>
+              <p className="mt-2 text-[12.5px] text-dusk/70">One use only. Only send it to the recipient. Opening it does not join the room or read Messages.</p>
             </div>
           ) : (
-            <p className="text-[13px] text-dusk/60">The code was shown once when it was created.</p>
+            <p className="text-[13px] text-dusk/60">The link was shown once when it was created. Create a new link if you need another; the old one will stop working.</p>
           )}
-          {isOrganizer && (
-            <button type="button" className="btn-secondary self-start" onClick={issue} disabled={createPairing.pending}>
-              New code
-            </button>
-          )}
+          <button type="button" className="btn-secondary self-start" onClick={issue} disabled={createPairing.pending}>
+            New invitation link
+          </button>
         </>
       )}
 

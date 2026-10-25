@@ -79,8 +79,10 @@ export const TWIN_LIMITS = {
   /** Keeps each stored chunk well under Convex's 1 MiB document limit, even for multi-byte text. */
   uploadBatchMaxChars: 250_000,
   uploadBatchMaxMessages: 1_000,
-  /** About the 3 MB the companion reads by default. */
-  vaultMaxChars: 3_500_000,
+  /** Shared 1 MiB read budget and server-side UTF-8 text limit. */
+  messageReadMaxBytes: 1024 * 1024,
+  vaultMaxBytes: 1024 * 1024,
+  vaultMaxChars: 1024 * 1024,
   vaultMaxChunks: 40,
   vaultTtlMs: 24 * 60 * 60_000,
   /** How often the twin checks the room for new ideas while the vault is open. */

@@ -10,6 +10,6 @@ npm run twin -- doctor           # check Full Disk Access and setup
 npm run test:twin                # unit tests
 ```
 
-Reads only the most recent 3 MB of message content (`--max-mb` to change). Needs Node 23.6+. No extra dependencies: `node:sqlite` for `chat.db`, `convex/browser` for the room connection.
+Reads only the most recent 1 MB of message content (`--max-mb` to read less). Needs Node 23.6+. No extra dependencies: `node:sqlite` for `chat.db`, `convex/browser` for the room connection.
 
 Design, privacy model, and production path: [docs/GIFT_TWIN.md](../docs/GIFT_TWIN.md).

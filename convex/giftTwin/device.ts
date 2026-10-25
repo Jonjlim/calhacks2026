@@ -26,6 +26,7 @@ import {
 } from "../../lib/agentCollaborators/contracts";
 import { closeVault, deleteVaultChunks, giftTwinEnabled, isWellFormedDeviceToken, loadDevice, revoke, sha256Hex, vaultView } from "./lib";
 import { vaultMessage } from "./schema";
+import { withoutEmoji } from "./text";
 
 const NOT_CONNECTED = "This Mac is not connected to a gift room. Pair it again with a new code.";
 const NO_UPLOAD = "That upload is no longer open. Run share again.";
@@ -138,19 +139,23 @@ export const uploadMessages = mutation({
     const messages: Array<{ text: string; sentAt: number }> = [];
     let chars = 0;
     for (const message of args.messages) {
-      const text = message.text.trim();
-      if (!text || text.length > TWIN_LIMITS.messageMaxChars || !Number.isFinite(message.sentAt) || message.sentAt < 0)
+      const raw = message.text.trim();
+      if (!raw || raw.length > TWIN_LIMITS.messageMaxChars || !Number.isFinite(message.sentAt) || message.sentAt < 0)
         return err("validation_failed", `Each message needs text (at most ${TWIN_LIMITS.messageMaxChars} characters) and a send time.`);
+      const text = withoutEmoji(raw);
+      if (!text) continue;
       messages.push({ text, sentAt: Math.round(message.sentAt) });
       chars += text.length;
     }
     if (chars > TWIN_LIMITS.uploadBatchMaxChars) return err("validation_failed", "That batch is too large.");
     const totalChars = (collaborator.vaultChars ?? 0) + chars;
-    const chunkCount = (
-      await ctx.db.query("twinVaultChunks").withIndex("by_collaborator", (q) => q.eq("collaboratorId", collaborator._id)).collect()
-    ).length;
-    if (totalChars > TWIN_LIMITS.vaultMaxChars || chunkCount >= TWIN_LIMITS.vaultMaxChunks)
-      return err("validation_failed", "The upload is over the size limit. Send fewer messages (try --max-mb 2).");
+    const chunks = await ctx.db.query("twinVaultChunks").withIndex("by_collaborator", (q) => q.eq("collaboratorId", collaborator._id)).collect();
+    const encoder = new TextEncoder();
+    const bytes = [...chunks.flatMap((chunk) => chunk.messages), ...messages]
+      .reduce((sum, message) => sum + encoder.encode(message.text).byteLength, 0);
+    if (totalChars > TWIN_LIMITS.vaultMaxChars || bytes > TWIN_LIMITS.vaultMaxBytes || chunks.length >= TWIN_LIMITS.vaultMaxChunks)
+      return err("validation_failed", "The upload exceeds the 1 MB text limit. Send fewer messages.");
+    if (messages.length === 0) return ok({ messageCount: collaborator.vaultMessageCount ?? 0 });
     const now = Date.now();
     await ctx.db.insert("twinVaultChunks", {
       roomId: room._id,

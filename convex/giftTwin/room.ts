@@ -40,7 +40,7 @@ interface PairingIssued {
 }
 
 /**
- * Organizer issues a short-lived, single-use pairing code for the recipient's
+ * A room member issues a short-lived, single-use pairing code for the recipient's
  * Mac. An action because codes need unseeded randomness; only the hash is stored.
  */
 export const createPairing = action({
@@ -82,7 +82,6 @@ export const recordPairing = internalMutation({
       .withIndex("by_room_user", (q) => q.eq("roomId", args.roomId).eq("userId", args.userId))
       .unique();
     if (!me) return memberError("unauthorized");
-    if (me.role !== "organizer") return err("unauthorized", "Only the organizer can invite a Gift Twin.");
     const label = (args.recipientLabel ?? room.recipientDisplayName).trim().slice(0, RECIPIENT_LABEL_MAX_CHARS) || room.recipientDisplayName;
 
     const existing = (

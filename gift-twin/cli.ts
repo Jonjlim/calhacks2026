@@ -11,7 +11,7 @@
  *   npm run twin -- forget             delete the uploaded messages now
  *   npm run twin -- status | doctor | unpair
  *
- * Only the most recent 3 MB of iMessage content is read (--max-mb to
+ * Only the most recent 1 MB of iMessage content is read (--max-mb to
  * change), and only messages the recipient sent are uploaded: never other
  * people's messages, phone numbers, emails, chat names, or attachments.
  */
@@ -60,7 +60,7 @@ function unwrap<T>(res: { ok: true; value: T } | { ok: false; error: { message: 
 function loadMessages(): ReadResult {
   if (flags.fixture) return { ok: true, messages: fixtureMessages(), stats: { bytesRead: 0, rowsScanned: 0, truncated: false } };
   const maxMb = flags["max-mb"] === undefined ? DEFAULT_MAX_BYTES / (1024 * 1024) : Number(flags["max-mb"]);
-  if (!Number.isFinite(maxMb) || maxMb <= 0) fail("--max-mb must be a positive number.");
+  if (!Number.isFinite(maxMb) || maxMb <= 0 || maxMb > 1) fail("--max-mb must be greater than 0 and at most 1.");
   const days = flags.days === undefined ? undefined : Number(flags.days);
   if (days !== undefined && (!Number.isFinite(days) || days <= 0)) fail("--days must be a positive number.");
   return readMessages({
@@ -189,7 +189,7 @@ function doctor() {
 async function main() {
   const [command, arg] = positionals;
   if (flags.help || !command) {
-    say("Usage: npm run twin -- <pair CODE | share | forget | status | doctor | unpair> [--fixture] [--max-mb 3] [--days N] [--yes] [--dry-run] [--verbose]");
+    say("Usage: npm run twin -- <pair CODE | share | forget | status | doctor | unpair> [--fixture] [--max-mb 1] [--days N] [--yes] [--dry-run] [--verbose]");
     return;
   }
   switch (command) {

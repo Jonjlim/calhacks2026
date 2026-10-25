@@ -12,61 +12,19 @@ import { accessSync, constants, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { TWIN_LIMITS } from "../../lib/agentCollaborators/contracts.ts";
 import type { LocalMessage } from "./types.ts";
 
-const APPLE_EPOCH_S = 978_307_200;
 const MAX_TEXT_CHARS = 2_000;
+export { appleDateToMs, decodeAttributedBody } from "../../lib/agentCollaborators/imessageText.ts";
+import { appleDateToMs, decodeAttributedBody } from "../../lib/agentCollaborators/imessageText.ts";
 
 export function defaultChatDbPath(): string {
   return join(homedir(), "Library", "Messages", "chat.db");
 }
 
-/** Messages stores either seconds or nanoseconds since 2001-01-01 depending on macOS version. */
-export function appleDateToMs(value: number | bigint): number {
-  const n = typeof value === "bigint" ? Number(value) : value;
-  const seconds = n > 1e12 ? n / 1e9 : n;
-  return Math.round((seconds + APPLE_EPOCH_S) * 1000);
-}
-
-const NSSTRING = new TextEncoder().encode("NSString");
-
-function indexOf(haystack: Uint8Array, needle: Uint8Array): number {
-  outer: for (let i = 0; i <= haystack.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) if (haystack[i + j] !== needle[j]) continue outer;
-    return i;
-  }
-  return -1;
-}
-
-/**
- * Newer macOS versions leave `message.text` empty and keep the body in a
- * typedstream `attributedBody` blob. The plain string follows the NSString
- * class marker, five header bytes, and a length prefix (one byte, or 0x81
- * followed by a little-endian uint16).
- */
-export function decodeAttributedBody(blob: Uint8Array | null | undefined): string | null {
-  if (!blob || blob.length === 0) return null;
-  const at = indexOf(blob, NSSTRING);
-  if (at < 0) return null;
-  let i = at + NSSTRING.length + 5;
-  if (i >= blob.length) return null;
-  let length = blob[i]!;
-  i += 1;
-  if (length === 0x81) {
-    if (i + 2 > blob.length) return null;
-    length = blob[i]! | (blob[i + 1]! << 8);
-    i += 2;
-  } else if (length === 0x82) {
-    if (i + 3 > blob.length) return null;
-    length = blob[i]! | (blob[i + 1]! << 8) | (blob[i + 2]! << 16);
-    i += 3;
-  }
-  if (length <= 0 || i + length > blob.length) return null;
-  return new TextDecoder("utf-8", { fatal: false }).decode(blob.subarray(i, i + length));
-}
-
-/** Demo budget: only the most recent 3 MB of message content is read. */
-export const DEFAULT_MAX_BYTES = 3 * 1024 * 1024;
+/** Demo budget: only the most recent 1 MB of message content is read. */
+export const DEFAULT_MAX_BYTES = TWIN_LIMITS.messageReadMaxBytes;
 
 export interface ReadOptions {
   path?: string;
@@ -126,7 +84,7 @@ export function readMessages(options: ReadOptions): ReadResult {
       return { ok: false, reason: "not_found", message: `No Messages database at ${path}. Is iMessage set up on this Mac?` };
     return { ok: false, reason: "unreadable", message: "The Messages database could not be opened." };
   }
-  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+  const maxBytes = Math.min(options.maxBytes ?? DEFAULT_MAX_BYTES, DEFAULT_MAX_BYTES);
   try {
     // ROWID order streams newest-first from the primary key, so iteration can
     // stop at the byte budget without SQLite sorting the whole history first.

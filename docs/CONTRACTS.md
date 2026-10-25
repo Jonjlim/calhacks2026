@@ -405,6 +405,11 @@ An **agent collaborator** is an AI agent that joins a room next to people and po
 
 Shared types and Zod schemas live in `lib/agentCollaborators/contracts.ts` (used by Convex, the Mac companion, and the UI).
 
+Recipient web onboarding (D20): members create the twin only at `/room/[roomId]/twin`. `createPairing` still returns the existing single-use code; the UI builds `/twin#invite=<pairingCode>` (fragment, never sent in HTTP requests). Opening the link does not consume it. Only an explicit recipient acceptance pairs it. The recipient page uses the same device operations without room membership and never receives room content. The device token is generated with Web Crypto and kept in this tab's session storage; closing the tab loses management access, but server expiry still applies. No raw messages are stored in browser storage.
+
+After accepting the terms, the recipient explicitly selects `chat.db`; selection immediately reads and uploads through the CLI-equivalent pipeline: scan the newest 1 MiB of message content (incoming content counts toward that budget), then use the existing companion `planUpload` to send `VaultMessage` text/time. There is no extra content screening, preference extraction, message review/removal, or second confirmation before uploading. The CLI's existing sent-only selection, tapback exclusion, and 2,000-character text limit remain unchanged. The read limit and server vault text limit are now 1 MiB. `uploadMessages` strips emoji sequences server-side before storage and skips messages left empty; its returned count includes only stored messages. A batch containing only emojis succeeds without creating an empty chunk. Plain digits and ordinary text are preserved. The recipient uses a visible file-picker button; selecting the database after consent starts upload. The database itself, incoming messages, handles, and attachments never leave the browser. File selection is required: a website cannot obtain automatic macOS Messages access. Unsupported databases and file permissions are visible errors. The browser offers status, delete now, disconnect, and explicitly labelled sample data. Failed uploads can be deleted or replaced; no automatic upload retry can duplicate batches. Owner: Dev 3; consumers: Dev 1 and Dev 2. Migration: no table or endpoint shape change; pairing creation broadens from organizer to room member. CLI remains compatible.
+
+
 ```ts
 type AgentCollaboratorKind = "gift_twin" | "trend_scout";
 type AgentCollaboratorStatus = "pending_pairing" | "active" | "revoked";
@@ -453,13 +458,13 @@ interface AgentCollaboratorPostView {
 
 | Operation | Kind | Input | Output | Access |
 | --- | --- | --- | --- | --- |
-| `giftTwin/room.createPairing` | action | `{ roomId, recipientLabel? }` | `Result<{ collaboratorId, pairingCode, expiresAt }>` | Organizer; flag on; one connected twin per room; code single-use, 15 min, stored hashed |
+| `giftTwin/room.createPairing` | action | `{ roomId, recipientLabel? }` | `Result<{ collaboratorId, pairingCode, expiresAt }>` | Member; flag on; one connected twin per room; code single-use, 15 min, stored hashed |
 | `giftTwin/room.getFeed` | query | `{ roomId }` | `Result<{ collaborators, posts }>` | Member; never returns hashes, upload ids, or message text; dismissed posts hidden |
 | `giftTwin/room.revokeCollaborator` | mutation | `{ collaboratorId }` | `Result<null>` | Organizer; the token stops working and the vault is deleted |
 | `giftTwin/device.pair` | mutation | `{ pairingCode, deviceToken, deviceLabel? }` | `Result<DeviceSession>` | Anyone with a valid code; flag on |
 | `giftTwin/device.session` | query | `{ deviceToken }` | `Result<DeviceSession>` | Device; includes `vault` status, never message text |
 | `giftTwin/device.startUpload` | mutation | `{ deviceToken, consent: true }` | `Result<{ uploadId, expiresAt }>` | Device; flag on; `consent` must be true; deletes any earlier upload; schedules deletion at `expiresAt` (24 h) |
-| `giftTwin/device.uploadMessages` | mutation | `{ deviceToken, uploadId, messages: VaultMessage[] }` | `Result<{ messageCount }>` | Device; ≤1,000 messages and ≤250,000 chars per call; ≤3,500,000 chars and 40 batches per upload |
+| `giftTwin/device.uploadMessages` | mutation | `{ deviceToken, uploadId, messages: VaultMessage[] }` | `Result<{ messageCount }>` | Device; ≤1,000 messages and ≤250,000 chars per call; ≤1 MiB of UTF-8 message text and 40 batches per upload |
 | `giftTwin/device.finishUpload` | mutation | `{ deviceToken, uploadId }` | `Result<{ messageCount, expiresAt }>` | Device; schedules the twin agent |
 | `giftTwin/device.forget` | mutation | `{ deviceToken }` | `Result<null>` | Device; deletes the vault now; posts stay |
 | `giftTwin/device.disconnect` | mutation | `{ deviceToken }` | `Result<null>` | Device; same as revoke |

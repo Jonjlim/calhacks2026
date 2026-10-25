@@ -91,9 +91,9 @@ describe("pairing", () => {
     expect(await alice.action(api.giftTwin.room.createPairing, { roomId })).toMatchObject({ ok: false, error: { code: "refused" } });
   });
 
-  it("lets only the organizer issue a code", async () => {
+  it("lets members issue a code but refuses outsiders", async () => {
     const { bob, mallory, roomId } = await setup();
-    expect(await bob.action(api.giftTwin.room.createPairing, { roomId })).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    expect(await bob.action(api.giftTwin.room.createPairing, { roomId })).toMatchObject({ ok: true });
     expect(await mallory.action(api.giftTwin.room.createPairing, { roomId })).toMatchObject({ ok: false, error: { code: "unauthorized" } });
   });
 
@@ -135,6 +135,42 @@ describe("pairing", () => {
 });
 
 describe("upload", () => {
+  it("removes emoji sequences on the server while preserving words and plain digits", async () => {
+    const { t } = await paired();
+    const { uploadId } = unwrap(await t.mutation(api.giftTwin.device.startUpload, { deviceToken: TOKEN, consent: true }));
+    const result = unwrap(await t.mutation(api.giftTwin.device.uploadMessages, {
+      deviceToken: TOKEN, uploadId,
+      messages: [
+        { text: "I want 2 books 📚👩🏽‍💻🇺🇸1️⃣❤️", sentAt: 1 },
+        { text: "😀👨‍👩‍👧‍👦👍🏽", sentAt: 2 },
+        { text: "#1 costs $25 * 2", sentAt: 3 },
+      ],
+    }));
+    expect(result.messageCount).toBe(2);
+    const chunks = await t.run((ctx) => ctx.db.query("twinVaultChunks").collect());
+    expect(chunks[0]?.messages).toEqual([
+      { text: "I want 2 books", sentAt: 1 },
+      { text: "#1 costs $25 * 2", sentAt: 3 },
+    ]);
+    expect(unwrap(await t.mutation(api.giftTwin.device.uploadMessages, {
+      deviceToken: TOKEN, uploadId, messages: [{ text: "🎉", sentAt: 4 }],
+    })).messageCount).toBe(2);
+    expect(await chunkCount(t)).toBe(1);
+  });
+
+  it("enforces the 1 MiB vault limit using UTF-8 bytes across batches", async () => {
+    const { t } = await paired();
+    const { uploadId } = unwrap(await t.mutation(api.giftTwin.device.startUpload, { deviceToken: TOKEN, consent: true }));
+    const messages = Array.from({ length: 40 }, () => ({ text: "界".repeat(2_000), sentAt: 1 }));
+    for (let batch = 0; batch < 4; batch++) {
+      expect(await t.mutation(api.giftTwin.device.uploadMessages, { deviceToken: TOKEN, uploadId, messages })).toMatchObject({ ok: true });
+    }
+    expect(await t.mutation(api.giftTwin.device.uploadMessages, { deviceToken: TOKEN, uploadId, messages })).toMatchObject({
+      ok: false, error: { code: "validation_failed" },
+    });
+    expect(await chunkCount(t)).toBe(4);
+  });
+
   it("needs explicit consent and the demo flag", async () => {
     const { t } = await paired();
     expect(await t.mutation(api.giftTwin.device.startUpload, { deviceToken: TOKEN, consent: false })).toMatchObject({ ok: false, error: { code: "refused" } });

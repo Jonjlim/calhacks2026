@@ -234,3 +234,10 @@ The buyer agent may see `AgentReply.guidance`, which is already policy-filtered.
 - We will not connect Gmail, iMessage, or Instagram. If a sponsor integration tempts us, it still cannot ingest a mailbox wholesale.
 
 Do not claim Unwrap is end-to-end encrypted or HIPAA-safe. It is a hackathon app with explicit, narrow consent and server-side access control.
+
+
+## Gift Twin recipient page (D20 demo exception)
+
+D20's explicitly consented recipient vault is separate from contributor imports and from the category-granted P1-A profile. The recipient page at `/twin` explains the 24-hour server vault, configured AI provider processing, automatic screened notes/votes in the room, possible inference mistakes, and that already shared notes remain after deletion. Acceptance is unchecked by default; it precedes pairing and local file reading. Selecting the database after acceptance immediately reads and uploads it through the same sent-only preparation as the CLI; the page states this before selection. There is no additional message review or local content filtering before upload. The server removes emoji sequences before vault storage and skips messages that become empty. Both the read budget and server vault text limit are 1 MiB. Declining leaves the invitation unused.
+
+The browser reads only a recipient-selected local Messages database using bundled SQLite WASM. No database file, incoming message, handle, chat name or attachment is uploaded. Sent text can itself contain private or third-party information; warn recipients before file selection, which initiates upload. Browser tokens stay in tab session storage, and text stays in memory only during reading/upload. Delete now and disconnect use the same server-authorized CLI operations. Closing the tab does not delete the vault: the 24-hour server expiry still applies. This is a hackathon prototype, not end-to-end encryption; never promise that a browser permission prompt automatically grants iMessage access.

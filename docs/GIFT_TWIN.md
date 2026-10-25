@@ -52,7 +52,7 @@ Other rules:
 
 | Data | Where it lives | Who sees it |
 | --- | --- | --- |
-| iMessage history | Recipient's Mac (`chat.db`, read-only; only the most recent 3 MB of content is read) | The companion process |
+| iMessage history | Recipient's Mac (`chat.db`, read-only; only the most recent 1 MB of content is read) | The companion process |
 | Other people's messages, phone numbers, emails, chat names, attachments | Never uploaded | Nobody |
 | Messages the recipient sent (text + time) | Convex `twinVaultChunks`, for at most 24 hours | Only the twin agent's internal functions, and the configured model provider during its calls. No person, not even the recipient's device, can read them back |
 | Insights and votes (screened sentences) | Convex `agentCollaboratorPosts` | Room members |
@@ -67,7 +67,15 @@ Safeguards:
 5. **Screening.** `screenSharedText` rejects quotes, links, contact details, and sensitive topics (health, religion, sexuality, politics, finances, legal, credentials). Every agent output is re-validated with Zod before insert. Prompts are not the control.
 6. **Surprise.** The device never receives room ideas; voting happens in the cloud.
 
-## Run the demo
+## Recipient page (no CLI)
+
+Room members create the twin at `/room/<roomId>/twin` and copy its invitation link. The recipient opens it at `/twin`, reads and accepts the privacy terms, connects, then selects their own Mac's `~/Library/Messages/chat.db`. A bundled SQLite WASM reader follows the CLI's same read-and-upload pipeline. The “Choose Messages file” button opens the system file picker. Selecting the file after consent immediately uploads the messages through the companion's existing `planUpload`, with no added review or local preference extraction. The server removes emoji sequences before vault storage and skips emoji-only messages; the vault enforces a 1 MiB UTF-8 text limit. The recipient manages status, deletion, or disconnecting on the same page. Sample data is available and clearly labelled.
+
+The browser cannot directly access iMessage or request automatic macOS database access. The recipient must select the file; macOS may prevent this. Files above 512 MB are refused to limit browser memory usage. The newest 1 MiB of message content is scanned, including incoming content in the read budget, exactly as in the CLI. The existing companion preparation then uploads only sent messages, with the same 2,000-character limit per message. This reads the database snapshot only; recent messages in the separate SQLite WAL may be absent. Use the CLI if the database cannot be selected or a complete live snapshot is required. Real macOS file-selection compatibility remains unverified.
+
+The single-use invite is in a URL fragment and is cleared from the address bar after loading. Opening it alone never consumes it. Device credentials are kept in tab session storage; messages are kept only in memory. Reload restores management access in the same tab. Closing the tab loses that access, but the server still deletes the vault at expiry. Delete and disconnect do not remove already posted room notes. No new service or provider is added.
+
+## Run the CLI demo
 
 Prerequisites: Node 23.6+ (uses built-in TypeScript stripping and `node:sqlite`), a Convex deployment, and this repository on the "recipient" Mac. Optional: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` on the Convex deployment for model-quality extraction and votes; without them the twin uses deterministic patterns.
 
