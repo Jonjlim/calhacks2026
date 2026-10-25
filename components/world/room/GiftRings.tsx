@@ -239,15 +239,20 @@ function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; 
           </span>
         )}
         {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
-        {info && <p className={s.caption}>{info.caption}</p>}
-        {info && info.actions.length > 0 && (
-          <div className={s.actions}>
-            {info.actions.map((a, i) => (
-              <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.act} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} aria-label={a.label} onClick={a.run}>
-                <span aria-hidden>{a.icon}</span>
-                <small>{a.label}</small>
-              </button>
-            ))}
+        {info && (
+          <div className={s.menu} role="dialog" aria-label={label}>
+            <button type="button" className={s.menuClose} onClick={() => rings.onSelect(null)} aria-label="Close">×</button>
+            <p className={s.caption}>{info.caption}</p>
+            {info.actions.length > 0 && (
+              <div className={s.actions}>
+                {info.actions.map((a, i) => (
+                  <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.act} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
+                    <span aria-hidden className={s.actIcon}>{a.icon}</span>
+                    <small>{a.label}</small>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
