@@ -69,6 +69,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
   const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean } | null>(null);
+  const composerDraft = useRef("");
   // Photos picked in the add box before they're sent.
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
   // “Why?” on one gift: its memories, themes and the gift light up together.
@@ -219,6 +220,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const startAdd = (what: "memory" | "wish" | "idea") => {
     if (!actions) return;
     setSelectedKey(null);
+    composerDraft.current = "";
     const [x, z] = what === "idea" ? ringPoint(300, RING_RADII.gift - 0.4) : ringPoint(RING_THEMES[what === "wish" ? "wish" : "interest"].angle, RING_RADII.input);
     setComposer({ x, z, zone: what === "idea" ? "gift" : "memory", kind: what === "wish" ? "explicit_wish" : "interest" });
     mapView.focus(x * 0.6, z * 0.6, 0.8);
@@ -572,25 +574,22 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const composerNode = composer && actions && (
     <div className={s.write} data-map-token>
-      {composer.zone === "memory" && (
-        <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-          {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
-          ))}
-          <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos"><MapIcon name="camera" size={14} />Photo</button>
-        </div>
-      )}
       <span className={`${s.cloud} ${s.writeCloud} ${composer.zone === "gift" ? s.ideaCloud : ""}`}>
-      <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
-        className={composer.zone === "gift" ? s.ideaInput : undefined}
+      <textarea autoFocus defaultValue={composerDraft.current} onChange={(e) => { composerDraft.current = e.currentTarget.value; }} maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
+        className={composer.zone === "gift" ? s.ideaInput : s.memoryInput}
         placeholder={composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat"}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(e.currentTarget.value); }
           if (e.key === "Escape") setComposer(null);
         }} />
+      {composer.zone === "memory" && <button type="button" className={s.mediaButton} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos" title="Add photos"><MapIcon name="camera" size={19} /></button>}
       <i className={s.trail} aria-hidden />
       </span>
+      {composer.zone === "memory" && <label className={s.wishOption} title="An explicit wish gets priority in gift searches.">
+        <input type="checkbox" checked={composer.kind === "explicit_wish"} onChange={(e) => setComposer({ ...composer, kind: e.currentTarget.checked ? "explicit_wish" : "interest" })} />
+        They asked for this <span>Wish</span>
+      </label>}
       <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
     </div>
   );
@@ -657,12 +656,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
-      <div className={s.kinds} role="radiogroup" aria-label="What is it?">
-        {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-          <button key={kind} type="button" role="radio" aria-checked={false} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
-        ))}
-        <button type="button" role="radio" aria-checked><MapIcon name="camera" size={14} />Photo</button>
-      </div>
+      <button type="button" className={s.backToWriting} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
       {photoPick.length === 0 ? (
         <label className={s.photoPick}>
           <MapIcon name="camera" size={22} />Choose up to 3 photos
@@ -908,6 +902,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       setSelectedKey(null);
       setWhyListing(null);
       setOpenTheme(null);
+      if (point) composerDraft.current = "";
       setComposer(point && actions ? { x: point[0], z: point[1], zone: zone === "gift" ? "gift" : "memory", kind: "interest" } : null);
     },
     onDrag: (key: string, result: RingDragResult) => {
