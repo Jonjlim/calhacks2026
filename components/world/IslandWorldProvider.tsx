@@ -9,6 +9,7 @@ import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { useUnwrapPhase, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { roomStage, useRoomStage } from "@/components/room/roomStage";
 import type { CouncilActor, CouncilEvent, DecorationSpec } from "@/lib/council/contracts";
+import { cueFromTarget, playSfx, resumeMusic, setSfxEnabled } from "./sounds";
 
 const WorldCanvas = dynamic(() => import("./WorldCanvas"), { ssr: false });
 /**
@@ -112,9 +113,23 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const markReady = useCallback(() => setReady(true), []);
   const assetStatus = useCallback((actor: CouncilActor, status: "ready" | "failed") => setAssets(prev => prev[actor] === status ? prev : { ...prev, [actor]: status }), []);
   const toggleSound = useCallback(() => setSoundEnabled(on => {
-    try { localStorage.setItem("unwrap:sound", on ? "off" : "on"); } catch { /* unavailable storage */ }
-    return !on;
+    const next = !on;
+    try { localStorage.setItem("unwrap:sound", next ? "on" : "off"); } catch { /* unavailable storage */ }
+    // Inside the click, so the browser allows the music to start.
+    setSfxEnabled(next);
+    return next;
   }), []);
+  useEffect(() => { setSfxEnabled(soundEnabled); }, [soundEnabled]);
+  useEffect(() => {
+    const onPointer = (e: PointerEvent) => {
+      if (!soundEnabled || e.button > 0) return;
+      resumeMusic();
+      const cue = cueFromTarget(e.target);
+      if (cue && cue !== "silent") playSfx(cue);
+    };
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => window.removeEventListener("pointerdown", onPointer, true);
+  }, [soundEnabled]);
   const value = useMemo(() => ({ webgl, ready, soundEnabled, toggleSound, setCouncil }), [webgl, ready, soundEnabled, toggleSound]);
   const activeCouncil = roomId && council?.roomId === roomId ? council : null;
   // The council's models only mount inside the tower, so only report their loading there.

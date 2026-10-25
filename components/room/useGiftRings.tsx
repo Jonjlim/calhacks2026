@@ -13,15 +13,17 @@ import type { PledgeWorld } from "@/components/world/room/PledgeRing";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
 import { giftTwinMap } from "@/lib/map/giftTwin";
-import { directionPoint, fadeOf, trendClouds } from "@/lib/map/directions";
+import { directionPoint, fadeOf, trendClouds, weaveThreads } from "@/lib/map/directions";
 import { emptyTrendNote, isTrendKey, TREND_KEY_PREFIX, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { book } from "@/components/book/bookStore";
 import { mapView } from "@/components/world/room/mapView";
+import { playChoose, playCouncilTick } from "@/components/world/sfx";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
 import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
+import { playSfx } from "@/components/world/sounds";
 
 /** One colour per storybook friend, shared by cursors, pledge arcs, vote chips and faces. */
 export const AVATAR_COLOR: Record<AvatarId, string> = { explorer: "#d0675a", kind: "#d98fb8", curious: "#e2ad6b", calm: "#79b391", dreamer: "#8d86d0" };
@@ -40,6 +42,9 @@ const PULSE_MS = 3200;
 const CURSOR_MS = 8000;
 /** Gifts shown on the map before the rest fold behind “+N more”. */
 const TOP_GIFTS = 6;
+/** How long woven threads stay before they settle, and the longest the council may reach before giving up. */
+const WEAVE_MS = 5200;
+const REACH_MAX_MS = 30_000;
 /** How long the council's reaction to passes stays in the status line. */
 const REACTION_MS = 15_000;
 /** A failed search stays on its theme this long, so it isn't mistaken for a quiet success. */
@@ -89,6 +94,13 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [now, setNow] = useState(0);
+  /**
+   * The council's weave (D23 trial): "reaching" while it thinks, then "weaving" the directions it
+   * decided, for everyone in the room. `fresh` names the directions that just arrived; `since` dates
+   * the request, so only this round's refused ideas fray.
+   */
+  const [weave, setWeave] = useState<{ id: number; phase: "reaching" | "weaving"; since: number; fresh: string[] } | null>(null);
+  const seenDirections = useRef<Set<string> | null>(null);
   const lock = useRef(false);
   const lastCursor = useRef({ at: 0, x: 0, z: 0 });
 
@@ -169,6 +181,25 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   );
   // Council directions that combine memories (D23 trial), and the trend clouds people can catch into them.
   const directions = useMemo(() => data.directions ?? [], [data.directions]);
+  // New directions weave in on every screen, not only for the friend who asked. The first load just remembers what's there.
+  useEffect(() => {
+    if (!data.directions) return;
+    const ids = new Set(data.directions.map((d) => d.id));
+    const before = seenDirections.current;
+    seenDirections.current = ids;
+    if (!before) return;
+    const fresh = [...ids].filter((id) => !before.has(id));
+    if (!fresh.length) return;
+    playChoose();
+    // The branches already seeking carry on into the weave: same session, so they attach instead of restarting.
+    setWeave((w) => ({ id: w?.id ?? Date.now(), phase: "weaving", since: w?.since ?? Date.now() - 30_000, fresh }));
+  }, [data.directions]);
+  // A weave settles after a few seconds; a request that never produced directions stops reaching.
+  useEffect(() => {
+    if (!weave) return;
+    const t = setTimeout(() => setWeave(null), weave.phase === "weaving" ? WEAVE_MS : REACH_MAX_MS);
+    return () => clearTimeout(t);
+  }, [weave]);
   const trendNet = useMemo(() => {
     const net: Record<string, number> = {};
     for (const row of signalRows ?? []) if (row.targetKind === "trend") net[`${TREND_KEY_PREFIX}${row.targetId}`] = row.up - row.down;
@@ -540,13 +571,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       return;
     }
     void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
+    if (composer.kind === "explicit_wish") playSfx("wish");
   };
   const composerNode = composer && actions && (
     <div className={s.write} data-map-token>
       {composer.zone === "memory" && (
         <div className={s.kinds} role="radiogroup" aria-label="What is it?">
           {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
+            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
           ))}
           <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos"><MapIcon name="camera" size={14} />Photo</button>
         </div>
@@ -630,7 +662,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     <div className={s.write} data-map-token>
       <div className={s.kinds} role="radiogroup" aria-label="What is it?">
         {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-          <button key={kind} type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
+          <button key={kind} type="button" role="radio" aria-checked={false} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
         ))}
         <button type="button" role="radio" aria-checked><MapIcon name="camera" size={14} />Photo</button>
       </div>
@@ -742,8 +774,21 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const proposeDirections = () => {
     if (!actions?.proposeDirections) return;
     setTrendAsked(Date.now());
-    void run(() => actions.proposeDirections!(), "The council combined your memories into gift directions. Open one to find gifts.", "directions");
+    playCouncilTick();
+    setWeave({ id: Date.now(), phase: "reaching", since: Date.now(), fresh: [] });
+    void run(() => actions.proposeDirections!(), "The council wove your memories into gift directions. Open one to find gifts.", "directions")
+      .then((ok) => { if (!ok) setWeave(null); });
   };
+  // The weave's threads. Every one is a real link: memories being weighed, the memories each new
+  // direction combines, and the memories a refused idea cited (with the checks' reason).
+  const weaveWorld: RingsWorld["weave"] = weaveThreads({
+    weave,
+    memoryKeys: clues.filter((c) => c.kind === "interest" || c.kind === "explicit_wish").map((c) => `clue:${c.id}`),
+    directions: directionNodes,
+    trail: data.trail ?? [],
+    selectedKey,
+  });
+
   const councilActs: RingAction[] = actions ? [
     ...(actions.proposeDirections ? [{ icon: "spark" as const, label: thinking ? "Combining…" : directions.length ? "New directions" : "Combine into directions", disabled: !!pending || clues.length < 2, run: proposeDirections }] : []),
     { icon: "gather", label: pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes", disabled: !!pending || clues.length < 3, run: () => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes") },
@@ -792,6 +837,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       const clue = clues.find((x) => x.id === c.id)!;
       return { key: `clue:${c.id}`, text: clue.text, author: twin.clueAuthors.get(clue.id) ?? name(clue.publisherId), agent: twin.clueAuthors.has(clue.id), avatar: avatarOf(clue.publisherId), color: twin.clueAuthors.has(clue.id) ? "#8b72ba" : colorOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue.id) };
     }),
+    weave: weaveWorld,
     ideas: ideas.map<RingsWorld["ideas"][number]>((idea, i) => {
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);

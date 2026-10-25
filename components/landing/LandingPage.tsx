@@ -8,6 +8,7 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { StorybookIntro } from "@/components/intro/StorybookIntro";
 import { useSession } from "@/components/providers/ConvexClientProvider";
+import { playSfx } from "@/components/world/sounds";
 import { InvitationTag } from "@/components/unwrap/InvitationTag";
 import { lobby } from "@/components/unwrap/lobbyStore";
 import { unwrapClock, useUnwrapPhase } from "@/components/unwrap/unwrapTimeline";
@@ -77,7 +78,7 @@ function LobbyRestore({ roomId, staticPreview, onMissing }: { roomId: string; st
 
 export function LandingPage() {
   const reducedMotion = useReducedMotion() ?? false;
-  const { webgl, ready, soundEnabled } = useIslandWorld();
+  const { webgl, ready, soundEnabled, toggleSound } = useIslandWorld();
   const convex = useConvex();
 
   const phase = useIntroPhase();
@@ -140,6 +141,7 @@ export function LandingPage() {
       giftTag.subscribe(() => {
         if (giftTag.tugCount === lastTug.current) return;
         lastTug.current = giftTag.tugCount;
+        playSfx("wish");
         if (!unwrapClock.active && !introClock.active) unwrapClock.start({ staticPreview: staticRef.current });
       }),
     [],
@@ -174,11 +176,25 @@ export function LandingPage() {
         </p>
         <div className="paper-grain pointer-events-none absolute inset-0" aria-hidden />
 
+        {mounted && (
+          <button
+            type="button"
+            data-sfx="silent"
+            onClick={toggleSound}
+            aria-pressed={soundEnabled}
+            aria-label={soundEnabled ? "Sound on" : "Sound off"}
+            className="pointer-events-auto absolute top-5 right-6 z-40 rounded-full border border-dusk/10 bg-paper/75 px-3.5 py-2 text-[13.5px] font-medium text-dusk/80 shadow-sm backdrop-blur-md transition hover:text-dusk"
+          >
+            {soundEnabled ? "Sound on" : "Sound off"}
+          </button>
+        )}
+
         {mounted && !introActive && !unwrapActive && !lobbyId && (
           // Mirrors the 3D tag for keyboards and screen readers (and stands in for it without WebGL).
           <div className="absolute bottom-10 left-1/2 z-10 -translate-x-1/2">
             <button
               type="button"
+              data-sfx="silent"
               aria-label="Begin Unwrap"
               aria-disabled={tagState === "tugging" || tagState === "responding"}
               onClick={() => giftTag.tug()}

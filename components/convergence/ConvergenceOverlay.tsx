@@ -1,5 +1,7 @@
 "use client";
 
+import { GiftJourney } from "@/components/room/GiftJourney";
+import type { RoomData } from "@/components/room/types";
 import { MapIcon } from "@/components/world/room/MapIcon";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +30,8 @@ export interface RevealGift {
   clues: PublishedClue[];
   listings?: ProductListing[];
   recommendations?: Recommendation[];
+  trail?: RoomData["trail"];
+  directions?: RoomData["directions"];
 }
 
 const isGoogle = (url: string) => {
@@ -101,10 +105,6 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
   const photoUrl = item?.listingSnapshot.imageUrl ?? listing?.imageUrl;
   const url = snapshot.sourceUrl || listing?.sourceUrl;
   const price = snapshot.priceStatus === "observed" && snapshot.priceMinor !== undefined ? formatMinor(snapshot.priceMinor, listing?.currency ?? "USD") : null;
-  const why = useMemo(() => {
-    const cited = (recommendation?.publishedClueIds ?? []).map((id) => gift.clues.find((c) => c.id === id)).filter((c): c is PublishedClue => !!c && c.status === "active");
-    return cited.slice(0, 4);
-  }, [recommendation, gift.clues]);
   const freshness = useMemo(() => (listing ? getPriceFreshness({ ...listing, retrievedAt: snapshot.retrievedAt }, Date.now()) : null), [listing, snapshot.retrievedAt]);
   const [photoFailed, setPhotoFailed] = useState(false);
   useEffect(() => setPhotoFailed(false), [photoUrl]);
@@ -208,18 +208,8 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
             </p>
             {gone && <p role="alert" className="rounded-xl bg-coral/12 px-3 py-2 text-[13px] text-[#8c3b2c]">This listing is marked unavailable. Check the source before you rely on it.</p>}
 
-            <div className="rounded-[16px] bg-white/55 px-4 py-3">
-              <h3 className="font-display text-[19px] leading-tight">Why this gift?</h3>
-              {recommendation?.explanation ? <p className="mt-1 text-[13.5px] leading-snug text-dusk/80">{recommendation.explanation}</p> : <p className="mt-1 text-[13.5px] leading-snug text-dusk/70">The organizer picked this one. No written reasoning was saved with it.</p>}
-              {why.length > 0 && (
-                <ul className="mt-2 flex flex-col gap-1.5">
-                  {why.map((c) => (
-                    <li key={c.id} className="rounded-lg bg-[#fff6e3] px-2.5 py-1.5 text-[12.5px] leading-snug text-dusk/85">“{c.text}”</li>
-                  ))}
-                </ul>
-              )}
-              {convergence.total > 0 && <p className="mt-2 text-[12px] text-dusk/55">{convergence.total} {convergence.total === 1 ? "memory or idea" : "memories and ideas"} from the room led here.</p>}
-            </div>
+            <GiftJourney key={focusedId} listingId={focusedId} recommendation={recommendation}
+              clues={gift.clues} directions={gift.directions} entries={gift.trail} />
 
             <div className="flex flex-col gap-2">
               <button type="button" className="btn-primary h-12 justify-center px-5 text-[15px]" onClick={() => { convergence.close(); onPlan(); }}>Plan our contributions <span aria-hidden>→</span></button>
@@ -229,7 +219,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
                 </a>
               ) : <p className="text-[12.5px] text-dusk/55">No source link was saved for this listing.</p>}
               <div className="flex gap-2">
-                {isOrganizer && <button type="button" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={onReplay}>Replay reveal</button>}
+                {isOrganizer && <button type="button" data-sfx="reveal" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={onReplay}>Replay reveal</button>}
                 <button type="button" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={() => convergence.close()}>Back to the map</button>
               </div>
             </div>

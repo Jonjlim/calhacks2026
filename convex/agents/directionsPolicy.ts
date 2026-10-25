@@ -57,7 +57,8 @@ export function acceptDirections(
 }
 
 /** What the checks threw out, in words the room can read ("How we got here"). */
-export interface RejectedDirection { label: string; reason: string }
+/** `clueIds`: the real memories it cited, so the map can fray the thread between them. */
+export interface RejectedDirection { label: string; reason: string; clueIds: string[] }
 
 /** Same rules as acceptDirections, also saying why each refused direction was refused. */
 export function screenDirections(
@@ -71,8 +72,8 @@ export function screenDirections(
   const queries = new Set<string>();
   for (const d of output.directions) {
     const label = tidy(d.label, 48);
-    const refuse = (reason: string) => rejected.push({ label, reason });
     const cited = [...new Set(d.memories)].map((n) => memories[n]).filter((m): m is DirectionMemory => !!m);
+    const refuse = (reason: string) => rejected.push({ label, reason, clueIds: cited.map((m) => m.id) });
     if (cited.length !== new Set(d.memories).size || !cited.length) { refuse("it cited a memory nobody shared"); continue; }
     if (cited.length < 2 && !cited.some((m) => m.kind === "explicit_wish")) { refuse("it rested on one memory that isn't a wish"); continue; }
     if (!cited.some((m) => positive(m.kind))) { refuse("it only cited things she owns or doesn't want"); continue; }
@@ -86,7 +87,7 @@ export function screenDirections(
     const broad = d.broad || (cited.length === 1 && isBroadPhrase(cited[0]!.text));
     accepted.push({ label, query, why, clueIds: cited.map((m) => m.id), ...(trend ? { trend } : {}), broad });
   }
-  for (const extra of accepted.slice(MAX_DIRECTIONS)) rejected.push({ label: extra.label, reason: `only ${MAX_DIRECTIONS} directions fit on the map` });
+  for (const extra of accepted.slice(MAX_DIRECTIONS)) rejected.push({ label: extra.label, reason: `only ${MAX_DIRECTIONS} directions fit on the map`, clueIds: extra.clueIds });
   return { accepted: accepted.slice(0, MAX_DIRECTIONS), rejected };
 }
 

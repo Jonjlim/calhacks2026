@@ -96,3 +96,64 @@ export function trendClouds(
   }
   return [...caught.slice(0, MAX_DRIFTING), ...drifting];
 }
+
+/** Memories a seeking branch sweeps toward, at most; and refused ideas shown fraying. */
+export const MAX_SEEK_TARGETS = 4;
+export const MAX_FRAYED = 3;
+
+export interface WeaveThreadSpec {
+  from: string;
+  to: string;
+  mode: "seek" | "kept" | "retract" | "frayed";
+  /** For "seek": the other memories its tip sweeps between. */
+  targets?: string[];
+  label?: string;
+  delay?: number;
+}
+export interface WeaveState { id: number; phase: "reaching" | "weaving"; since: number; fresh: string[] }
+
+/**
+ * The weave's branches, by node key (D23 trial), as one continuous motion.
+ * The moment someone asks, every memory sends out a branch that seeks among
+ * the other memories. When the council answers, each memory's branch either
+ * latches onto a new direction that combines it ("kept"; extra branches when it
+ * feeds several) or pulls back home ("retract"), and up to three refused ideas
+ * fray between the memories they cited, labelled with the checks' reason.
+ * Every target is a real node. Opening a direction grows its branches again.
+ */
+export function weaveThreads({ weave, memoryKeys, directions, trail, selectedKey }: {
+  weave: WeaveState | null;
+  memoryKeys: readonly string[];
+  directions: readonly { id: string; key: string; clueIds: readonly string[] }[];
+  trail: readonly { actor: string; outcome: string; at: number; text: string; clueIds?: readonly string[] }[];
+  selectedKey: string | null;
+}): { id: number; threads: WeaveThreadSpec[] } | null {
+  if (weave?.phase === "reaching") {
+    if (memoryKeys.length < 2) return null;
+    const threads = memoryKeys.map((from, i): WeaveThreadSpec => {
+      const others = [...memoryKeys.slice(i + 1), ...memoryKeys.slice(0, i)].slice(0, MAX_SEEK_TARGETS);
+      return { from, to: others[0]!, mode: "seek", targets: others, delay: (i % 6) * 0.08 };
+    });
+    return { id: weave.id, threads };
+  }
+  if (weave?.phase === "weaving") {
+    const fresh = directions.filter((d) => weave.fresh.includes(d.id));
+    const threads: WeaveThreadSpec[] = [];
+    for (const from of memoryKeys) {
+      const joins = fresh.filter((d) => d.clueIds.some((id) => `clue:${id}` === from));
+      if (!joins.length) threads.push({ from, to: from, mode: "retract" });
+      joins.forEach((d, j) => threads.push({ from, to: d.key, mode: "kept", delay: j * 0.25 }));
+    }
+    trail.filter((e) => e.actor === "checks" && e.outcome === "rejected" && e.at >= weave.since - 2000 && (e.clueIds?.length ?? 0) >= 2)
+      .slice(-MAX_FRAYED).forEach((e, i) => {
+        const [a, b] = e.clueIds!;
+        threads.push({ from: `clue:${a}`, to: `clue:${b}`, mode: "frayed", delay: 0.5 + i * 0.4, label: e.text.replace(/^Threw out “[^”]*”: /, "").replace(/\.$/, "") });
+      });
+    return { id: weave.id, threads };
+  }
+  if (selectedKey?.startsWith("direction:")) {
+    const d = directions.find((n) => n.key === selectedKey);
+    if (d) return { id: d.clueIds.length * 7919 + d.key.length, threads: d.clueIds.map((id, j) => ({ from: `clue:${id}`, to: d.key, mode: "kept", delay: j * 0.12 })) };
+  }
+  return null;
+}

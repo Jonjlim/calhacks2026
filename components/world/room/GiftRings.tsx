@@ -24,6 +24,7 @@ import { PledgeRing, type PledgeWorld } from "./PledgeRing";
 import { platformTop } from "../props/Stonework";
 import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import { MagicTrail } from "./MagicTrail";
+import { WeaveThread, type WeaveMode } from "./WeaveThread";
 import { buildBody } from "../convergence/GiftConvergence";
 import { paint } from "../painterly/materials";
 import { LOOKS, lookFor, NOTE_SHAPE, ThemeIcon, ThemeScenery } from "./ThemeScenery";
@@ -68,6 +69,12 @@ export interface RingsWorld {
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
   /** Friends' gift ideas and sourced trend suggestions. `tag` replaces the "gift idea" caption; `faded` after someone passed. */
   ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean; direction?: boolean; agent?: boolean }[];
+  /**
+   * The council's weave (D23 trial), by node key: links it is weighing ("reach"), links each new
+   * direction combines ("kept"), and links a refused idea cited ("frayed", with the checks' reason).
+   * `id` changes for each weave so every thread grows again from the start.
+   */
+  weave?: { id: number; threads: { from: string; to: string; mode: WeaveMode; targets?: string[]; label?: string; delay?: number }[] } | null;
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -693,6 +700,13 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     [openT?.theme, openT?.x, openT?.z, rings.clues.map((c) => c.key + c.theme).join()],
   );
   const open = (c: RingsWorld["clues"][number]) => close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
+  /** Where a node is drawn right now, for threads that join nodes (the weave). */
+  const anchorOf = (key: string): [number, number] | null => {
+    const c = rings.clues.find((x) => x.key === key);
+    if (c) return open(c) ? place(c.key, ...(fan.get(c.key) ?? [c.x, c.z])) : themeAt.get(c.theme) ?? [c.x, c.z];
+    const idea = rings.ideas.find((x) => x.key === key);
+    return idea ? place(idea.key, idea.x, idea.z) : null;
+  };
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
   // Never more than three gift candidates are prominent at once: the top ranked overall, or the best of the focused branch, plus the chosen one.
   // The rest stay in the room's data and in the Book of Possibilities; here they are summed up in one marker.
@@ -816,6 +830,23 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden><CameraIcon size={22} /></i>}<em>{ph.mine ? (ph.reading ? "reading…" : ph.found ? `${ph.found} to review` : "your photo") : ph.author}</em>{ph.mine && ph.found > 0 && <b>{ph.found}</b>}</span>} />
         </RingIsland>
       ))}
+
+      {rings.weave && !revealing && (() => {
+        // Each branch ties where its nodes are drawn now (a resting memory sits on its theme's cloud), and keeps
+        // its key from seeking to attaching, so the same branch swings onto its direction instead of restarting.
+        const slots = new Map<string, number>();
+        return rings.weave.threads.map((w) => {
+          const a = anchorOf(w.from);
+          const b = anchorOf(w.to);
+          if (!a || !b) return null;
+          const n = w.mode === "frayed" ? 0 : slots.get(w.from) ?? 0;
+          if (w.mode !== "frayed") slots.set(w.from, n + 1);
+          const key = w.mode === "frayed" ? `${rings.weave!.id}:fray:${w.from}:${w.to}` : `${rings.weave!.id}:${w.from}#${n}`;
+          const targets = w.targets?.flatMap((k) => { const at = anchorOf(k); return at ? [world(at[0], at[1], 0.5)] : []; });
+          return <WeaveThread key={key} start={world(a[0], a[1], 0.5)} end={world(b[0], b[1], 0.5)}
+            mid={world((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 2.6)} mode={w.mode} targets={targets} label={w.label} delay={w.delay} animate={animate} />;
+        });
+      })()}
 
       {rings.ideas.map((idea, i) => {
         // Its attached card already reads the idea out, so a selected idea keeps its small face.
