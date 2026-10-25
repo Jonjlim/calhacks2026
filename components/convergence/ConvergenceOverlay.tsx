@@ -1,5 +1,6 @@
 "use client";
 
+import { MapIcon } from "@/components/world/room/MapIcon";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GiftSelection, ProductListing, PublishedClue, Recommendation } from "@/lib/contracts";
@@ -147,7 +148,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
                   <img src={listing.imageUrl} alt={snapshot.title} className="h-full w-full object-contain" onError={() => setPhotoFailed(true)} />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_40%,#fff4d6,#f6dcc7)] px-5 text-center">
-                    <span aria-hidden className="text-[44px] leading-none">🎁</span>
+                    <span aria-hidden className="text-[#a07a2c]"><MapIcon name="present" size={44} /></span>
                     <span className="font-display text-[18px] leading-tight text-dusk">{snapshot.title}</span>
                     <span className="text-[11px] text-dusk/55">Photo unavailable</span>
                   </div>

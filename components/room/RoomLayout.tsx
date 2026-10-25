@@ -14,6 +14,7 @@ import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts"
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { mapView } from "@/components/world/room/mapView";
+import { MapIcon } from "@/components/world/room/MapIcon";
 import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
@@ -48,6 +49,41 @@ const JAR_KINDS: Record<"wish" | "interest" | "moment", { title: string; kinds: 
 };
 
 const chip = "paper-card rounded-full px-3.5 py-2 text-[13.5px] text-dusk shadow-sm";
+const round = "paper-card grid h-11 w-11 place-items-center rounded-full text-dusk shadow-sm hover:-translate-y-px transition-transform";
+
+/** One round menu for room settings on the map. */
+function MapMenu({ items }: { items: { label: string; hint: string; run(): void }[] }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("pointerdown", away);
+    window.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("pointerdown", away);
+      window.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button className={round} aria-label="Room menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="text-[18px] leading-none tracking-[0.12em]" aria-hidden>···</span>
+      </button>
+      {open && (
+        <div role="menu" className="paper-card absolute top-[calc(100%+6px)] right-0 z-20 flex w-[240px] flex-col gap-0.5 rounded-[16px] p-1.5 shadow-[0_20px_40px_-16px_rgba(40,24,44,0.7)]">
+          {items.map((it) => (
+            <button key={it.label} role="menuitem" className="flex flex-col items-start rounded-[11px] px-3 py-2 text-left hover:bg-dusk/5" onClick={() => { setOpen(false); it.run(); }}>
+              <span className="text-[13px] font-semibold">{it.label}</span>
+              <span className="text-[11px] text-dusk/55">{it.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function RoomLayout({ data, actions, preview = false }: { data: RoomData; actions?: RoomActions; preview?: boolean }) {
   const { room, participants, me } = data.view;
@@ -240,24 +276,54 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
       </motion.div>
 
+      {/* On the map, room controls fold into an invite button and one menu; the council's tools live at the present. */}
+      {stage === "map" && (
+        <div inert={engaged || undefined} className={`absolute top-5 right-5 flex items-start gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+          {data.invitePath && <InviteCard path={data.invitePath} compact />}
+          <MapMenu items={[
+            { label: soundEnabled ? "Sound on" : "Sound off", hint: "Room sounds and music", run: toggleSound },
+            { label: time === "day" ? "Daytime" : "Night sky", hint: "Switch the light", run: () => setTimeOfDay(time === "day" ? "night" : "day") },
+            { label: "Recenter the map", hint: "Or press 0 · hold and drag the sky to turn, right-drag to move", run: () => mapView.reset() },
+            { label: "Back to the present", hint: "Zoom in on the island", run: () => setStage("garden") },
+            ...(!preview && actions ? [{ label: "Backstage", hint: "Pasted chats, notes and agent tools", run: () => setDrawer({ kind: "notes" }) }] : []),
+          ]} />
+        </div>
+      )}
+
       {/* Invite + small toggles */}
-      <div className={`absolute top-5 right-5 flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      {stage !== "map" && <div className={`absolute top-5 right-5 flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
           <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
           <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
-          {stage === "map" && map.tools}
-          {stage === "map" && <button className={chip} onClick={() => mapView.reset()} title="Drag the sky to move · scroll to zoom · 0 recenters">Recenter</button>}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
-      </div>
+      </div>}
 
       {/* The memory game floats over the tower while the room is still gathering. */}
       {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
         <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
       )}
 
+      {/* On the map: a quiet status line. Actions happen on the map itself. */}
+      {stage === "map" && (
+        <div inert={engaged || undefined} className={`absolute bottom-5 left-1/2 flex max-w-[min(720px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full bg-[#fbf7f0]/88 py-2 pr-2 pl-4 shadow-[0_14px_30px_-18px_rgba(65,52,76,0.6)] backdrop-blur-sm transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+          <span className="flex gap-1" aria-hidden>
+            {COUNCIL_ACTORS.map((a) => (
+              <span key={a} className={`h-2 w-2 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
+            ))}
+          </span>
+          <p className="font-display text-[16px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
+          <p role="status" className="min-w-0 truncate text-[12.5px] text-dusk/60">{map.error ?? map.notice ?? status ?? "Click the sky to add · hold and drag to turn the view · drag a node toward the present to support"}</p>
+          {phase === "researching" && primary}
+          {/* The Great Gift Convergence (Dev 1): the organizer starts the reveal once a gift is in the box. */}
+          {selection && isOrganizer && !preview && (
+            <button className="btn-primary flex h-10 shrink-0 items-center gap-1.5 px-4 text-[13.5px]" onClick={() => startReveal(false)}><MapIcon name="spark" size={15} />{seen ? "Replay reveal" : "Reveal our gift"}</button>
+          )}
+        </div>
+      )}
+
       {/* Phase bar */}
-      <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      {stage !== "map" && <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <span className="flex gap-1" aria-hidden>
           {COUNCIL_ACTORS.map((a) => (
             <span key={a} className={`h-2.5 w-2.5 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
@@ -265,23 +331,14 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click outside to add a memory · click near the present for a gift idea · drag to move" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{status ?? `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
-          {stage === "map" && selection && isOrganizer && !preview && (
-            <button className="btn-primary h-11 px-5" onClick={() => startReveal(false)}>{seen ? "Replay reveal" : "Reveal our gift"} <span aria-hidden>✨</span></button>
-          )}
           {primary}
-          {stage === "map" ? (
-            <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("garden")}>Back to the present</button>
-          ) : (
-            <>
-              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map <span aria-hidden>↗</span></button>
-              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
-                {stage === "tower" ? "Garden" : "Tower"}
-              </button>
-            </>
-          )}
+          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map <span aria-hidden>↗</span></button>
+          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
+            {stage === "tower" ? "Garden" : "Tower"}
+          </button>
           {(phase === "review" || phase === "approve" || phase === "done") && stage === "tower" && (
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}
@@ -289,7 +346,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className="btn-secondary h-11 px-4 text-[14px]" aria-label="Backstage: notes, agents and sharing" title="Backstage: notes, agents and sharing" onClick={() => setDrawer({ kind: "notes" })}>Backstage</button>
           )}
         </div>
-      </div>
+      </div>}
       {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
 
       {selection && (
@@ -378,18 +435,25 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
 }
 
 /** Real, scannable invite QR plus copyable link. Collapses to a pill once friends have joined. */
-function InviteCard({ path }: { path: string }) {
+function InviteCard({ path, compact = false }: { path: string; compact?: boolean }) {
   const [origin, setOrigin] = useState<string | null>(null);
-  const [open, setOpen] = useState(true);
+  // On the map the QR waits behind a round button, so it never covers the rings.
+  const [open, setOpen] = useState(!compact);
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => setOrigin(window.location.origin), []);
   const url = origin ? inviteUrl(path, appOrigin(origin)) : null;
   const modules = useMemo(() => (url ? inviteQrModules(url) : null), [url]);
   if (!url || !modules) return null;
   const code = path.split("/").pop() ?? "";
-  if (!open) return <button className={chip} onClick={() => setOpen(true)}>Invite friends · QR</button>;
+  if (!open) {
+    return compact ? (
+      <button className={round} onClick={() => setOpen(true)} aria-label="Invite friends" title="Invite friends">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><circle cx="9" cy="8" r="4" /><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6" /></svg>
+      </button>
+    ) : <button className={chip} onClick={() => setOpen(true)}>Invite friends · QR</button>;
+  }
   return (
-    <div className="paper-card w-[220px] rounded-[20px] p-3.5 text-center" data-invite-url={url}>
+    <div className={`paper-card w-[220px] rounded-[20px] p-3.5 text-center ${compact ? "absolute top-0 right-14 z-20" : ""}`} data-invite-url={url}>
       <div className="flex items-baseline justify-between">
         <p className="font-display text-[19px]">Join on your phone</p>
         <button className="text-[12px] text-dusk/55 hover:text-dusk" onClick={() => setOpen(false)} aria-label="Hide invite">Hide</button>
