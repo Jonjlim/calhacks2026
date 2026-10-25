@@ -298,7 +298,7 @@
 .nextStep { display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 15px; font: 700 12.5px var(--font-sans); color: #3b2a16; white-space: nowrap; cursor: pointer; background: linear-gradient(100deg, #e9c46a 0%, #ffe3a0 40%, #e9c46a 60%, #f4d58f 100%); background-size: 220% 100%; animation: shimmer 4s linear infinite; box-shadow: 0 10px 24px -10px rgb(160 122 44 / .9), 0 0 0 3px rgb(251 247 240 / .35); transition: transform .15s; }
 .nextStep:hover { transform: translateY(-1px) scale(1.03); }
 .nextStep:disabled { opacity: .55; cursor: not-allowed; animation: none; }
-.nextHint { display: flex; align-items: center; gap: 6px; white-space: nowrap; font: 600 12px var(--font-sans); color: rgb(255 248 235 / .85); text-shadow: 0 1px 4px rgb(0 0 0 / .5); pointer-events: none; }
+.nextHint { display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; background: rgb(47 39 55 / .6); font: 600 12px var(--font-sans); color: #fff8eb; pointer-events: none; }
 .boxOn { box-shadow: 0 0 0 3px rgb(251 247 240 / .9), 0 0 0 6px var(--color-gold), 0 10px 22px -8px rgb(40 24 44 / .55); }
 .box { position: relative; }
 @media (prefers-reduced-motion: reduce) { .nextStep { animation: none; } }
