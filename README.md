@@ -2,7 +2,7 @@
 
 **Thoughtful gifts, together.** An interactive storybook world where friends turn shared memories into evidence-backed gift recommendations, agree on a present, and complete a clearly labeled demo gift-wrapping experience.
 
-**Cal Hacks 13.0 · October 2026** · [GitHub repository](https://github.com/Jonjlim/calhacks2026) · [Current `refactor` branch](https://github.com/Jonjlim/calhacks2026/tree/refactor)
+**Cal Hacks 13.0 · October 2026** · [Devpost]([https://devpost.com/software/unwrap-y7w16s?ref_content=my-projects-tab&ref_feature=my_projects])
 
 > **Codebase snapshot:** This README documents the GitHub **`refactor`** branch (not `refractor`), inspected October 25, 2026. It distinguishes implemented code from optional features and integrations that still require live configuration or validation. **Simulated payments do not charge money, place merchant orders, or buy gifts.**
 
