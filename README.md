@@ -20,6 +20,11 @@ Unwrap brings those perspectives into a shared, hand-painted 3D storybook world.
 4. **Explore and compare.** Discover relationships in the floating-island map, then open the Book of Possibilities to browse products in one place.
 5. **Decide together.** Select a gift, set private contribution limits, approve the proposal, and celebrate the group decision through an animated finale.
 
+## Visual language
+
+The experience begins with a **pencil-drawn scene that fills with watercolor**, then becomes an interactive 3D floating-island world. The same visual treatment returns when opening the gift catalogue.
+
+![Pencil-to-watercolor storybook sequence](public/screenshots/sketch-animation.png)
 ---
 
 ## Key features
@@ -273,12 +278,6 @@ scripts/              Live smoke tests and provider spikes
 ```
 
 ---
-
-## Visual language
-
-The experience begins with a **pencil-drawn scene that fills with watercolor**, then becomes an interactive 3D floating-island world. The same visual treatment returns when opening the gift catalogue.
-
-![Pencil-to-watercolor storybook sequence](public/screenshots/sketch-animation.png)
 
 ## Getting started
 
