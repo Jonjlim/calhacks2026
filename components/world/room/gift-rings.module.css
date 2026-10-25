@@ -278,3 +278,14 @@
 @media (prefers-reduced-motion: reduce) {
   .councilBubble, .councilBubble.working::before { animation: none; }
 }
+
+/* The overview stays calm: labels are short until you hover or choose something. */
+.compact .bubble { max-width: 128px; }
+.compact .bubble q { -webkit-line-clamp: 1; }
+.compact .idea { max-width: 128px; }
+.compact .idea small { display: none; }
+.compact:hover .bubble, .compact:hover .idea { max-width: 220px; }
+.compact:hover .bubble q { -webkit-line-clamp: 4; }
+.compact:hover .idea small { display: block; }
+.compact:hover { z-index: 5; }
+.statusDot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; animation: councilPulse 1s ease-in-out infinite; }

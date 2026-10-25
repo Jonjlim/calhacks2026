@@ -230,6 +230,34 @@ function HazeVeils() {
   );
 }
 
+/**
+ * The far kingdom on every side. The gift map's camera can orbit freely, so the
+ * mountain ranges and haze are repeated to the left and right, and the whole
+ * set of landmark islands (castle, windmill village, hanging gardens,
+ * watchtower) is mirrored behind the viewer's default position. Geometry is
+ * built per copy but shares its materials, and none of it is interactive.
+ */
+export function MapSurround({ animate }: { animate: boolean }) {
+  return (
+    <group>
+      {[Math.PI / 2, -Math.PI / 2].map((turn) => (
+        <group key={turn} rotation={[0, turn, 0]}>
+          <Mountains />
+          <HazeVeils />
+        </group>
+      ))}
+      <group rotation={[0, Math.PI, 0]}>
+        <Mountains />
+        <HazeVeils />
+        <CloudCastle animate={animate} />
+        <WindmillVillage animate={animate} />
+        <HangingGardens animate={animate} />
+        <WatchtowerOutpost animate={animate} />
+      </group>
+    </group>
+  );
+}
+
 export function DistantScenery({ animate, islets = true }: { animate: boolean; islets?: boolean }) {
   const end = useMemo(() => bridgeEnd(), []);
   return (

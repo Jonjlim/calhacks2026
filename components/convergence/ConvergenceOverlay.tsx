@@ -153,7 +153,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
                   <img src={listing.imageUrl} alt={snapshot.title} className="h-full w-full object-contain" onError={() => setPhotoFailed(true)} />
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[radial-gradient(circle_at_50%_40%,#fff4d6,#f6dcc7)] px-5 text-center">
-                    <span aria-hidden className="text-[44px] leading-none">🎁</span>
+                    <svg aria-hidden width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#c9694d" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="9" width="17" height="11" rx="1.5" /><path d="M3 9h18v-3H3zM12 6v14M12 6c-1-3-5-3.5-5-1.2C7 6 9 6 12 6zM12 6c1-3 5-3.5 5-1.2C17 6 15 6 12 6z" /></svg>
                     <span className="font-display text-[18px] leading-tight text-dusk">{snapshot.title}</span>
                     <span className="text-[11px] text-dusk/55">Photo unavailable</span>
                   </div>

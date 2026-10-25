@@ -133,11 +133,20 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       const view = mapView.step(dt, reducedMotion);
       const poseOf = (stage: typeof shown): CameraPose => {
         if (stage !== "map") return stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : p.landing;
-        // The map can be dragged and zoomed: slide both ends of the view, and pull the camera along its line of sight.
-        const base = pullBack(mapPose(w, size.height), view.zoom);
+        // The camera orbits a focus point: pan moves the point, zoom scales the distance to it, yaw swings round it and pitch tilts the view.
+        const base = mapPose(w, size.height);
         const [px, py, pz] = base.position;
         const [tx, ty, tz] = base.target;
-        return { ...base, position: [px + view.x, py, pz + view.z], target: [tx + view.x, ty, tz + view.z] };
+        const dx = px - tx;
+        const dy = py - ty;
+        const dz = pz - tz;
+        const dist = Math.hypot(dx, dy, dz) * view.zoom;
+        const yaw = Math.atan2(dx, dz) + view.yaw;
+        // Never lower than a scenic low angle (so the view stays above the islands' undersides) nor straight overhead.
+        const el = THREE.MathUtils.clamp(Math.asin(dy / Math.hypot(dx, dy, dz)) + view.pitch, 0.2, 1.42);
+        const fx = tx + view.x;
+        const fz = tz + view.z;
+        return { ...base, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
       };
       const scenePose = poseOf(shown);
       if (convergence.active) {

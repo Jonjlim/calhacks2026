@@ -193,7 +193,7 @@ function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; 
   const pulse = rings.pulses?.[k];
   return (
     <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
-      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
         onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
         <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
           onPointerDown={(e) => drag.begin(k, from, e)}
@@ -248,7 +248,10 @@ function useMapNavigation(center: THREE.Vector3) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const gl = useThree((st) => st.gl);
   const size = useThree((st) => st.size);
-  const pan = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  // One finger or the left button orbits; the right or middle button, or Shift / Ctrl / Alt with the left, pans. Two fingers pinch to zoom.
+  const pan = useRef<{ id: number; x: number; y: number; moved: boolean; mode: "orbit" | "pan" } | null>(null);
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef(0);
   useEffect(() => {
     mapView.reset(true);
     return () => mapView.reset(true);
@@ -256,6 +259,16 @@ function useMapNavigation(center: THREE.Vector3) {
   useEffect(() => {
     const worldPerPixel = () => (2 * camera.position.distanceTo(center) * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, size.height);
     const move = (e: PointerEvent) => {
+      if (e.pointerType === "touch" && touches.current.has(e.pointerId)) {
+        touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (touches.current.size === 2) {
+          const [a, b] = [...touches.current.values()];
+          const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+          if (pinch.current > 0 && d > 0) mapView.zoomBy(pinch.current / d);
+          pinch.current = d;
+          return;
+        }
+      }
       const p = pan.current;
       if (!p || e.pointerId !== p.id) return;
       // A click wobbles a pixel or two; only a real drag moves the map.
@@ -265,19 +278,30 @@ function useMapNavigation(center: THREE.Vector3) {
         mapView.dragging = true;
         mapCursor.set("pan");
       }
-      const k = worldPerPixel();
-      // Screen-down is toward the viewer on the tilted map, which is foreshortened.
-      mapView.pan(-(e.clientX - p.x) * k, -(e.clientY - p.y) * k * 1.3);
+      const dx = e.clientX - p.x;
+      const dy = e.clientY - p.y;
+      if (p.mode === "orbit") {
+        // Dragging right swings the camera round to the left (the world follows the finger); dragging down looks more from above.
+        mapView.orbit(-dx * 0.0058, dy * 0.0042);
+      } else {
+        const k = worldPerPixel();
+        // Screen-down is toward the viewer on the tilted map, which is foreshortened.
+        mapView.panScreen(-dx * k, dy * k * 1.3);
+      }
       p.x = e.clientX;
       p.y = e.clientY;
     };
     const up = (e: PointerEvent) => {
+      touches.current.delete(e.pointerId);
+      if (touches.current.size < 2) pinch.current = 0;
       if (pan.current?.id !== e.pointerId) return;
       if (pan.current.moved) mapCursor.set("memory");
       pan.current = null;
       mapView.dragging = false;
     };
     const wrapper = gl.domElement.parentElement ?? gl.domElement;
+    const noMenu = (e: Event) => e.preventDefault();
+    wrapper.addEventListener("contextmenu", noMenu);
     const wheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement | null)?.closest?.("textarea")) return;
       e.preventDefault();
@@ -290,17 +314,26 @@ function useMapNavigation(center: THREE.Vector3) {
       } else {
         // Two fingers on a trackpad: move around, like the sky is being slid.
         const k = worldPerPixel();
-        mapView.pan(e.deltaX * k, e.deltaY * k * 1.3);
+        mapView.panScreen(e.deltaX * k, -e.deltaY * k * 1.3);
       }
     };
+    // Keyboard alternatives for everything the mouse does: arrows pan, Shift + arrows (or Q / E) orbit and tilt, + / - zoom, 0 returns to the overview.
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const step = 3;
-      if (e.key === "ArrowLeft") mapView.pan(-step, 0);
-      else if (e.key === "ArrowRight") mapView.pan(step, 0);
-      else if (e.key === "ArrowUp") mapView.pan(0, -step);
-      else if (e.key === "ArrowDown") mapView.pan(0, step);
+      const turn = 0.18;
+      if (e.shiftKey && e.key === "ArrowLeft") mapView.orbit(turn, 0);
+      else if (e.shiftKey && e.key === "ArrowRight") mapView.orbit(-turn, 0);
+      else if (e.shiftKey && e.key === "ArrowUp") mapView.orbit(0, turn * 0.7);
+      else if (e.shiftKey && e.key === "ArrowDown") mapView.orbit(0, -turn * 0.7);
+      else if (e.key === "q" || e.key === "Q") mapView.orbit(turn, 0);
+      else if (e.key === "e" || e.key === "E") mapView.orbit(-turn, 0);
+      else if (e.key === "ArrowLeft") mapView.panScreen(-step, 0);
+      else if (e.key === "ArrowRight") mapView.panScreen(step, 0);
+      else if (e.key === "ArrowUp") mapView.panScreen(0, step);
+      else if (e.key === "ArrowDown") mapView.panScreen(0, -step);
       else if (e.key === "+" || e.key === "=") mapView.zoomBy(0.85);
       else if (e.key === "-" || e.key === "_") mapView.zoomBy(1 / 0.85);
       else if (e.key === "0") mapView.reset();
@@ -317,16 +350,29 @@ function useMapNavigation(center: THREE.Vector3) {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
       wrapper.removeEventListener("wheel", wheel);
+      wrapper.removeEventListener("contextmenu", noMenu);
       window.removeEventListener("keydown", key);
       mapView.dragging = false;
     };
   }, [camera, gl, size.height, center]);
   return {
     start(e: ThreeEvent<PointerEvent>) {
-      if (e.nativeEvent.button !== 0 || mapView.locked) return;
-      e.nativeEvent.preventDefault();
+      const n = e.nativeEvent;
+      if (mapView.locked) return;
+      if (n.pointerType === "touch") {
+        touches.current.set(n.pointerId, { x: n.clientX, y: n.clientY });
+        if (touches.current.size === 2) {
+          const [a, b] = [...touches.current.values()];
+          pinch.current = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+          pan.current = null;
+          return;
+        }
+      }
+      if (n.button > 2) return;
+      n.preventDefault();
       window.getSelection()?.removeAllRanges();
-      pan.current = { id: e.nativeEvent.pointerId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, moved: false };
+      const panning = n.button === 1 || n.button === 2 || n.shiftKey || n.ctrlKey || n.altKey;
+      pan.current = { id: n.pointerId, x: n.clientX, y: n.clientY, moved: false, mode: panning ? "pan" : "orbit" };
     },
   };
 }
@@ -429,7 +475,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const t = themeAt.get(c.theme);
         return (
           <group key={c.key}>
-            {t && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
+            {t && !revealing && lit(c.key) && lit(`theme:${c.theme}`) && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
             <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)}>
               <Suspense fallback={null}>
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
@@ -458,9 +504,9 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           <group key={g.key}>
             {g.themes.map((theme) => {
               const t = themeAt.get(theme);
-              return t && !revealing ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
+              return t && !revealing && lit(g.key) && lit(`theme:${theme}`) ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
             })}
-            {rings.selectedListingId === g.listingId && !revealing && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
+            {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
                 face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />

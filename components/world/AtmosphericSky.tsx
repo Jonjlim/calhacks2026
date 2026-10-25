@@ -177,7 +177,7 @@ function useKeepClear() {
   };
 }
 
-function CloudLayer({ animate, tint }: { animate: boolean; tint: string }) {
+function CloudLayer({ animate, tint, clearZone = true }: { animate: boolean; tint: string; clearZone?: boolean }) {
   const specs = useMemo(buildClouds, []);
   const refs = useRef<(THREE.Sprite | null)[]>([]);
   const keepClear = useKeepClear();
@@ -191,7 +191,7 @@ function CloudLayer({ animate, tint }: { animate: boolean; tint: string }) {
         sprite.position.x += s.speed * step;
         if (sprite.position.x > 90) sprite.position.x = -90;
       }
-      (sprite.material as THREE.SpriteMaterial).opacity = s.opacity * keepClear(sprite, s.w, camera, aspect);
+      (sprite.material as THREE.SpriteMaterial).opacity = s.opacity * (clearZone ? keepClear(sprite, s.w, camera, aspect) : 1);
     });
   });
   return (
@@ -297,6 +297,25 @@ function ForegroundWisps({ animate, tint }: { animate: boolean; tint: string }) 
         >
           <spriteMaterial map={cloudTexture(s.seed, true)} color={tint} transparent depthWrite={false} opacity={0.3} fog={false} />
         </sprite>
+      ))}
+    </>
+  );
+}
+
+/**
+ * On the gift map the camera can swing all the way round, so the cloud banks
+ * that normally sit only behind the island are repeated on the other three
+ * sides: the same layers, drifting at their own paces, so there is sky and
+ * depth in every direction.
+ */
+export function SurroundClouds({ animate }: { animate: boolean }) {
+  const palette = useScenePalette();
+  return (
+    <>
+      {[Math.PI / 2, Math.PI, -Math.PI / 2].map((turn) => (
+        <group key={turn} rotation={[0, turn, 0]}>
+          <CloudLayer animate={animate} tint={palette.cloudTint} clearZone={false} />
+        </group>
       ))}
     </>
   );

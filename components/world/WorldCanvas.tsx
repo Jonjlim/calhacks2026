@@ -10,9 +10,9 @@ import { CouncilFamiliars } from "./room/CouncilFamiliars";
 import { GiftRings } from "./room/GiftRings";
 import { TowerInterior } from "./room/TowerInterior";
 import type { CouncilActor } from "@/lib/council/contracts";
-import { AtmosphericSky } from "./AtmosphericSky";
+import { AtmosphericSky, SurroundClouds } from "./AtmosphericSky";
 import { Birds, Fireflies, FlowerPetals, ForegroundFoliage, MagicMotes } from "./AmbientEffects";
-import { DistantScenery } from "./DistantScenery";
+import { DistantScenery, MapSurround } from "./DistantScenery";
 import { FloatingIsland } from "./FloatingIsland";
 import { HeroGiftBox } from "./HeroGiftBox";
 import { IntroBridge } from "./intro/IntroBridge";
@@ -105,6 +105,8 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
+      {council && stage.shown === "map" && <MapSurround animate={animate} />}
+      {council && stage.shown === "map" && <SurroundClouds animate={animate} />}
       {council && stage.shown === "map" && <GiftRings animate={animate} />}
       {council && stage.shown === "map" && <CouncilFamiliars world={council} animate={animate} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />

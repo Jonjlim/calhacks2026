@@ -12,6 +12,7 @@ import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RIN
 import { isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
+import { mapView } from "@/components/world/room/mapView";
 import { BoxPanel } from "./BoxPanel";
 import type { RoomActions, RoomData } from "./types";
 
@@ -182,6 +183,29 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const cited = (rec?.publishedClueIds ?? []).filter((id) => themeOfClue.has(id));
     const trend = trendByListing.get(selection.listingId);
     highlight = new Set(["box", `gift:${selection.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeOfClue.get(id)}`), ...(trend ? [trendKey(trend.trendJobId, trend.query)] : [])]);
+  }
+  // Progressive disclosure: choosing a memory, a theme or a gift lights up only what connects to it, and everything else recedes.
+  if (!highlight && selectedKey && (selectedKey.startsWith("clue:") || selectedKey.startsWith("theme:") || selectedKey.startsWith("gift:"))) {
+    const set = new Set<string>(["box", selectedKey]);
+    const addTheme = (id: string) => {
+      set.add(`theme:${id}`);
+      for (const c of layout.clues) if (c.theme === id) set.add(`clue:${c.id}`);
+      for (const g of layout.gifts) if (g.themes.includes(id)) set.add(`gift:${g.listingId}`);
+    };
+    if (selectedKey.startsWith("clue:")) {
+      const theme = themeOfClue.get(selectedKey.slice(5));
+      if (theme) {
+        set.add(`theme:${theme}`);
+        for (const g of layout.gifts) if (g.themes.includes(theme)) set.add(`gift:${g.listingId}`);
+      }
+    } else if (selectedKey.startsWith("theme:")) {
+      addTheme(selectedKey.slice(6));
+    } else {
+      const listingId = selectedKey.slice(5);
+      for (const g of layout.gifts) if (g.listingId === listingId) for (const id of g.themes) set.add(`theme:${id}`);
+      for (const id of recs.find((r) => r.listingId === listingId)?.publishedClueIds ?? []) if (themeOfClue.has(id)) set.add(`clue:${id}`);
+    }
+    highlight = set;
   }
 
   const vote = (listingId: string, value: "up" | "down") => {
@@ -490,7 +514,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const boxPanel = (
     <BoxPanel proposal={data.proposal} selection={selection} listing={selection ? listingById.get(selection.listingId) : undefined} participants={participants} me={me}
       isOrganizer={isOrganizer} actions={actions} avatarOf={avatarOf} colorOf={colorOf} why={why} onWhy={() => setWhy((w) => !w)} onClose={() => setSelectedKey(null)}
-      onReveal={onReveal ? () => { setSelectedKey(null); onReveal(!isOrganizer); } : undefined} revealLabel={isOrganizer ? (revealSeen ? "✨ Replay reveal" : "✨ Reveal our gift") : "✨ See our gift"} />
+      onReveal={onReveal ? () => { setSelectedKey(null); onReveal(!isOrganizer); } : undefined} revealLabel={isOrganizer ? (revealSeen ? "Replay reveal" : "Reveal our gift") : "See our gift"} />
   );
 
   // The sharpen round: one question between the two leading gifts.
@@ -523,11 +547,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     <>
       <button type="button" className={s.tool} disabled={!!pending || clues.length < 3} title={clues.length < 3 ? "Share at least 3 memories first" : "The council groups memories into themes"}
         onClick={() => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes")}>
-        {pending === "themes" ? "Grouping…" : councilThemes.length ? "✨ Regroup themes" : "✨ Group into themes"}
+        {pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes"}
       </button>
       <button type="button" className={s.tool} disabled={!!pending || recs.length < 2} title={recs.length < 2 ? "Find at least two gifts first" : "One question to split the two leading gifts"}
         onClick={() => void run(() => actions.sharpen(), "The council has one question for you.", "sharpen")}>
-        {pending === "sharpen" ? "Thinking…" : "🎯 Sharpen"}
+        {pending === "sharpen" ? "Thinking…" : "Sharpen"}
       </button>
     </>
   ) : null;
@@ -583,6 +607,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       setComposer(null);
       setSelectedKey(key);
       if (key !== "box") setWhy(false);
+      // Choosing a memory, theme or gift glides the camera to it, keeping the viewer's angle.
+      const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) : undefined;
+      if (at) mapView.focus(at.x, at.z);
     },
     onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);
