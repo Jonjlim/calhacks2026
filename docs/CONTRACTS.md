@@ -931,6 +931,8 @@ May enqueue `AgentJob` `evaluate_thread`.
 
 Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
 
+After sharing a room photo, the map waits for the saved photo to arrive on the room subscription, focuses its island, and opens its private review panel. Closing the composer is not a published clue: the uploader must still review and publish each suggestion. Failed photo reads and completed reads without suggestions must not remain labeled “Reading”.
+
 ### `extractClues`
 
 | | |
@@ -2011,3 +2013,5 @@ The map draws every gift the catalog returns, apart from ones the room let go. O
 - `research.tiktokLooks.list({ roomId })` → `Result<{ id, query, status, posts: { url, videoId }[], retrievedAt?, lastError? }[]>`. Posts are public TikTok links (private accounts and ads dropped), at most 6.
 - New `tiktokLooks` table (room-scoped, purged with the room). A successful search logs one "looked at N public TikToks" line in the decision log.
 
+
+Map subscriptions fail independently: an unavailable optional endpoint (for example TikTok inspiration) must not remove saved photos, directions, or other successfully loaded map data. The room names the unavailable feature instead of treating it as an empty successful result. Combine reports when no new direction was saved.

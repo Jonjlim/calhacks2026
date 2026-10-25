@@ -380,6 +380,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
+          {stage === "map" && !!data.mapUnavailable?.length && <p role="alert" className="max-w-[440px] text-[12.5px] text-dusk/80">{data.mapUnavailable.join(", ")} temporarily unavailable. Your other map items are still here.</p>}
           <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Add a memory or gift idea · use the photo icon to share pictures · drag to look around" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
