@@ -53,13 +53,14 @@ export interface WorldCanvasProps {
   /** While the storybook intro runs, the camera follows the intro clock and pointer parallax is off. */
   introActive?: boolean;
   onReady?: () => void;
+  onUnavailable?: () => void;
   council?: RoomWorld | null;
   roomActive?: boolean;
   onAssetStatus?: (actor: CouncilActor, status: "ready" | "failed") => void;
 }
 
 /** The interactive 3D opening scene. Purely visual; holds no application state. */
-export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStrength, introActive = false, onReady, council, roomActive = false, onAssetStatus }: WorldCanvasProps) {
+export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStrength, introActive = false, onReady, onUnavailable, council, roomActive = false, onAssetStatus }: WorldCanvasProps) {
   const stage = useRoomStage();
   const [quality, setQuality] = useState<WorldQuality>("high");
   const [canvasReady, setCanvasReady] = useState(false);
@@ -83,8 +84,8 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
         gl.setClearColor(palette.clearColor);
         requestAnimationFrame(markReady);
       }}
-      aria-hidden
     >
+      <ContextRecovery onUnavailable={onUnavailable} />
       <ScenePaletteContext.Provider value={palette}>
       <PerformanceMonitor onDecline={() => setQuality("low")} flipflops={2} />
       {painterlyStrength > 0 && canvasReady && (
@@ -128,4 +129,15 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       </ScenePaletteContext.Provider>
     </Canvas>
   );
+}
+
+/** Losing the GPU must not strand the user inside a non-interactive map. */
+function ContextRecovery({ onUnavailable }: { onUnavailable?: () => void }) {
+  const gl = useThree((state) => state.gl);
+  useEffect(() => {
+    const lost = () => onUnavailable?.();
+    gl.domElement.addEventListener("webglcontextlost", lost);
+    return () => gl.domElement.removeEventListener("webglcontextlost", lost);
+  }, [gl, onUnavailable]);
+  return null;
 }

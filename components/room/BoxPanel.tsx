@@ -36,6 +36,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
 }) {
   const { revision, approvals, myLimit } = proposal;
   const [limitInput, setLimitInput] = useState(myLimit ? (myLimit.amountMinor / 100).toFixed(2) : "");
+  useEffect(() => setLimitInput(myLimit ? (myLimit.amountMinor / 100).toFixed(2) : ""), [myLimit?.amountMinor]);
   const [limitError, setLimitError] = useState<AppError | null>(null);
   const saveLimit = useResultAction(actions?.setLimit);
   const approve = useResultAction(actions?.approve);

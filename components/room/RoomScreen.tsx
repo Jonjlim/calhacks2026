@@ -21,6 +21,7 @@ import {
 } from "@/lib/mocks/queries";
 import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
 import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
+import { useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { RoomLayout } from "./RoomLayout";
 import { RevealHarness } from "./RevealHarness";
 import type { RoomActions, RoomData } from "./types";
@@ -258,6 +259,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     evidence: value(evidenceRes, []).map(withId),
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
+    researchJobs: jobsRes?.ok ? jobsRes.value.researchJobs : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
     trends: trendsRes?.ok ? trendsRes.value : undefined,
   };
@@ -315,12 +317,20 @@ function RoomWithQuestionPoll({ roomId, data, actions, legacyActions, surface }:
   roomId: Id<"rooms">; data: RoomData; actions: RoomActions; legacyActions: RoomActions; surface: RoomSurface;
 }) {
   const poll = useQuery(api.questionPolls.state, { roomId });
-  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined }}
+  // The simulated checkout is shared state: everyone in the room reaches the same ending from it.
+  const sim = useQuery(api.payments.simulation.getState, { roomId });
+  const simulate = useMutation(api.payments.simulation.simulateContribution);
+  const wrap = useMutation(api.payments.simulation.wrapGift);
+  const view = sim?.ok ? sim.value : null;
+  const revisionId = view?.revisionId as Id<"proposalRevisions"> | null | undefined;
+  const simulation = view && revisionId ? { view, simulate: () => simulate({ roomId, revisionId }), wrap: () => wrap({ roomId, revisionId }) } : view ? { view, simulate: async () => ({ ok: false as const, error: { code: "invalid_revision" as const, message: "There is no proposal yet." } }), wrap: async () => ({ ok: false as const, error: { code: "invalid_revision" as const, message: "There is no proposal yet." } }) } : undefined;
+  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined, simulation }}
     actions={poll?.ok ? actions : legacyActions} />;
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {
-  return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
+  const { webgl } = useIslandWorld();
+  return surface === "phone" || webgl === false ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {

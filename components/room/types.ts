@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/convex/_generated/api";
 import type {
   ChatMessage,
+  ContributionSimulationView,
   ClueKind,
   EvidenceSource,
   GiftSelection,
@@ -47,6 +48,7 @@ export interface RoomData {
   invitePath?: string;
   activity?: ActivityView;
   latestResearch?: ResearchJobRow | null;
+  researchJobs?: ResearchJobRow[];
   councilUnavailable?: boolean;
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
   /** Latest sourced Google Trends suggestions for one memory, and listings found from them. */
@@ -69,6 +71,15 @@ export interface RoomData {
   trail?: TrailEntry[];
   /** TikTok inspiration searches for trend clouds (D23 trial). */
   tiktokLooks?: TikTokLookView[];
+  /** The simulated checkout and the end of the game. Absent when the backend has no simulation. */
+  simulation?: SimulationApi;
+}
+
+/** The shared, clearly simulated checkout (convex/payments/simulation): where the group is, and what this person can do next. */
+export interface SimulationApi {
+  view: ContributionSimulationView;
+  simulate(): Promise<Result<unknown>>;
+  wrap(): Promise<Result<unknown>>;
 }
 
 export type TrailEntry = OkValue<FunctionReturnType<typeof api.trail.list>>[number];

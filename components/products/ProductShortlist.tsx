@@ -1,5 +1,7 @@
 "use client";
 
+import { addToGiftBox, giftIsInBox } from "@/lib/room/giftBox";
+
 import type { ResearchJobRow, RoomActions, VoteSummary } from "@/components/room/types";
 import { Button } from "@/components/ui/Button";
 import { ErrorText } from "@/components/ui/ErrorText";
@@ -8,7 +10,7 @@ import type { GiftSelection, ProductListing, PublishedClue, Recommendation, Vote
 import { useResultAction } from "@/lib/useResultAction";
 import { ProductCard } from "./ProductCard";
 
-type ShortlistActions = Pick<RoomActions, "startResearch" | "castVote" | "clearVote" | "selectGift">;
+type ShortlistActions = Pick<RoomActions, "startResearch" | "castVote" | "clearVote" | "selectGift" | "addGiftToBox">;
 
 // PX-007 / PX-009: shortlist, "Why this?", select and vote controls.
 export function ProductShortlist({
@@ -72,7 +74,8 @@ export function ProductShortlist({
                 listing={listing}
                 clueTexts={r.publishedClueIds.map((id) => clueText.get(id)).filter((t): t is string => !!t)}
                 vote={votes[listing.id]}
-                selected={selection?.listingId === listing.id}
+                selected={giftIsInBox(selection, listing.id)}
+                selection={selection}
                 isOrganizer={isOrganizer}
                 actions={actions}
               />
@@ -90,6 +93,7 @@ function ShortlistItem({
   clueTexts,
   vote,
   selected,
+  selection,
   isOrganizer,
   actions,
 }: {
@@ -98,12 +102,13 @@ function ShortlistItem({
   clueTexts: string[];
   vote?: VoteSummary;
   selected: boolean;
+  selection: GiftSelection | null;
   isOrganizer: boolean;
   actions?: ShortlistActions;
 }) {
   const cast = useResultAction(actions?.castVote);
   const clear = useResultAction(actions?.clearVote);
-  const select = useResultAction(actions?.selectGift);
+  const select = useResultAction(actions ? (id: string) => addToGiftBox(actions, selection, id) : undefined);
   const busy = cast.pending || clear.pending;
 
   function toggle(value: VoteValue) {
@@ -127,11 +132,11 @@ function ShortlistItem({
             Not quite · {vote?.tally.down ?? 0}
           </Button>
           {selected ? (
-            <span className="rounded-full bg-coral/15 px-3 py-1 text-[12px] font-medium text-coral">Chosen gift</span>
+            <span className="rounded-full bg-coral/15 px-3 py-1 text-[12px] font-medium text-coral">In the gift box</span>
           ) : (
             isOrganizer && (
               <Button variant="primary" disabled={select.pending || listing.status === "invalid"} onClick={() => select.run(listing.id)}>
-                Choose this gift
+                Add to gift box
               </Button>
             )
           )}
