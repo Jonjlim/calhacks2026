@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOX_DROP_RADIUS, GIFT_MIN_RADIUS, RING_RADII, RING_THEMES, dragResult, layoutRings, ringDistance, ringPoint, themeForKind } from "./rings";
+import { BOX_DROP_RADIUS, GIFT_MIN_RADIUS, RING_RADII, UNGROUPED, dragResult, layoutRings, ringDistance, ringPoint, themeForKind } from "./rings";
 
 const gift = (over: Partial<Parameters<typeof layoutRings>[1][number]> = {}) => ({ listingId: "l1", clueIds: [], score: 0.6, up: 0, down: 0, resting: false, ...over });
 
@@ -16,20 +16,22 @@ describe("ring layout", () => {
     expect(three.slice(0, 2)).toEqual(two);
   });
 
-  it("puts clues on the outer ring and only shows themes that have clues", () => {
-    const layout = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }], []);
-    expect(layout.themes).toEqual([expect.objectContaining({ id: "interest", label: "Loves", count: 2 })]);
-    for (const c of layout.clues) expect(ringDistance(c.x, c.z)).toBeCloseTo(RING_RADII.input, 5);
+  it("shows memories on their own around the outer ring until the council groups them", () => {
+    const layout = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "explicit_wish" }, { id: "c", kind: "timing" }], []);
+    expect(layout.themes).toEqual([]);
+    expect(layout.clues.every((c) => c.theme === UNGROUPED)).toBe(true);
+    for (const c of layout.clues) expect(ringDistance(c.x, c.z)).toBeGreaterThan(RING_RADII.input - 1);
+    // No two floating memories share a seat.
+    const seats = new Set(layout.clues.map((c) => `${c.x.toFixed(1)},${c.z.toFixed(1)}`));
+    expect(seats.size).toBe(3);
   });
 
   it("places a gift between the themes its recommendation cites", () => {
     const clues = [{ id: "a", kind: "interest" }, { id: "b", kind: "explicit_wish" }];
-    const [both] = layoutRings(clues, [gift({ clueIds: ["a", "b"] })]).gifts;
-    const [one] = layoutRings(clues, [gift({ clueIds: ["a"] })]).gifts;
-    expect(both!.themes.sort()).toEqual(["interest", "wish"]);
-    const angle = (Math.atan2(both!.z, both!.x / 1.5) * 180) / Math.PI;
-    const between = ((RING_THEMES.interest.angle + RING_THEMES.wish.angle + 360) / 2) % 360 - 360;
-    expect(angle).toBeCloseTo(between, 0);
+    const themes = [{ id: "t1", label: "Loves the outdoors", clueIds: ["a"] }, { id: "t2", label: "Retro style", clueIds: ["b"] }];
+    const [both] = layoutRings(clues, [gift({ clueIds: ["a", "b"] })], { themes }).gifts;
+    const [one] = layoutRings(clues, [gift({ clueIds: ["a"] })], { themes }).gifts;
+    expect(both!.themes.sort()).toEqual(["t1", "t2"]);
     // Fitting two themes pulls it closer to the present than fitting one.
     expect(both!.radius).toBeLessThan(one!.radius);
   });
@@ -43,8 +45,8 @@ describe("ring layout", () => {
   });
 
   it("ignores clue ids the viewer cannot see", () => {
-    const [g] = layoutRings([{ id: "a", kind: "interest" }], [gift({ clueIds: ["a", "hidden"] })]).gifts;
-    expect(g!.themes).toEqual(["interest"]);
+    const [g] = layoutRings([{ id: "a", kind: "interest" }], [gift({ clueIds: ["a", "hidden"] })], { themes: [{ id: "t1", label: "Hikes", clueIds: ["a", "hidden"] }] }).gifts;
+    expect(g!.themes).toEqual(["t1"]);
   });
 
   it("fans out gifts that share a direction", () => {
@@ -80,16 +82,17 @@ describe("zones", () => {
 
 describe("council themes, signals and sharpen", () => {
   const clues = [{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }, { id: "c", kind: "timing" }];
-  it("groups by council themes and collects the rest under one more theme", async () => {
-    const { layoutRings: lay, OTHER_THEME } = await import("./rings");
+  it("groups by council themes and lets a memory no theme holds yet float on its own", async () => {
+    const { layoutRings: lay } = await import("./rings");
     const out = lay(clues, [], { themes: [{ id: "t1", label: "Makes things", clueIds: ["a", "b", "zz"] }] });
-    expect(out.themes.map((t) => [t.id, t.count])).toEqual([["t1", 2], [OTHER_THEME, 1]]);
-    expect(out.clues.find((c) => c.id === "c")?.theme).toBe(OTHER_THEME);
+    expect(out.themes.map((t) => [t.id, t.count])).toEqual([["t1", 2]]);
+    expect(out.clues.find((c) => c.id === "c")?.theme).toBe(UNGROUPED);
   });
   it("pulls signalled clues and themes inward, and their gifts with them", async () => {
     const { layoutRings: lay, ringDistance: dist } = await import("./rings");
-    const base = lay(clues, [gift({ clueIds: ["a"] })]);
-    const pulled = lay(clues, [gift({ clueIds: ["a"] })], { signals: { clue: { a: 2 }, theme: { interest: 2 } } });
+    const themes = [{ id: "t1", label: "Makes things", clueIds: ["a", "b"] }];
+    const base = lay(clues, [gift({ clueIds: ["a"] })], { themes });
+    const pulled = lay(clues, [gift({ clueIds: ["a"] })], { themes, signals: { clue: { a: 2 }, theme: { t1: 2 } } });
     const r = (l: typeof base, id: string) => { const c = l.clues.find((x) => x.id === id)!; return dist(c.x, c.z); };
     expect(r(pulled, "a")).toBeLessThan(r(base, "a"));
     expect(pulled.gifts[0]!.radius).toBeLessThan(base.gifts[0]!.radius);

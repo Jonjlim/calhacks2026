@@ -66,6 +66,8 @@ export interface RoomData {
   searchPools?: SearchPoolSummary[];
   /** The room's decision log, for "How we got here" (D23 trial). */
   trail?: TrailEntry[];
+  /** TikTok inspiration searches for trend clouds (D23 trial). */
+  tiktokLooks?: TikTokLookView[];
 }
 
 export type TrailEntry = OkValue<FunctionReturnType<typeof api.trail.list>>[number];
@@ -118,6 +120,8 @@ export interface RoomActions {
   proposeDirections?: Run;
   /** Search real gifts for one direction (D23 trial). */
   researchDirection?: Run<[directionId: string, publishedClueIds: string[]]>;
+  /** Show public TikToks for one trend cloud's search (D23 trial); reuses a recent search. */
+  lookTikTok?: Run<[trendJobId: string, query: string]>;
   suggestThemes: Run;
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
@@ -130,3 +134,6 @@ export interface RoomActions {
   /** Shares this viewer's pointer on the map plane; fire and forget. */
   moveCursor: Run<[x: number, z: number]>;
 }
+
+/** TikTok inspiration for a trend cloud (D23 trial). */
+export type TikTokLookView = OkValue<FunctionReturnType<typeof api.research.tiktokLooks.list>>[number];

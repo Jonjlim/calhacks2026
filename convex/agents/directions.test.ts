@@ -8,6 +8,7 @@ import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { modules } from "../test.setup";
 import fixture from "../research/fixtures/johnvc-shopping.json";
+import { GIFTS_PER_DIRECTION } from "../research/catalog";
 
 const research = internal.research.research;
 function unwrap<T>(result: Result<T>): T {
@@ -84,17 +85,18 @@ describe("searching one direction", () => {
     expect((await s.t.run((ctx) => ctx.db.get(again)))!.status).toBe("stale");
   });
 
-  it("shows two gifts per direction, each saying which direction found it", async () => {
+  it("shows a few gifts per direction, each saying which direction found it", async () => {
     const s = await setup();
     const a = await s.direction("Pottery tools", "pottery trimming tools");
     await s.finish(await s.search(a, "a1"));
     await s.finish(await s.search(undefined, "g1"));
     const view = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId }));
     const fromA = view.recommendations.filter((r) => r.foundBy?.directionId === a);
-    expect(fromA).toHaveLength(2);
+    const pool = view.searchPools!.find((p) => p.directionId === a)!;
+    expect(fromA).toHaveLength(Math.min(GIFTS_PER_DIRECTION, pool.found - pool.removedByClues - pool.foldedDuplicates));
+    expect(fromA.length).toBeLessThanOrEqual(GIFTS_PER_DIRECTION);
     expect(fromA[0]?.foundBy).toMatchObject({ source: "direction", query: "pottery trimming tools" });
-    expect(view.recommendations.length).toBeLessThanOrEqual(4);
-    expect(view.searchPools?.find((p) => p.directionId === a)).toMatchObject({ query: "pottery trimming tools", shown: 2 });
+    expect(pool).toMatchObject({ query: "pottery trimming tools", shown: fromA.length });
   });
 
   it("lets a direction go once the room passes on it, gifts and all", async () => {
@@ -173,10 +175,18 @@ describe("the council reacting to passes", () => {
     expect((await scheduledReplacement(s))?.args[0]).toMatchObject({ passed: [expect.stringContaining("too pricey")] });
   });
 
-  it("gives a pulled-in direction a third gift, and puts a pulled gift first", async () => {
+  it("gives a pulled-in direction one more gift, and puts a pulled gift first", async () => {
     const s = await setup();
     const a = await s.direction("Pottery tools", "pottery trimming tools");
-    await s.finish(await s.search(a, "a1"));
+    const jobId = await s.search(a, "a1");
+    await s.finish(jobId);
+    // More distinct products than a direction shows, so pulling it in has one more to reveal.
+    await s.t.run(async (ctx) => {
+      const first = (await ctx.db.query("productListings").withIndex("by_job", (q) => q.eq("jobId", jobId)).first())!;
+      const { _id, _creationTime, ...base } = first;
+      for (const title of ["Clay loop trimming tool set", "Wooden rib shaping tool", "Needle and fettling knife kit", "Sponge on a stick finishing tool"])
+        await ctx.db.insert("productListings", { ...base, title, sourceUrl: `https://example.com/${encodeURIComponent(title)}` });
+    });
     const before = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId })).recommendations;
     unwrap(await s.alex.mutation(api.mapSignals.setDirection, { roomId: s.roomId, targetKind: "direction", targetId: a, value: 1 }));
     const after = unwrap(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId })).recommendations;

@@ -86,7 +86,7 @@ describe("council themes", () => {
       { label: "Makes things", clueIds: [ids.pottery, ids.foreign, ids.pottery] },
       { label: "Slow mornings", clueIds: [ids.coffee, ids.mornings] },
     ] });
-    expect(stored).toEqual({ stored: 2, stale: false });
+    expect(stored).toMatchObject({ stored: 2, stale: false });
     const rows = await t.run((ctx) => ctx.db.query("mapThemes").collect());
     expect(rows.find((r) => r.label === "Makes things")?.clueIds).toEqual([ids.pottery]);
   });

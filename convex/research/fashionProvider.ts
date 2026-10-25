@@ -18,6 +18,16 @@ export function createFashionProvider(token: string, fetcher: typeof fetch = fet
         uniqueAuthors: true, expansion: [], commentsPerPost: 0, includeAuthorProfile: false,
       });
     },
+    /**
+     * TikTok inspiration for one trend cloud (D23 trial). `query` must already be a sourced,
+     * screened Google Trends suggestion; the caller checks that. Same actor and cap, fewer posts.
+     */
+    startInspiration(query: string): Promise<ProviderResult<FashionRun>> {
+      return client.startRun(`acts/${FASHION_ACTOR}/runs?build=${FASHION_BUILD}&timeout=180&memory=1024&maxTotalChargeUsd=0.50`, {
+        keywords: [query], maxItems: 12, maxItemsPerKeyword: 12, sortType: "DATE_POSTED",
+        uniqueAuthors: true, expansion: [], commentsPerPost: 0, includeAuthorProfile: false,
+      });
+    },
     getRun: (id: string) => client.getRun(id),
     getDataset: (id: string) => client.getDataset(id, 20),
   };
