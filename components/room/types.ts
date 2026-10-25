@@ -55,6 +55,7 @@ export interface RoomData {
   /** Screened AI notes and evaluations, kept separate from participant votes. */
   agentCollaborators?: AgentCollaboratorFeed;
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
+  mapUnavailable?: string[];
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
   questionPoll?: QuestionPollView | null;
@@ -70,6 +71,8 @@ export interface RoomData {
   trail?: TrailEntry[];
   /** The simulated checkout and the end of the game. Absent when the backend has no simulation. */
   simulation?: SimulationApi;
+  /** TikTok inspiration searches for trend clouds (D23 trial). */
+  tiktokLooks?: TikTokLookView[];
 }
 
 /** The shared, clearly simulated checkout (convex/payments/simulation): where the group is, and what this person can do next. */
@@ -129,6 +132,8 @@ export interface RoomActions {
   proposeDirections?: Run;
   /** Search real gifts for one direction (D23 trial). */
   researchDirection?: Run<[directionId: string, publishedClueIds: string[]]>;
+  /** Show public TikToks for one trend cloud's search (D23 trial); reuses a recent search. */
+  lookTikTok?: Run<[trendJobId: string, query: string]>;
   suggestThemes: Run;
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
@@ -141,3 +146,6 @@ export interface RoomActions {
   /** Shares this viewer's pointer on the map plane; fire and forget. */
   moveCursor: Run<[x: number, z: number]>;
 }
+
+/** TikTok inspiration for a trend cloud (D23 trial). */
+export type TikTokLookView = OkValue<FunctionReturnType<typeof api.research.tiktokLooks.list>>[number];

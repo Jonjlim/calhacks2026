@@ -7,7 +7,7 @@
  * are never treated as fitting the budget. Pure functions: callers pass the
  * room's current active clues so re-ranking needs no new provider run.
  */
-import type { ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
+import type { GroupBudgetGuidance, ClueKind, ProductListing, PublishedClue } from "../../lib/contracts";
 import { formatMinor } from "../../lib/money";
 import { hasProductImageUrl } from "../../lib/research/images";
 import { catalogEvidenceFor, type CatalogEvidence } from "./catalogEvidence";
@@ -66,8 +66,7 @@ export interface RankListingsInput {
   listings: ProductListing[];
   clues: PublishedClue[];
   budgetMinor?: number;
-  /** The group's soft minimum: gifts well under it rank a little lower, never out. */
-  budgetMinMinor?: number;
+  budgetGuidance?: GroupBudgetGuidance;
   limit?: number;
 }
 
@@ -138,7 +137,7 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     }
     const missProduct = [...matchedPreferences.values()].reduce((miss, strength) => miss * (1 - strength), 1);
     const personalRelevance = round(1 - missProduct);
-    const budget = budgetFitFor(listing, input.budgetMinor, input.budgetMinMinor);
+    const budget = budgetFitFor(listing, input.budgetMinor, input.budgetGuidance);
     const parts = { personalRelevance, budgetFit: budget.fit, trendSignal: 0 as const };
     return {
       listingId: listing.id,
@@ -240,22 +239,25 @@ function blocks(clueTokens: string[], titleTokens: Set<string>): boolean {
 function budgetFitFor(
   listing: ProductListing,
   budgetMinor: number | undefined,
-  budgetMinMinor?: number,
+  guidance?: GroupBudgetGuidance,
 ): { fit: number; note?: string } {
   if (listing.priceStatus !== "observed" || listing.priceMinor === undefined) {
     return { fit: UNKNOWN_PRICE_BUDGET_FIT, note: "price unknown" };
   }
-  if (budgetMinor === undefined || budgetMinor <= 0) return { fit: 1 };
+  if (!guidance && (budgetMinor === undefined || budgetMinor <= 0)) return { fit: 1 };
   const shipping =
     listing.shippingStatus === "observed" && listing.shippingMinor !== undefined
       ? listing.shippingMinor
       : 0;
   const total = listing.priceMinor + shipping;
-  if (total <= budgetMinor) {
-    // Well under the group's comfortable range: a small nudge down, softer the closer it is. Never below 0.8.
-    if (budgetMinMinor !== undefined && budgetMinMinor > 0 && total < budgetMinMinor) return { fit: round(Math.max(0.8, 1 - 0.2 * (1 - total / budgetMinMinor))), note: "below the group's usual range" };
-    return { fit: 1 };
+  if (guidance) {
+    const below = total < guidance.lowerMinor;
+    const above = total > guidance.upperMinor;
+    return { fit: round((below ? total / guidance.lowerMinor : 1) * (above ? guidance.upperMinor / total : 1)),
+      note: below || above ? "outside the group’s suggested range (flexible)" : undefined };
   }
+  if (budgetMinor === undefined || budgetMinor <= 0) return { fit: 1 };
+  if (total <= budgetMinor) return { fit: 1 };
   const over = total - budgetMinor;
   return {
     fit: round(Math.max(0, 1 - over / budgetMinor)),

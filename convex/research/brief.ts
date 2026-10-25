@@ -18,6 +18,7 @@ export interface BuildSearchBriefInput {
   knowledgeRevision: number;
   clues: BriefClue[];
   budgetMinor?: number;
+  budgetGuidance?: SearchBrief["budgetGuidance"];
   occasion?: string;
   listingLimit?: number;
 }
@@ -42,6 +43,7 @@ export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
 
   return {
     roomId: input.roomId,
+    ...(input.budgetGuidance && { budgetGuidance: input.budgetGuidance }),
     knowledgeRevision: input.knowledgeRevision,
     queryTerms: uniquePhrases(positive, true).slice(0, MAX_QUERY_TERMS),
     mustExclude: uniquePhrases(negative),

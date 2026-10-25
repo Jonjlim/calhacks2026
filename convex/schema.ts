@@ -41,8 +41,7 @@ export default defineSchema({
     deadlineAt: v.optional(v.number()),
     currency: V.currency,
     budgetMinor: v.optional(v.number()),
-    /** The group's soft minimum (mean of friends' lowest amounts); budgetMinor is its soft maximum. See lib/budget.ts. */
-    budgetMinMinor: v.optional(v.number()),
+    budgetGuidance: v.optional(V.budgetGuidance),
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
@@ -58,15 +57,17 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   }).index("by_invite_token", ["inviteToken"]),
 
+  budgetRanges: defineTable({
+    roomId: v.id("rooms"), participantId: v.id("participants"),
+    minMinor: v.number(), maxMinor: v.number(), currency: v.literal("USD"), updatedAt: v.number(),
+  }).index("by_room", ["roomId"]).index("by_room_participant", ["roomId", "participantId"]),
+
   participants: defineTable({
     roomId: v.id("rooms"),
     userId: v.string(),
     displayName: v.string(),
     role: V.participantRole,
     joinedAt: v.number(),
-    /** This friend's own comfortable range for the gift. Private: only the group's soft range is shared. */
-    budgetMinMinor: v.optional(v.number()),
-    budgetMaxMinor: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
@@ -485,6 +486,35 @@ export default defineSchema({
     clueIds: v.optional(v.array(v.id("publishedClues"))),
   }).index("by_room", ["roomId", "at"]),
 
+  /** TikTok inspiration for a trend cloud (D23 trial): public post links only, one search per room and query per day. */
+  tiktokLooks: defineTable({
+    roomId: v.id("rooms"),
+    query: v.string(),
+    trendJobId: v.id("trendJobs"),
+    requestedBy: v.id("participants"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("succeeded"), v.literal("failed"), v.literal("uncertain")),
+    providerRunId: v.optional(v.string()),
+    postUrls: v.array(v.string()),
+    retrievedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_room_query", ["roomId", "query"]),
+
+  /**
+   * The gift tag (D26): an opt-in, revocable link the organizer gives the recipient to read how friends chose the gift.
+   * The token is the only key to the public story; it shows published memories and the gift, never prices, caps or private imports.
+   */
+  giftStories: defineTable({
+    roomId: v.id("rooms"),
+    token: v.string(),
+    createdBy: v.id("participants"),
+    includePhotos: v.boolean(),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_room", ["roomId"]),
+
   /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
   mapDirections: defineTable({
     roomId: v.id("rooms"),
@@ -522,6 +552,8 @@ export default defineSchema({
     runId: v.string(),
     source: v.union(v.literal("web"), v.literal("asi1")),
     demoKey: v.optional(v.string()),
+    /** Set by dev3/fetch-council's real agents; mirrored here so both branches can share one deployment. */
+    agentAddress: v.optional(v.string()),
     roomId: v.optional(v.id("rooms")),
     researchJobId: v.optional(v.id("researchJobs")),
     knowledgeRevision: v.optional(v.number()),

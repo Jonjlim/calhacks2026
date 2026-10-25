@@ -1,5 +1,6 @@
 "use client";
 
+import { GiftOrbitMenu } from "@/components/room/GiftOrbitMenu";
 import { Html, QuadraticBezierLine } from "@react-three/drei";
 import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +27,7 @@ import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import { MagicTrail } from "./MagicTrail";
 import { MapBridge } from "./MapBridge";
 import { MainIslandOccluders, OCCLUDERS } from "./MainIslandOccluders";
+import { giftBundles } from "@/lib/map/giftBundles";
 import { WeaveThread, type WeaveMode } from "./WeaveThread";
 import { buildBody } from "../convergence/GiftConvergence";
 import { paint } from "../painterly/materials";
@@ -292,7 +294,10 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
           {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
           </div>
         </Html>
-        {info && (
+        {info && (k.startsWith("gift:") ? (
+          <Html fullscreen zIndexRange={[90, 80]} style={{ pointerEvents: "none" }}><GiftOrbitMenu gift={rings.gifts.find(g => g.key === k)!} detail={info} onMap
+            evaluations={rings.evaluations?.[k]} onClose={() => rings.onSelect(null)} /></Html>
+        ) : (
           <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>
             <div data-map-token className={cls} style={{ marginTop: 470 }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
         {info && (
@@ -319,7 +324,8 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
         )}
             </div>
           </Html>
-        )}
+        ))}
+
       </>
     );
   }
@@ -666,6 +672,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const nav = useMapNavigation(center);
   const close = useCloseZoom();
   const [zone, setZone] = useState<RingZone | null>(null);
+  /** Gift bundles someone tapped open on this screen. */
+  const [openBundles, setOpenBundles] = useState<ReadonlySet<string>>(() => new Set());
   const latest = useRef(rings);
   latest.current = rings;
   // Escape closes whatever is open, like clicking the sky.
@@ -701,7 +709,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [openT?.theme, openT?.x, openT?.z, rings.clues.map((c) => c.key + c.theme).join()],
   );
-  const open = (c: RingsWorld["clues"][number]) => close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
+  // A memory no theme holds yet floats on its own and is always shown; grouped ones rest on their theme until opened.
+  const open = (c: RingsWorld["clues"][number]) => !c.theme || close || rings.openTheme === c.theme || rings.selectedKey === c.key || lit(c.key);
   /** Where a node is drawn right now, for threads that join nodes (the weave). */
   const anchorOf = (key: string): [number, number] | null => {
     const c = rings.clues.find((x) => x.key === key);
@@ -710,14 +719,10 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
     return idea ? place(idea.key, idea.x, idea.z) : null;
   };
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
-  // Never more than three gift candidates are prominent at once: the top ranked overall, or the best of the focused branch, plus the chosen one.
-  // The rest stay in the room's data and in the Book of Possibilities; here they are summed up in one marker.
-  const rankedGifts = rings.gifts.filter((g) => !g.hidden || g.listingId === rings.selectedListingId).sort((a, b) => a.rank - b.rank);
-  const pool = rings.highlight ? rankedGifts.filter((g) => rings.highlight!.has(g.key)) : rankedGifts;
-  const shownGifts = pool.slice(0, 3);
-  const chosen = rankedGifts.find((g) => g.listingId === rings.selectedListingId);
-  if (chosen && !shownGifts.includes(chosen)) shownGifts.push(chosen);
-  const hiddenGifts = rings.gifts.length - shownGifts.length;
+  // Every gift is on the map; only a crowded map folds each theme's extras into a "+N" bundle (D23 trial).
+  const visibleGifts = rings.gifts.filter((g) => !g.hidden || g.listingId === rings.selectedListingId);
+  const { shown: shownGifts, bundles } = giftBundles(visibleGifts, { selectedListingId: rings.selectedListingId, highlight: rings.highlight, open: openBundles });
+  const hiddenGifts = visibleGifts.length - shownGifts.length;
 
   // A theme island empties once every memory in it has flown into the box.
   const themeGone = (theme: string) => {
@@ -808,19 +813,28 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           </group>
         );
       })}
-      {rings.moreGifts && rings.moreGifts.count > 0 && (
+      {/* A crowded theme's extra gifts, folded where they would sit; tapping fans them out. */}
+      {!revealing && bundles.map((b) => (
+        <Html key={`bundle:${b.id}`} position={world(b.x, b.z, 0.6)} center zIndexRange={[24, 10]} occlude={OCCLUDERS}>
+          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); setOpenBundles((open) => new Set(open).add(b.id)); }}
+            onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}
+            aria-label={`Show ${b.count} more ${b.count === 1 ? "gift" : "gifts"} here`}>
+            <b>+{b.count}</b> {b.count === 1 ? "gift" : "gifts"}
+          </button>
+        </Html>
+      ))}
+      {openBundles.size > 0 && (
         <Html position={world(-RING_RADII.gift * RING_STRETCH - 1.5, 0, 1.2)} center zIndexRange={[25, 20]} occlude={OCCLUDERS}>
-          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); rings.moreGifts?.toggle(); }}
-            onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
-            {rings.moreGifts.open ? "Show the top gifts only" : `+${rings.moreGifts.count} more ${rings.moreGifts.count === 1 ? "gift" : "gifts"}`}
+          <button type="button" data-map-token className={s.moreGifts} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setOpenBundles(new Set()); }}>
+            Fold the extra gifts again
           </button>
         </Html>
       )}
-
       {hiddenGifts > 0 && rings.onOpenBook && (
-        <Html position={world(6.2, 9.4, 0.4)} center zIndexRange={[24, 10]} occlude={OCCLUDERS}>
-          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label={`${hiddenGifts} more researched gifts in the Book of Possibilities`}>
-            <b>+{hiddenGifts}</b> more in the book
+        <Html position={world(6.2, 9.4, 0.4)} center zIndexRange={[24, 10]}>
+          <button type="button" data-map-token className={s.moreGifts} onClick={() => rings.onOpenBook?.()} aria-label="Every researched gift, in the Book of Possibilities">
+            All gifts in the book
           </button>
         </Html>
       )}

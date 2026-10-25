@@ -183,7 +183,7 @@ export function LandingPage() {
             onClick={toggleSound}
             aria-pressed={soundEnabled}
             aria-label={soundEnabled ? "Sound on" : "Sound off"}
-            className="pointer-events-auto absolute top-5 right-6 z-40 rounded-full border border-dusk/10 bg-paper/75 px-3.5 py-2 text-[13.5px] font-medium text-dusk/80 shadow-sm backdrop-blur-md transition hover:text-dusk"
+            className="pointer-events-auto absolute top-5 right-6 z-50 rounded-full border border-dusk/10 bg-paper/75 px-3.5 py-2 text-[13.5px] font-medium text-dusk/80 shadow-sm backdrop-blur-md transition hover:text-dusk"
           >
             {soundEnabled ? "Sound on" : "Sound off"}
           </button>

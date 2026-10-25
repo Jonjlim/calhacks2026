@@ -21,8 +21,8 @@ const STEP = 500;
 const TOP = 50_000;
 
 export function BudgetTab({ roomId }: { roomId: string }) {
-  const res = useQuery(api.rooms.getBudget, { roomId: roomId as Id<"rooms"> });
-  const save = useMutation(api.rooms.setMyBudget);
+  const res = useQuery(api.budgets.state, { roomId: roomId as Id<"rooms"> });
+  const save = useMutation(api.budgets.setRange);
   const [range, setRange] = useState<[number, number]>([2000, 8000]);
   const [open, setOpen] = useState(false);
   const [peek, setPeek] = useState(false);
@@ -35,16 +35,16 @@ export function BudgetTab({ roomId }: { roomId: string }) {
   useEffect(() => {
     if (!view || seeded.current) return;
     seeded.current = true;
-    if (view.mine) setRange([view.mine.minMinor, view.mine.maxMinor]);
+    if (view.range) setRange([view.range.minMinor, view.range.maxMinor]);
     else setOpen(true);
   }, [view]);
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && view?.mine && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && view?.range && setOpen(false);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, view?.mine]);
+  }, [open, view?.range]);
 
   if (!view) return null;
   const [lo, hi] = range;
@@ -62,17 +62,17 @@ export function BudgetTab({ roomId }: { roomId: string }) {
     }
   };
   const pct = (v: number) => `${(v / TOP) * 100}%`;
-  const soft = view.soft;
+  const soft = view.guidance;
   return (
     <>
-      {open && <div className={s.veil} onClick={() => view.mine && setOpen(false)} aria-hidden />}
+      {open && <div className={s.veil} onClick={() => view.range && setOpen(false)} aria-hidden />}
       <aside className={`${s.panel} ${open ? s.open : s.shut} ${!open && peek ? s.peek : ""}`} aria-label="Gift budget" onPointerEnter={() => setPeek(true)} onPointerLeave={() => setPeek(false)}>
         <button type="button" className={s.tab} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Tuck the budget away" : "Open the gift budget"}>
           <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden><path d={open ? "M5 3l6 5-6 5" : "M11 3L5 8l6 5"} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           {!open && <span>Budget</span>}
         </button>
         <div className={s.body} inert={!open || undefined}>
-          <p className={s.kicker}>{view.mine ? "Your budget" : "First, a budget"}</p>
+          <p className={s.kicker}>{view.range ? "Your budget" : "First, a budget"}</p>
           <h2>What feels right for this gift?</h2>
           <p className={s.lede}>Give a range you would be happy to chip in toward. It guides which gifts we look for; it is never a hard limit, and nobody sees your numbers.</p>
 
@@ -90,23 +90,23 @@ export function BudgetTab({ roomId }: { roomId: string }) {
           <div className={s.scale} aria-hidden><span>$0</span><span>$250</span><span>$500+</span></div>
 
           <div className={s.groupBox} aria-label="The group's budget range">
-            <p className={s.groupHead}><b>The whole group</b><span>{soft ? `${soft.count} of ${view.friends} have answered` : "no one has answered yet"}</span></p>
+            <p className={s.groupHead}><b>The whole group</b><span>{soft ? `${soft.responseCount} of ${view.participantCount} have answered` : "no one has answered yet"}</span></p>
             {soft ? (
               <>
                 <div className={s.groupBar} aria-hidden>
                   <span className={s.track} />
-                  <span className={s.groupFill} style={{ left: pct(Math.min(soft.minMinor, TOP)), right: `calc(100% - ${pct(Math.min(soft.maxMinor, TOP))})` }} />
-                  {view.mine && <i className={s.mineDot} style={{ left: pct(Math.min(hi, TOP)) }} title="Your highest" />}
+                  <span className={s.groupFill} style={{ left: pct(Math.min(soft.lowerMinor, TOP)), right: `calc(100% - ${pct(Math.min(soft.upperMinor, TOP))})` }} />
+                  {view.range && <i className={s.mineDot} style={{ left: pct(Math.min(hi, TOP)) }} title="Your highest" />}
                 </div>
-                <p className={s.groupRead}><b>{formatMinor(soft.minMinor)}</b> <i>to</i> <b>{formatMinor(soft.maxMinor)}</b></p>
-                <p className={s.groupNote}>Built from everyone’s ranges: the lowest of the highest amounts times {view.friends}, and the average of the lowest amounts. Gifts in this range rank highest; others are only ranked lower, never hidden.</p>
+                <p className={s.groupRead}><b>{formatMinor(soft.lowerMinor)}</b> <i>to</i> <b>{formatMinor(soft.upperMinor)}</b></p>
+                <p className={s.groupNote}>Built from everyone’s ranges: the lowest of the highest amounts times {view.participantCount}, and the average of the lowest amounts. Gifts in this range rank highest; others are only ranked lower, never hidden.</p>
               </>
             ) : (
               <p className={s.groupNote}>As friends answer, you will see the range gifts are ranked around.</p>
             )}
           </div>
           {error && <p role="alert" className={s.err}>{error}</p>}
-          <button type="button" className={s.go} onClick={confirm} disabled={pending || hi < STEP}>{pending ? "Saving…" : view.mine ? "Update my budget" : "Confirm my budget"}</button>
+          <button type="button" className={s.go} onClick={confirm} disabled={pending || hi < STEP}>{pending ? "Saving…" : view.range ? "Update my budget" : "Confirm my budget"}</button>
         </div>
       </aside>
     </>

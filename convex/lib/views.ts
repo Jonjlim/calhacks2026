@@ -20,7 +20,7 @@ export function toRoom(d: Doc<"rooms">): Room {
     deadlineAt: d.deadlineAt,
     currency: d.currency,
     budgetMinor: d.budgetMinor,
-    budgetMinMinor: d.budgetMinMinor,
+    budgetGuidance: d.budgetGuidance,
     knowledgeRevision: d.knowledgeRevision,
     currentRevisionId: d.currentRevisionId,
     currentSelectionId: d.currentSelectionId,

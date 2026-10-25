@@ -2,13 +2,13 @@
  * Rooms and membership. Owner: Dev 2 (BE-002, BE-013).
  * Consumers: Dev 1 (create/join UI), Dev 3 (room snapshot).
  */
-import { softBudget, validRange } from "../lib/budget";
 import { v } from "convex/values";
 import type { Room, RoomView } from "../lib/contracts";
 import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { refreshBudgetGuidance } from "./lib/budgets";
 import { getMembership, getUserId, isLiveRoom, requireMember } from "./lib/auth";
 import { purgeParticipantPrivateData } from "./lib/evidence";
 import { cleanText, isMoney, LIMITS } from "./lib/input";
@@ -158,6 +158,7 @@ export const joinRoom = mutation({
       role: "contributor",
       joinedAt: Date.now(),
     });
+    await refreshBudgetGuidance(ctx, room._id);
     // A new participant changes the allocation inputs for any live proposal.
     await recomputeProposal(ctx, room._id);
 
@@ -377,7 +378,10 @@ export const leaveRoom = mutation({
       for (const event of events) if (event.participantId === me._id) await ctx.db.delete(event._id);
     }
 
+    const budgetRange = await ctx.db.query("budgetRanges").withIndex("by_room_participant", q => q.eq("roomId", roomId).eq("participantId", me._id)).unique();
+    if (budgetRange) await ctx.db.delete(budgetRange._id);
     await ctx.db.delete(me._id);
+    await refreshBudgetGuidance(ctx, roomId);
     await recomputeProposal(ctx, roomId);
     if (publishedChanged) await bumpKnowledgeRevision(ctx, roomId);
     return ok(null);
@@ -434,38 +438,5 @@ export const purgeRoomBatch = internalMutation({
     const step = await purgeRoomStep(ctx, roomId, PURGE_BATCH_SIZE);
     if (!step.done) await ctx.scheduler.runAfter(0, internal.rooms.purgeRoomBatch, { roomId });
     return step;
-  },
-});
-
-/**
- * One friend's comfortable range for the gift. Stored on their own participant row;
- * the room's soft range (lowest maximum times the friends, mean minimum: lib/budget.ts)
- * is recomputed from everyone's and written to the room as a research hint, which only
- * nudges how gifts are ranked. It never touches caps, allocation or the proposal.
- */
-export const setMyBudget = mutation({
-  args: { roomId: v.id("rooms"), minMinor: v.number(), maxMinor: v.number() },
-  handler: async (ctx, { roomId, minMinor, maxMinor }) => {
-    const member = await requireMember(ctx, roomId);
-    if (!member.ok) return memberError<{ minMinor: number; maxMinor: number }>(member.code);
-    if (!validRange({ minMinor, maxMinor })) return err<{ minMinor: number; maxMinor: number }>("validation_failed", "Choose a lowest and a highest amount, lowest first.");
-    await ctx.db.patch(member.me._id, { budgetMinMinor: minMinor, budgetMaxMinor: maxMinor });
-    const all = await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).collect();
-    const soft = softBudget(all.filter((p) => p.budgetMinMinor !== undefined && p.budgetMaxMinor !== undefined).map((p) => ({ minMinor: p.budgetMinMinor!, maxMinor: p.budgetMaxMinor! })), all.length);
-    await ctx.db.patch(roomId, { budgetMinor: soft?.maxMinor, budgetMinMinor: soft?.minMinor });
-    return ok({ minMinor, maxMinor });
-  },
-});
-
-/** My own range, and the group's soft range (never anyone else's figures). */
-export const getBudget = query({
-  args: { roomId: v.id("rooms") },
-  handler: async (ctx, { roomId }) => {
-    const member = await requireMember(ctx, roomId);
-    if (!member.ok) return memberError<never>(member.code);
-    const all = await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).collect();
-    const soft = softBudget(all.filter((p) => p.budgetMinMinor !== undefined && p.budgetMaxMinor !== undefined).map((p) => ({ minMinor: p.budgetMinMinor!, maxMinor: p.budgetMaxMinor! })), all.length);
-    const mine = member.me.budgetMinMinor !== undefined && member.me.budgetMaxMinor !== undefined ? { minMinor: member.me.budgetMinMinor, maxMinor: member.me.budgetMaxMinor } : null;
-    return ok({ mine, soft, friends: all.length, answered: soft?.count ?? 0 });
   },
 });
