@@ -35,7 +35,7 @@ const FAILED = "#d95b4a";
 const RESULT_MS = 7000;
 /** Distance in front of the camera, and how tall a companion is on screen (share of the viewport height). */
 const DEPTH = 10;
-const HEIGHT_SHARE = 0.085;
+const HEIGHT_SHARE = 0.1;
 /** Model height per unit of `scale` (measured). */
 const MODEL_UNITS = 1.63;
 /** Screen position of the dock in normalised device coordinates. */

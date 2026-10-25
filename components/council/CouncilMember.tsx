@@ -63,13 +63,16 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.material = Array.isArray(mesh.material) ? mesh.material.map(role) : role(mesh.material);
-      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) { mesh.scale.x *= 1.12; mesh.scale.y *= 1.12; }
+      if (capsule && /^Eye(Left|Right)$/.test(mesh.name)) { mesh.scale.x *= 1.3; mesh.scale.y *= 1.3; }
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
     });
+    // Slimmer and cuter: a narrower body (its flippers and face come with it), set on the clone only.
+    if (capsule) c.scale.set(c.scale.x * 0.8, c.scale.y * 1.04, c.scale.z * 0.8);
     return c;
   }, [scene, state.actor]);
+  const antenna = useMemo(() => instance.getObjectByName("Antenna") ?? null, [instance]);
   const { actions, mixer } = useAnimations(animations, instance);
   const capsuleParts = useMemo(() => {
     const eyes: THREE.Mesh[] = [];
@@ -115,6 +118,12 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
   }, [mixer, pose.then, play]);
   useEffect(() => { onReady?.(); }, [onReady]);
   useFrame(({ clock }) => {
+    // Big, bouncy antennas: set after the animation has posed the bone, so the clip cannot shrink them back.
+    if (antenna) {
+      const sway = animate ? Math.sin(clock.elapsedTime * 2.2 + state.actor.length) * 0.08 : 0;
+      antenna.scale.setScalar(1.95);
+      antenna.rotation.z = sway;
+    }
     if (!root.current) return;
     const phase = Object.keys(COUNCIL_MODELS).indexOf(state.actor) * 1.2;
     root.current.position.y = position[1] + 0.42 + (animate ? Math.sin(clock.elapsedTime * 1.3 + phase) * 0.025 : 0);
