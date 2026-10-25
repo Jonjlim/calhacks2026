@@ -89,6 +89,16 @@ Still unverified end to end on one shared deployment: live product search (`APIF
 
 **Phase 2 is starting: the map-first room.** The app will open in a lobby in front of the present, then zoom out to one gift map where all sharing, themes, research, votes, the box, and approvals happen. The tower, Backstage drawer, and separate map page are leaving the main path. See [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md) and the prototype in [work/vision-lab/](work/vision-lab/README.md).
 
+## Fetch.ai demo
+
+Unwrap's Gift Council uses five Fetch.ai uAgents coordinated by Courier, with an Agent Chat Protocol entry point for ASI:One. The council researches gifts and checks constraints; the website adds multiplayer discovery and proposal approvals.
+
+- [Chat with Courier in ASI:One](https://asi1.ai/ai/agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg)
+- [Agent names, public addresses, Python run instructions and offline tests](fetch-agent/README.md)
+- [Backend configuration and deployment](docs/FETCH_AI_COUNCIL.md)
+
+Demo prompt: “Find a birthday gift for Maya. She loves pottery and handmade crafts, already owns a beginner pottery kit, dislikes scented candles, and our budget is $80. Give real products with links, observed prices, and reasons.”
+
 ## Development
 
 ```bash

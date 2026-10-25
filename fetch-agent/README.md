@@ -1,6 +1,7 @@
 # Unwrap Gift Council
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 ![tag:gift-recommendation](https://img.shields.io/badge/gift--recommendation-3D8BD3)
 ![tag:shopping](https://img.shields.io/badge/shopping-3D8BD3)
 
@@ -39,11 +40,31 @@ Muse and Scout run in parallel. If a specialist does not answer in time, the Cou
 
 | Agent | Address |
 | --- | --- |
-| Courier (Unwrap Gift Council) | `agent1q…` (fill in from `python print_addresses.py`) |
-| Archivist | `agent1q…` |
-| Muse | `agent1q…` |
-| Scout | `agent1q…` |
-| Keeper | `agent1q…` |
+| Courier (Unwrap Gift Council) | `agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg` |
+| Archivist | `agent1qvy8ev9ze4e6zhuec59shm7d8mterdfl7duzxcnq4vlnlgg8k6227nylv43` |
+| Muse | `agent1q2q6anuhf0khmgkh5w5fw05hgw85vdgltc3qv4zl6gxd2q6y4r6d57uwwr4` |
+| Scout | `agent1qwptueewcv6r7t3ra7jejgvte0tjgmua8hm2du6hgdvehmw55j2vcmv66mm` |
+| Keeper | `agent1qvrvpqjhey6g8crugt3qznxzdw7utysct068tgtlsw44j6twtxp32epyej4` |
+
+The public chat entry point is [Courier in ASI:One](https://asi1.ai/ai/agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg). Specialist agents handle typed council requests rather than public chat.
+
+## Run or test
+
+From the repository root (Python 3.10+):
+
+```sh
+cd fetch-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# Fill .env with your own private seeds and provider credentials.
+python print_addresses.py
+python agent.py
+```
+
+Run offline tests in this directory with `python -m pytest -q`. Real shopping needs a configured Convex research backend and Apify credentials, or the direct Apify fallback described in [the setup guide](../docs/FETCH_AI_COUNCIL.md). ASI:One reasoning uses an optional ASI1_API_KEY; no live shopping credentials means no verified products. Preserve the deployed seeds to preserve the published addresses; fresh seeds create new agent identities.
+
 ## Honesty rules
 
 - Products, links and prices come only from research results, never from the language model.

@@ -425,11 +425,11 @@ Local tests mock paid provider traffic. This checkout still needs the team's Con
 
 ## Decision: Fetch.ai AI Council coordinator (additive)
 
-**Status:** local agent verified (Chat Protocol manifest published, Almanac API registration, full council run over HTTP). Agentverse mailbox + ASI:One chat are **unverified** until run with the team's Agentverse account.
+**Status:** verified 2026-10-25 with the team's Agentverse account. Courier is Active, mailbox-connected, and ASI Available on Agent Chat Protocol 0.3.0. An ASI:One chat researched a real gift request (16 live listings; Keeper kept 5 at or under the budget and excluded 3). Almanac API batch registration succeeds while `agent.py` is running. uAgents reads each README once at startup, so a restart publishes README edits.
 
-One Python uAgent in `fetch-agent/` (`uagents==0.25.5`, AgentChatProtocol 0.3.0) is the only Fetch.ai registration. It runs five roles — Archivist, Muse, Scout, Keeper, Courier — as real functions and replies in ASI:One without needing the website. It is a new external API (Agentverse / ASI:One), not a second app: Convex stays authoritative for state, and the Scout's product research reuses the existing Apify pipeline through a secret-gated Convex HTTP action rather than a new provider.
+Five Python uAgents in one Bureau (`fetch-agent/`, `uagents==0.25.5`, AgentChatProtocol 0.3.0) are the Fetch.ai registration: Courier (the public ASI:One entry), Archivist, Muse, Scout, and Keeper. Each has its own address and mailbox. The Courier replies in ASI:One without needing the website. This is a new external API (Agentverse / ASI:One), not a second app: Convex stays authoritative for state, and the Scout's product research reuses the existing Apify pipeline through a secret-gated Convex HTTP action rather than a new provider.
 
-Flow: ASI:One or `/council` page → coordinator → `POST /council/events` (Bearer `COUNCIL_INGEST_SECRET`) → Convex `councilEvents` / `giftDecorations` → `council.demoState` subscription → avatars animate locally. Products and raw memories never travel in events. The language model (ASI:One `asi1`) may only add clues; products, prices and links come only from research. Rejected: five separately registered agents (no new capability, five times the setup); runtime 3D generation for charms (slow, unbounded; a fixed library is rendered locally instead).
+Flow: ASI:One or the room → Courier → typed messages to the specialists, and `POST /council/events` (Bearer `COUNCIL_INGEST_SECRET`) → Convex `councilEvents` / `giftDecorations`. Products and raw memories never travel in events. The language model (ASI:One `asi1`) may only add clues; products, prices and links come only from research. Rejected: a second product source, and runtime 3D generation for charms (slow, unbounded; a fixed library is rendered locally instead).
 
 ### D15 — Recorded fashion evidence in the existing buyer snapshot (2026-10-24)
 

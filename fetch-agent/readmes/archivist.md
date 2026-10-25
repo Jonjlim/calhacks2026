@@ -1,6 +1,7 @@
 # Unwrap Archivist
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 ![tag:gift-recommendation](https://img.shields.io/badge/gift--recommendation-3D8BD3)
 
 **Reads what friends remember about a gift recipient and turns it into structured clues.**

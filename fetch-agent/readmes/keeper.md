@@ -1,6 +1,7 @@
 # Unwrap Keeper
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
+![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 ![tag:gift-recommendation](https://img.shields.io/badge/gift--recommendation-3D8BD3)
 
 **Checks real listings against the budget and what the recipient already owns or dislikes.**
