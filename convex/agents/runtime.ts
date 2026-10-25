@@ -94,6 +94,7 @@ export async function readBuyerSnapshot(
     recipientDisplayName: room.recipientDisplayName,
     occasion: room.occasion,
     budgetMinor: room.budgetMinor,
+    budgetGuidance: room.budgetGuidance,
     deadlineAt: room.deadlineAt,
     knowledgeRevision: room.knowledgeRevision,
     latestMessageId: chronological
@@ -181,6 +182,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
     recipient: snapshot.recipientDisplayName,
     occasion: snapshot.occasion,
     budget: snapshot.budgetMinor,
+    budgetGuidance: snapshot.budgetGuidance,
     deadline: snapshot.deadlineAt,
     revision: snapshot.knowledgeRevision,
     messages: snapshot.recentMessages.map((m) => m.id),
@@ -867,6 +869,7 @@ export const completeTurn = internalMutation({
           ...(snapshot.budgetMinor !== undefined
             ? { budgetMinor: snapshot.budgetMinor }
             : {}),
+          ...(snapshot.budgetGuidance && { budgetGuidance: snapshot.budgetGuidance }),
           occasion: snapshot.occasion,
           listingLimit: brief.listingLimit,
         },

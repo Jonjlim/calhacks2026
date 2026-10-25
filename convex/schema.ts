@@ -41,6 +41,7 @@ export default defineSchema({
     deadlineAt: v.optional(v.number()),
     currency: V.currency,
     budgetMinor: v.optional(v.number()),
+    budgetGuidance: v.optional(V.budgetGuidance),
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
@@ -55,6 +56,11 @@ export default defineSchema({
     /** Set by rooms.deleteRoom; the room is unreachable from then on while purgeRoomBatch removes its rows. */
     deletedAt: v.optional(v.number()),
   }).index("by_invite_token", ["inviteToken"]),
+
+  budgetRanges: defineTable({
+    roomId: v.id("rooms"), participantId: v.id("participants"),
+    minMinor: v.number(), maxMinor: v.number(), currency: v.literal("USD"), updatedAt: v.number(),
+  }).index("by_room", ["roomId"]).index("by_room_participant", ["roomId", "participantId"]),
 
   participants: defineTable({
     roomId: v.id("rooms"),

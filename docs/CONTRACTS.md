@@ -1,5 +1,50 @@
 # Contracts
 
+## Member budget ranges (2026-10-25)
+
+Owner: Dev 2. Consumers: Dev 1 (join prompt/right-edge slider), Dev 3 (buyer and
+direction context), Dev 4 (ranking/research briefs). Additive, no data migration.
+
+```ts
+interface MemberBudgetRange {
+  roomId: string; participantId: string;
+  minMinor: number; maxMinor: number; currency: "USD"; updatedAt: number;
+}
+interface GroupBudgetGuidance {
+  lowerMinor: number; upperMinor: number; currency: "USD";
+  responseCount: number; participantCount: number; conflicting: boolean;
+}
+```
+
+- `budgetRanges` is contributor-private, indexed by `roomId` and by
+  `[roomId, participantId]`. Values are integer cents, 0 ≤ min ≤ max ≤ 10,000,000.
+- `budgets.state({roomId})` is a member-only query returning
+  `Result<{range: MemberBudgetRange | null, guidance: GroupBudgetGuidance | null,
+  participantCount: number}>`. It returns only the caller's range.
+- `budgets.setRange({roomId,minMinor,maxMinor})` is a member-only mutation returning
+  `Result<MemberBudgetRange>`. It resolves the participant from auth; no caller
+  can choose another owner. Expected errors: unauthorized, not_found,
+  validation_failed. No AI tool can call this mutation.
+- `Room.budgetGuidance?`, `SearchBrief.budgetGuidance?`, and
+  `BuyerSnapshot.budgetGuidance?` contain only the derived group guidance. Lower is
+  the rounded arithmetic mean of submitted minima; upper is the smallest submitted
+  maximum times the CURRENT number of room participants. Missing ranges remain
+  unknown (never zero); responseCount makes incomplete guidance visible. No
+  submitted ranges means no guidance. Conflicting is true when lower > upper;
+  retain the requested formulas rather than silently swapping them.
+- Set, join and leave recompute guidance atomically. Leaving deletes the private
+  range; room purge includes it. Live catalog ranking reads current guidance,
+  including for already-fetched products. Updates do not spend on a new search,
+  change knowledgeRevision, or modify shares, approvals, payment/contribution caps.
+- Guidance changes only the budget-fit score, not eligibility: products outside
+  either bound remain candidates. It is not copied into the provider's maxPrice
+  or into budgetMinor. Unknown prices remain unknown. Models get aggregates only
+  and are told the bounds are context, never a cutoff or spending authorization.
+- First room entry asks for an explicit range. The right-edge two-handle bar stays
+  editable; saved sliders update on release/key change. Suggested initial values
+  are not stored or counted until a member confirms them. The raw ranges never
+  appear in participant projections, council payloads, logs or recipient tools.
+
 Shared interfaces for parallel work. These TypeScript shapes are documentation, not compiled code. When implementation starts, copy them into `lib/contracts/` and keep this file authoritative for names and semantics.
 
 Owners change this document in the same PR as the code. Consumers mock; they do not invent sibling types.
