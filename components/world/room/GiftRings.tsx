@@ -578,6 +578,19 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         );
       })}
 
+      {/* A faint thread from every theme island to the present: the one quiet reminder that they all belong to the same gift. */}
+      {!revealing && rings.themes.map((t) => {
+        const [x, z] = place(t.key, t.x, t.z);
+        const len = Math.hypot(x, z) || 1;
+        // Ends at the edge of the main island, not in the middle of it; sags a little below the straight line.
+        const ex = (x / len) * 5.4;
+        const ez = (z / len) * 5.4;
+        const focused = !!rings.highlight && rings.highlight.has(t.key);
+        return (
+          <QuadraticBezierLine key={`thread:${t.key}`} start={world(x, z, 0.5)} end={world(ex, ez, 0.2)} mid={world((x + ex) / 2, (z + ez) / 2, -1.3)} color="#a98aa6" lineWidth={focused ? 2.4 : 1.8} dashed dashSize={0.5} gapSize={0.45} transparent opacity={rings.highlight && !focused ? 0.15 : 0.6} />
+        );
+      })}
+
       {rings.themes.map((t, i) => {
         const [x, z] = place(t.key, t.x, t.z);
         return (
