@@ -8,7 +8,7 @@ One friend remembers the hobby they picked up last month. Another knows what the
 
 Unwrap brings those perspectives into a shared, hand-painted 3D storybook world. Friends add memories and ideas, specialized AI agents interpret the clues and research sourced products, and the group explores, compares, and chooses together. With the recipient's explicit permission, an optional **Gift Twin** can surface preferences from messages they sent themselves—without exposing their private conversations to the group.
 
-**Cal Hacks 13.0 · October 2026** · [Devpost submission](https://devpost.com/software/unwrap-y7w16s) · [Fetch.ai Council on ASI:One](https://asi1.ai/ai/agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg)
+**Cal Hacks 13.0 · October 2026** · [Devpost submission](https://devpost.com/software/unwrap-y7w16s)
 
 ![Unwrap's storybook gift introduction](public/screenshots/gift-intro.png)
 
