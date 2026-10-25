@@ -101,20 +101,33 @@ describe("council themes", () => {
 });
 
 describe("sharpen", () => {
-  it("asks one question between the two leading gifts; answering publishes the member's own clue once", async () => {
+  it("asks one question between the two leading gifts; a preset answer is the member's vote, not a memory", async () => {
     const { t, ids, alice, bob } = await setup();
     const { sharpenId, source } = value(await alice.action(api.agents.themes.sharpen, { roomId: ids.roomId }));
     expect(source).toBe("preset");
     const open = value(await bob.query(api.agents.themes.getSharpen, { roomId: ids.roomId }))!;
     expect(open.finalistIds).toEqual([ids.kit, ids.mug]);
     expect(open.options.map((o) => o.listingIds[0])).toEqual([ids.kit, ids.mug]);
-    const { clueId } = value(await bob.mutation(api.agents.themes.answerSharpen, { sharpenId, option: 1 }));
-    const clue = await t.run((ctx) => ctx.db.get(clueId as Id<"publishedClues">));
-    expect(clue).toMatchObject({ publisherId: ids.bob, kind: "interest", status: "active" });
+    const cluesBefore = (await t.run((ctx) => ctx.db.query("publishedClues").collect())).length;
+    const answered = value(await bob.mutation(api.agents.themes.answerSharpen, { sharpenId, option: 1 }));
+    expect(answered.clueId).toBeUndefined();
+    expect((await t.run((ctx) => ctx.db.query("publishedClues").collect())).length).toBe(cluesBefore);
+    expect(await t.run((ctx) => ctx.db.query("votes").collect())).toMatchObject([{ listingId: ids.mug, participantId: ids.bob, value: "up" }]);
     expect(await alice.mutation(api.agents.themes.answerSharpen, { sharpenId, option: 0 })).toMatchObject({ ok: false, error: { code: "invalid_revision" } });
     const room = await t.run((ctx) => ctx.db.get(ids.roomId));
-    expect(room?.knowledgeRevision).toBe(2);
+    expect(room?.knowledgeRevision).toBe(1);
     expect(value(await alice.query(api.agents.themes.getSharpen, { roomId: ids.roomId }))).toMatchObject({ status: "answered", answer: 1 });
+  });
+
+  it("a question the model wrote is still published as the answering member's own memory", async () => {
+    const { t, ids, bob } = await setup();
+    const sharpenId = await t.run((ctx) => ctx.db.insert("mapSharpens", {
+      roomId: ids.roomId, question: "Does Maya love making things, or having handmade things around?", source: "agent", askedBy: ids.alice,
+      options: [{ label: "Making them", clue: "Maya loves making things herself.", listingIds: [ids.kit] }, { label: "Having them", clue: "Maya loves handmade things around her.", listingIds: [ids.mug] }],
+      finalistIds: [ids.kit, ids.mug], status: "open", knowledgeRevision: 1, createdAt: 0,
+    }));
+    const { clueId } = value(await bob.mutation(api.agents.themes.answerSharpen, { sharpenId, option: 1 }));
+    expect(await t.run((ctx) => ctx.db.get(clueId as Id<"publishedClues">))).toMatchObject({ publisherId: ids.bob, kind: "interest", status: "active", text: "Maya loves handmade things around her." });
   });
 
   it("needs two gifts, and skips gifts someone said she already owns", async () => {

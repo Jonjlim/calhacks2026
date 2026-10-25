@@ -1895,4 +1895,99 @@ Owner: Dev 4. Consumers: Dev 1 (gift captions, "Why this?" MAP-016), Dev 3 (cata
 - **`foundBy`.** Each research pool comes from exactly one provider search (the first query term), so every recommendation in it carries that `query`. `source: "memory"` names the active published clue whose search phrase it was, or, for a query written around a memory (the buyer agent writes "hiking gifts"), the most specific clue whose every search word the query contains, ignoring generic words like "gifts" or "ideas"; `"trend"` names the chosen Google Trends suggestion and its clue; `"discovery"` is any other sourced direction, or a memory since withdrawn (no `publishedClueId` then). It says how a listing was **found**. It is never a clue citation: `publishedClueIds`, scores and exclusions are unchanged, and the buyer agent's citation rules still read only `publishedClueIds`.
 - **Explanation.** A listing that no clue matches, found by a memory search, now reads `Found by searching "hiking" from "we hiked mt hood". No published clue matches this directly`. Matched listings and trend finds keep their existing wording (the map already captions trend finds).
 - **Variety.** `rankListings` keeps the best-ranked listing of each product and at most `MAX_PER_SELLER` (3) per seller before other sellers' products. A product is its title before any `|`, without size, fit, colour, pure-number or catalog-code words; titles match when equal or when one extends the other by at least three leading words. Men's and women's versions stay separate. A seller's further distinct products fill only slots nobody else can. This changes which rows are shown and their order, never a score or citation. It applies everywhere ranking runs (room catalog, council, agents).
-- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`) drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.
+- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`), drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.
+
+
+### Directions flow — trial (D23, `dev4/directions-trial`)
+
+Owner: Dev 4 for the trial, touching Dev 3 (agents), Dev 2 (schema/signals) and Dev 1 (map). **Trial branch only** until the team reviews it. Every field below is additive and optional for old clients.
+
+Memories → directions → gifts. A direction is the council's suggestion of one gift direction that combines memories. It is an interpretation, never room knowledge: it publishes nothing, and it never changes budgets, caps, selection or approvals.
+
+```ts
+interface MapDirection {
+  id: string;
+  label: string;            // 2–6 words, e.g. "Vintage-pattern trail jacket"
+  query: string;            // the one shopping search for it, ≤ 60 chars
+  why: string;              // one sentence grounded in the cited memories
+  clueIds: string[];        // ≥ 2 active published clues, unless one is an explicit wish
+  trend?: { trendJobId: string; query: string }; // a caught trend cloud it weaves in
+  broad: boolean;           // rests on one broad memory → the council asks one question
+  source: "agent" | "preset";
+  stale: boolean;           // memories changed since it was proposed
+  researched: boolean;      // a research job exists for it
+}
+```
+
+- `agents.directions.propose({ roomId })` (action, any member, explicit tap). Model output is Zod-validated: cited memory numbers must exist and be active; a direction citing one memory must cite an explicit wish; no links, prices or sensitive traits. Without a model it builds presets by pairing published interest/wish phrases. It keeps researched directions, replaces unresearched ones (max 4 shown), starts **one** room-level Google Trends lookup for a memory without a recent sample, and, for a new broad direction, opens one probe question.
+- `agents.directions.list({ roomId })` → `Result<MapDirection[]>`, membership-checked.
+- **Probe questions** reuse `mapSharpens` with optional `directionId` and empty `listingIds`/`finalistIds`. Answering publishes the chosen sentence as the answering member's memory, as Sharpen does. A preset Sharpen option (no model) now has an empty `clue`; answering it casts that member's up vote on its listing instead of publishing product text as a memory.
+- **Signals.** `mapSignals.targetKind` adds `"direction"` (target: direction ID) and `"trend"` (target: `trendJobId:query` from a usable sample). On a trend, +1 = caught, −1 = let it drift. A direction or gift fades once passed and leaves the map when at least half the room has passed and nobody pulled it in. Nothing is deleted.
+- **Research per direction.** `research.startResearch` accepts optional `directionId`. The direction's `query` becomes the one search; its clues must be included. The job stores `directionId`; jobs in different directions run side by side, and only a newer job **in the same direction** makes one stale. `listRecommendations` merges the newest succeeded pool per visible direction (top 2 each, after variety) with the general pool (top 2 when directions exist, otherwise the usual 12).
+- `SearchOrigin.source` adds `"direction"` with optional `directionId`. `RecommendationsView` adds optional `searchPools: { jobId, directionId?, query, found, removedByClues, foldedDuplicates, shown }[]`, so "Why this gift?" can show what each search did.
+- **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
+- **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.
+
+#### Passes the council reacts to (D23 trial)
+
+- **Reasons.** `votes.castVote` and `mapSignals.setDirection` accept optional `reason: "style" | "price" | "has_similar" | "vibe"` on a pass ("not her style", "too pricey", "she has something like it", "wrong vibe"). Stored on the vote/signal row; ignored on pulls. Skipping the reason is still a pass.
+- **Retiring.** A direction is retired (`mapDirections.retiredAt`, never deleted) when the room has let the direction go (`fadeOf` = gone) or let `GIFT_PASSES_TO_RETIRE` (2) of the gifts its newest search found go. Retired directions leave `agents.directions.list` and the catalog; their search, reasons and history stay in the decision log.
+- **Replacement.** Retiring schedules `internal.agents.directions.replace`: one new direction beside the others (`replaces` links them), drafted with the same model/preset path and checks, told which directions the room passed on and why ("too pricey" asks for a simpler or smaller gift). It never deletes or resets other directions and starts no trend lookup.
+- **Pulls.** A direction pulled in (more pulls than passes) shows 3 gifts instead of 2. `listRecommendations` is ordered by the room's net gift votes, then score: pulled gifts lead and passed ones trail. Scores and citations are unchanged; the map keeps this server order.
+- The retirement and the replacement each write one council line to the decision log, which also reaches every member's status line for 15 seconds.
+
+#### Decision log — "How we got here" (D23 trial)
+
+```ts
+interface TrailEntry {
+  _id: string;
+  at: number;
+  stage: "memories" | "council" | "steering" | "search" | "choice" | "money";
+  actor: "council" | "checks" | "trends" | "search" | "person";
+  participantId?: string; who?: string;     // set for "person"
+  outcome: "kept" | "rejected" | "info";    // "rejected": a check threw it out, or a friend passed
+  text: string;                             // one plain sentence, ≤ 280 chars
+  directionId?: string; listingId?: string; clueIds?: string[];
+}
+```
+
+- `trail.list({ roomId })` → `Result<TrailEntry[]>`, membership-checked, oldest first, last 300.
+- Append-only `roomTrail` table, written inside the steps themselves: how memories were read as search words; each direction the council kept (with its why and search) and each one the checks threw out (with the reason); the probe question; each Google Trends screen result (seen vs kept); each search's outcome (results, kept, dropped, failures); pulls/passes on directions and gifts, caught/dropped trend clouds, question answers, "she already has it"; who put what in the box; approvals with the **room-visible share** and total, and the "everyone approved — simulated" line.
+- **Privacy:** only room-visible facts. Never raw imports, unpublished guesses, recipient-private data or anyone's contribution maximum. Logging never blocks or changes a decision. Purged with the room.
+- The map opens it from the box's "Why this gift?", a gift's ⋯ menu, and the council menu; lines on the chosen gift's path (same listing, direction or cited memories) are highlighted.
+
+
+### Live group question votes and additive gift-box actions
+
+Alex requested changeable group question votes, vote-driven ranking and multiple
+selected gifts in the map UI. Owners: Dev 4 implementation; Dev 1 consumes the
+map controls, Dev 2 reviews membership/selection and Dev 3 consumes questions.
+
+`mapSharpens.ballots?` is an additive array of `{participantId, option, updatedAt}`
+with at most one ballot per member and 2,000 ballots per question. Old rows remain
+valid and room purge already deletes the parent. `questionPolls.state({roomId})`
+returns the latest non-dismissed question's ID, live option counts, own option,
+member/voter counts, leader (null on tie), open/closed/stale status and canFinish.
+`questionPolls.vote({questionId, option: number | null})` records, changes or
+withdraws the caller's own vote; it rejects nonmembers, stale, superseded or
+closed questions and invalid options. Voting never publishes a clue, changes
+money, or changes the explicit listing votes table. Organizer-only
+`questionPolls.finish({questionId})` closes a current poll with a unique leader;
+ties remain open or can be skipped through the existing dismissal operation.
+Existing answerSharpen remains for compatibility; the live map uses poll votes.
+
+Research ordering applies direct gift votes, then question support, then existing
+relevance/deterministic tie order BEFORE truncating a pool. Question support is
+an advisory signal from explicitly linked product IDs or literal product-title
+matches to an option; it is not a recipient fact or a new evidence citation.
+Ownership, exclusion, invalid-listing and availability filters remain authoritative.
+A question's signals apply only at its current knowledge revision. Existing
+selected products remain available in the room projection across searches.
+
+`proposals.addGiftToBox({roomId, listingId})` atomically appends one distinct gift
+and is idempotent. `removeGiftFromBox` removes only that gift, clearing when empty.
+Both are organizer-only, preserve the 12-item bound and payment locks, and use
+existing proposal recomputation/approval invalidation. `setGiftBox` remains full
+replacement; `selectGift` remains legacy replace-with-one. The live map now uses
+add/remove, presents Add to box as a primary action and renders every item and
+the combined proposal estimate. Votes never select gifts or approve a proposal.

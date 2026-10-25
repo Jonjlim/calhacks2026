@@ -63,7 +63,6 @@ export function MapCursor({ name, color }: { name: string; color: string }) {
   return createPortal(
     <div ref={el} className={s.cursor} style={{ ["--who" as string]: color }} aria-hidden>
       <svg viewBox="0 0 20 22"><path d="M2 2l15 8-6.5 1.8L7.5 19z" /></svg>
-      <b>{name}</b>
       <i ref={label} />
     </div>,
     host,

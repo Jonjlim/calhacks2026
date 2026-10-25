@@ -17,6 +17,7 @@ import type { Result } from "../../lib/contracts";
 import { requireMember } from "../lib/auth";
 import { cleanText, LIMITS } from "../lib/input";
 import { bumpKnowledgeRevision } from "../lib/knowledge";
+import { logTrail } from "../lib/trail";
 import { err, memberError, ok } from "../lib/result";
 import { BASE_INSTRUCTIONS, containsSensitiveData } from "./engine";
 import { IDEA_CALLS_PER_WINDOW } from "./ideas";
@@ -234,9 +235,10 @@ export const sharpen = action({
 
     let source: "agent" | "preset" = "preset";
     let question = `Which feels more like ${room.recipient}?`;
+    // Without a model the answer is a vote, not a memory: product titles are not facts about her (D23 trial).
     let options = [
-      { label: shortTitle(a.title), clue: `${room.recipient} would love ${a.title.toLowerCase()} more than ${b.title.toLowerCase()}.`, listingIds: [a.id] },
-      { label: shortTitle(b.title), clue: `${room.recipient} would love ${b.title.toLowerCase()} more than ${a.title.toLowerCase()}.`, listingIds: [b.id] },
+      { label: shortTitle(a.title), clue: "", listingIds: [a.id] },
+      { label: shortTitle(b.title), clue: "", listingIds: [b.id] },
     ];
     if (!room.overBudget && process.env.LLM_API_KEY) {
       await ctx.runMutation(internal.agents.ideas.recordIdeaCall, { roomId });
@@ -272,28 +274,44 @@ export const sharpen = action({
 export const getSharpen = query({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    type Out = (Pick<Doc<"mapSharpens">, "_id" | "question" | "options" | "finalistIds" | "status" | "answer" | "source"> & { answeredBy?: Id<"participants"> }) | null;
+    type Out = (Pick<Doc<"mapSharpens">, "_id" | "question" | "options" | "finalistIds" | "status" | "answer" | "source"> & { answeredBy?: Id<"participants">; directionId?: Id<"mapDirections"> }) | null;
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Out>(member.code);
     const latest = await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).order("desc").first();
     if (!latest || latest.status === "dismissed") return ok<Out>(null);
-    const { _id, question, options, finalistIds, status, answer, answeredBy, source } = latest;
-    return ok<Out>({ _id, question, options, finalistIds, status, answer, answeredBy, source });
+    const { _id, question, options, finalistIds, status, answer, answeredBy, source, directionId } = latest;
+    return ok<Out>({ _id, question, options, finalistIds, status, answer, answeredBy, source, ...(directionId ? { directionId } : {}) });
   },
 });
 
-/** Tapping an answer is the member's own statement: it publishes that clue as them, like any manual memory. */
+/**
+ * Tapping an answer is the member's own statement: it publishes that clue as them, like any manual memory.
+ * A preset answer has no clue; it is the member's up vote on the gift it names instead.
+ */
 export const answerSharpen = mutation({
   args: { sharpenId: v.id("mapSharpens"), option: v.number() },
   handler: async (ctx, { sharpenId, option }) => {
-    type Out = { clueId: Id<"publishedClues"> };
+    type Out = { clueId?: Id<"publishedClues"> };
     const row = await ctx.db.get(sharpenId);
     if (!row) return err<Out>("not_found", "That question is gone.");
     const member = await requireMember(ctx, row.roomId);
     if (!member.ok) return memberError<Out>(member.code);
     if (row.status !== "open") return err<Out>("invalid_revision", "Someone already answered this question.");
+    if (row.ballots !== undefined) return err<Out>("invalid_revision", "This question is using group votes. Vote in the room poll instead.");
     const chosen = row.options[option];
-    if (!chosen) return err<Out>("validation_failed", "Pick one of the two answers.");
+    if (!chosen) return err<Out>("validation_failed", "Pick one of the answers.");
+    if (!chosen.clue.trim()) {
+      for (const listingId of chosen.listingIds) {
+        const vote = await ctx.db.query("votes").withIndex("by_listing_participant", (q) => q.eq("listingId", listingId).eq("participantId", member.me._id)).first();
+        if (vote) await ctx.db.patch(vote._id, { value: "up", updatedAt: Date.now() });
+        else await ctx.db.insert("votes", { roomId: row.roomId, listingId, participantId: member.me._id, value: "up", updatedAt: Date.now() });
+      }
+      await ctx.db.patch(sharpenId, { status: "answered", answer: option, answeredBy: member.me._id });
+      await logTrail(ctx, row.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "kept",
+        ...(chosen.listingIds[0] ? { listingId: chosen.listingIds[0] } : {}),
+        text: `${member.me.displayName || "A friend"} answered “${row.question}” with ${chosen.label}. Counted as a vote for that gift, not as a memory.` });
+      return ok<Out>({});
+    }
     const text = cleanText(chosen.clue, LIMITS.clueTextMaxChars);
     if (!text) return err<Out>("validation_failed", "That answer can't be shared.");
     const clueId = await ctx.db.insert("publishedClues", {
@@ -302,6 +320,9 @@ export const answerSharpen = mutation({
     });
     await ctx.db.patch(sharpenId, { status: "answered", answer: option, answeredBy: member.me._id });
     await bumpKnowledgeRevision(ctx, row.roomId);
+    await logTrail(ctx, row.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "kept", clueIds: [clueId],
+      ...(row.directionId ? { directionId: row.directionId } : {}),
+      text: `${member.me.displayName || "A friend"} answered “${row.question}”: ${chosen.label}. Shared as their memory: “${text}”` });
     return ok<Out>({ clueId });
   },
 });

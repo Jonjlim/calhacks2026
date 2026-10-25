@@ -18,17 +18,17 @@ export const RING_THEMES: Record<RingTheme, { label: string; angle: number }> = 
 };
 
 /** Ring radii in world units around the present, before the sideways stretch. */
-export const RING_RADII = { input: 16.5, theme: 12, gift: 8.8 } as const;
+export const RING_RADII = { input: 21, theme: 15.5, gift: 10.6 } as const;
 /** Rings are ovals: wider than deep, to fill a landscape screen from above. */
 export const RING_STRETCH = 1.5;
 /** Closest a gift may float to the present without sitting on the main island. */
-export const GIFT_MIN_RADIUS = 7.6;
+export const GIFT_MIN_RADIUS = 8.6;
 /** Releasing a dragged gift inside this ring distance drops it on the present. */
 export const BOX_DROP_RADIUS = 6;
 /** How far a drag must move toward or away from the present to count as a vote. */
 export const VOTE_DRAG_DISTANCE = 1.6;
 /** Degrees between neighbouring clues around a theme. Fixed, so a new clue never moves the others. */
-export const CLUE_STEP = 13;
+export const CLUE_STEP = 15;
 
 export const themeForKind = (kind: string): RingTheme =>
   kind === "explicit_wish" ? "wish" : kind === "interest" ? "interest" : "moment";

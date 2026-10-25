@@ -5,8 +5,11 @@
 import { z } from "zod";
 import type { SearchBrief } from "../../lib/contracts";
 
-export const VERIFIED_ACTOR = "johnvc~google-shopping-api-google-shopping-products-prices-deals";
-export const VERIFIED_BUILD = "0.0.142";
+/** Scrapewise replacement (D25). Build verified by one bounded live query; fixture retained. */
+export const VERIFIED_ACTOR = "scrapewise~google-shopping";
+export const SHOPPING_BUILD = "0.1.46";
+/** Maximum requested count; the charge cap can end a run earlier. */
+export const SHOPPING_MAX_RESULTS = 20;
 export const PROVIDER_DEADLINE_MS = 180_000;
 export const PROVIDER_MAX_RESPONSE_BYTES = 750_000;
 export type ProviderResult<T> =
@@ -69,12 +72,15 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
       // One complete direction per run; do not combine unrelated hobbies/styles.
       const q = (brief.queryTerms.map(term => term.trim()).find(Boolean) ?? "").slice(0, 200);
       if (!q) return Promise.resolve({ kind: "failed", message: "Publish an interest or wish before searching." });
-      return runRequest("acts/" + VERIFIED_ACTOR
-        + "/runs?build=" + VERIFIED_BUILD + "&timeout=120&maxTotalChargeUsd=0.20",
+      // Bound each paid run; this cap does not guarantee a result count or usable links.
+      return runRequest("acts/" + VERIFIED_ACTOR + "/runs?build=" + SHOPPING_BUILD + "&timeout=120&maxTotalChargeUsd=0.40",
       "POST", {
-        q, gl: "us", hl: "en", max_pages: 1,
+        queries: [q], country: "us", language: "en", maxItems: SHOPPING_MAX_RESULTS,
+        maxItemsPerQuery: SHOPPING_MAX_RESULTS, maxPagesPerQuery: 1,
+        includeOffers: false, includeStoreLink: false, includeDetails: false,
+        compareWithPreviousRun: false,
         ...(brief.budgetMinor !== undefined && brief.budgetMinor > 0
-          ? { max_price: brief.budgetMinor / 100 } : {}),
+          ? { maxPrice: brief.budgetMinor / 100 } : {}),
       });
     },
     async getRun(runId: string): Promise<ProviderResult<ProviderRun>> {

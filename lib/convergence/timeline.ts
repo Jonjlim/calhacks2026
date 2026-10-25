@@ -24,10 +24,14 @@ export const CONVERGENCE_TIMES = {
   wrap: [4.65, 6.5],
   levitate: [6.4, 7.2],
   /** The shaking builds. */
-  charge: [7.0, 9.0],
-  burst: [9.0, 9.7],
-  reveal: [9.4, 10.8],
-  end: 10.8,
+  charge: [7.0, 9.25],
+  /** Just before the burst the ribbon whips off the box, so the present bursts bare. */
+  ribbonOff: [8.05, 9.2],
+  /** The camera swings to the middle of the screen and closes in, ready for the explosion. */
+  boom: [8.2, 9.2],
+  burst: [9.3, 10.1],
+  reveal: [9.8, 11.3],
+  end: 11.3,
 } as const;
 
 /** How long the camera takes to glide back to the map once the reveal is closed. */
@@ -126,8 +130,8 @@ export interface GiftChoreography {
   glow: number;
   /** Warm pool of light beneath the present, 0..1. */
   halo: number;
-  /** The ribbon loops fly outward at the burst, 0..1. */
-  sweep: number;
+  /** 0..1 as the bow collapses into the knot, just before the ribbon is peeled off. */
+  ribbonKnot: number;
   /** 0..1 through the burst: the walls, lid, floor and ribbon fly outward. */
   burst: number;
 }
@@ -145,33 +149,41 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
   const lidClose = smooth(span(t, T.lidClose[0], T.lidClose[1]));
   const closing = t >= T.lidClose[0];
   const lidOpen = 1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2);
-  const popped = 1 + 1.4 * Math.pow(span(t, T.burst[0], T.burst[0] + 0.3) - 1, 3) + 0.4 * Math.pow(span(t, T.burst[0], T.burst[0] + 0.3) - 1, 2);
-  const lid = t >= T.burst[0] ? popped : closing ? 1 - lidClose : lidOpen;
+  const lid = closing ? 1 - lidClose : lidOpen;
 
   const wall: number[] = [];
   for (let i = 0; i < WALL_COUNT; i++) {
     const opening = span(t, 0.5 + i * 0.07, T.boxOpen[1] - (3 - i) * 0.05);
     const shutting = smoother(span(t, T.wallsClose[0] + (3 - i) * 0.05, T.wallsClose[1] - i * 0.03));
-    const exploding = flop(span(t, T.burst[0] + i * 0.03, T.burst[0] + 0.38));
-    wall.push(t >= T.burst[0] ? exploding : t < T.wallsClose[0] ? flop(opening) : Math.min(1, flop(opening)) * (1 - shutting));
+    // At the burst the walls stay upright: the box shatters from whole (see `burst`).
+    wall.push(t >= T.wallsClose[0] ? Math.min(1, flop(opening)) * (1 - shutting) : flop(opening));
   }
   const backFold = clamp01(wall[BACK_WALL]! * 1.15);
   const burstEnd = T.burst[1];
-  const hollow = (t >= T.boxOpen[0] && t < T.lidClose[1]) || (t >= T.burst[0] && t < burstEnd + 0.05);
+  const hollow = (t >= T.boxOpen[0] && t < T.lidClose[1]) || (t >= T.burst[0] && t < burstEnd);
 
   // --- The ribbon: unties quickly, then winds back on. -------------------
   const untie = (a: number, b: number) => 1 - smooth(span(t, a, b));
   const wind = (a: number, b: number) => smooth(span(t, a, b));
   const wrapped = t >= T.wrap[0];
-  const ribbon = wrapped
-    ? { bandX: wind(4.65, 5.35), bandZ: wind(5.0, 5.75), tails: wind(5.5, 6.05), bow: easeOutBack(span(t, 5.8, 6.5)) }
-    : { bandX: untie(0.35, 0.85), bandZ: untie(0.3, 0.8), tails: untie(0.2, 0.5), bow: untie(0.0, 0.35) };
+  const off = t >= T.ribbonOff[0];
+  // The bow collapses into the knot, then the bands hand over to the peeling strip (RibbonUnravel).
+  const knot = span(t, T.ribbonOff[0], T.ribbonOff[0] + 0.35);
+  const swapped = t >= T.ribbonOff[0] + 0.35;
+  const ribbon = off
+    ? swapped
+      ? { bandX: 0, bandZ: 0, tails: 0, bow: 0 }
+      : { bandX: 1, bandZ: 1, tails: 1, bow: 1 - 0.92 * smooth(knot) }
+    : wrapped
+      ? { bandX: wind(4.65, 5.35), bandZ: wind(5.0, 5.75), tails: wind(5.5, 6.05), bow: easeOutBack(span(t, 5.8, 6.5)) }
+      : { bandX: untie(0.35, 0.85), bandZ: untie(0.3, 0.8), tails: untie(0.2, 0.5), bow: untie(0.0, 0.35) };
+  const ribbonKnot = smooth(knot);
 
   // --- Levitation, charging, shaking. -----------------------------------
   const rise = smoother(span(t, T.levitate[0], T.levitate[1]));
   const bob = rise * Math.sin(t * 2.6) * 0.03;
   const charge = Math.pow(span(t, T.charge[0], T.charge[1]), 1.6);
-  const anticipate = span(t, T.charge[1] - 0.28, T.charge[1]) * (1 - span(t, T.burst[0], T.burst[0] + 0.1));
+  const anticipate = span(t, T.burst[0] - 0.3, T.burst[0]) * (1 - span(t, T.burst[0], T.burst[0] + 0.05));
   const wobble = Math.sin(t * (24 + 10 * charge)) * (0.5 + 0.5 * Math.sin(t * 7.3));
   const shake = charge * (1 - anticipate * 0.6);
   const shakeX = wobble * (0.012 + 0.05 * shake);
@@ -183,9 +195,8 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
   // --- Burst: a brief swell, then the present gives way to the gift. ------
   // The present bursts open and outward: it never shrinks, its parts fly away and it is gone once they have.
   const pop = span(t, T.burst[0], T.burst[0] + 0.14);
-  const presence = t < burstEnd + 0.05 ? 1 + 0.1 * smooth(pop) : 0;
+  const presence = t < burstEnd ? 1 + 0.08 * smooth(pop) : 0;
   const burst = span(t, T.burst[0], burstEnd);
-  const sweep = smooth(span(t, T.burst[0], T.burst[0] + 0.6));
   const squash = anticipate * 0.1;
 
   const interior = Math.min(1, fill) * 0.7;
@@ -210,7 +221,7 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
     charge,
     glow,
     halo,
-    sweep,
+    ribbonKnot,
     burst,
   };
 }
@@ -218,4 +229,26 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
 /** Progress of the camera's push from the map to the close-up, 0..1 (eased). */
 export function cameraPush(t: number): number {
   return smoother(span(t, T.cameraPush[0], T.cameraPush[1]));
+}
+
+/** 0 on the reveal's resting composition, 1 on the centred, closer "boom" framing used for the explosion. */
+export function boomAmount(t: number): number {
+  return smoother(span(t, CONVERGENCE_TIMES.boom[0], CONVERGENCE_TIMES.boom[1])) * (1 - smoother(span(t, CONVERGENCE_TIMES.burst[1] - 0.05, CONVERGENCE_TIMES.reveal[1])));
+}
+
+/**
+ * The camera's shake as offsets in its own frame (world units, radians for
+ * roll): a tremor that grows with the charge and a hard hit that fades over
+ * about a second at the burst. Never used with reduced motion (that path
+ * skips the performance).
+ */
+export function cameraShake(t: number): { x: number; y: number; roll: number } {
+  const T0 = CONVERGENCE_TIMES;
+  const charge = Math.pow(span(t, T0.charge[0] + 0.4, T0.burst[0]), 2.2);
+  const since = t - T0.burst[0];
+  const hit = since >= 0 ? Math.exp(-since * 4.2) * (1 - Math.exp(-since * 60)) : 0;
+  const a = 0.012 * charge + 0.34 * hit;
+  const n1 = Math.sin(t * 61.7) + 0.6 * Math.sin(t * 97.3 + 1.1);
+  const n2 = Math.sin(t * 73.1 + 2.4) + 0.6 * Math.sin(t * 111.7);
+  return { x: a * n1, y: a * 0.8 * n2, roll: (0.004 * charge + 0.05 * hit) * Math.sin(t * 53.9 + 0.7) };
 }

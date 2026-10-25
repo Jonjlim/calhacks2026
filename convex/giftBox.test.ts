@@ -192,4 +192,40 @@ describe("one or multiple gifts use one approved proposal and contribution simul
     expect(view.revision?.items?.map(i => i.listingId)).toEqual([s.first]);
     expect(view.revision?.payableTotalMinor).toBe(4000);
   });
+  it("atomically adds multiple gifts under concurrent clicks and removes only one at a time", async () => {
+    const s = await setup();
+    const add = (listingId: Id<"productListings">) => s.alex.mutation(api.proposals.addGiftToBox, { roomId: s.roomId, listingId });
+    await Promise.all([add(s.first), add(s.second), add(s.first)]);
+    const selection = value(await s.alex.query(api.proposals.getSelection, { roomId: s.roomId }))!;
+    expect(new Set(selection.items?.map(item => item.listingId))).toEqual(new Set([s.first, s.second]));
+    const before = value(await s.alex.query(api.proposals.getProposal, { roomId: s.roomId })).revision!;
+    await add(s.first);
+    expect(value(await s.alex.query(api.proposals.getProposal, { roomId: s.roomId })).revision?.id).toBe(before.id);
+    value(await s.alex.mutation(api.proposals.removeGiftFromBox, { roomId: s.roomId, listingId: s.second }));
+    expect(value(await s.alex.query(api.proposals.getSelection, { roomId: s.roomId }))?.items?.map(item => item.listingId)).toEqual([s.first]);
+    expect(value(await s.alex.query(api.proposals.getProposal, { roomId: s.roomId })).revision?.payableTotalMinor).toBe(4000);
+    value(await s.alex.mutation(api.proposals.removeGiftFromBox, { roomId: s.roomId, listingId: s.first }));
+    expect(value(await s.alex.query(api.proposals.getSelection, { roomId: s.roomId }))).toBeNull();
+  });
+  it("keeps selected items available after a newer search replaces the candidate pool", async () => {
+    const s = await setup(); await s.choose();
+    await s.t.run(async ctx => {
+      const source = (await ctx.db.get(s.first))!;
+      const jobId = await ctx.db.insert("researchJobs", { roomId: s.roomId, knowledgeRevision: 0, status: "succeeded", publishedClueIds: [], inputHash: "new-search", idempotencyKey: "new-search", attempt: 1, createdAt: Date.now() + 1 });
+      const { _id, _creationTime, ...fields } = source;
+      await ctx.db.insert("productListings", { ...fields, jobId, title: "New search result", sourceUrl: "https://example.com/new" });
+    });
+    const results = value(await s.alex.query(api.research.research.listRecommendations, { roomId: s.roomId }));
+    expect(results.recommendations.map(r => r.listingId)).toEqual(expect.arrayContaining([s.first, s.second]));
+    expect(results.listings.map(l => l.id)).toEqual(expect.arrayContaining([s.first, s.second]));
+  });
+  it("denies contributor box edits and protects locked boxes for additive operations", async () => {
+    const s = await setup(); const r = await s.choose();
+    expect(await s.sam.mutation(api.proposals.addGiftToBox, { roomId: s.roomId, listingId: s.first })).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    expect(await s.sam.mutation(api.proposals.removeGiftFromBox, { roomId: s.roomId, listingId: s.first })).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    await s.t.run(ctx => ctx.db.patch(r.id as Id<"proposalRevisions">, { status: "capturing" }));
+    expect(await s.alex.mutation(api.proposals.addGiftToBox, { roomId: s.roomId, listingId: s.first })).toMatchObject({ ok: false, error: { code: "invalid_revision" } });
+    expect(await s.alex.mutation(api.proposals.removeGiftFromBox, { roomId: s.roomId, listingId: s.first })).toMatchObject({ ok: false, error: { code: "invalid_revision" } });
+  });
+
 });

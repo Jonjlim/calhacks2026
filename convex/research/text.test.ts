@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cluePhrase, shoppingPhrase, shoppingPhrases } from "./text";
+import { cluePhrase, productCategory, shoppingPhrase, shoppingPhrases } from "./text";
 import { trendSeed } from "./trendPolicy";
 
 const seed = (text: string) => trendSeed({ kind: "interest", text, status: "active" }, ["Maya"]);
@@ -71,5 +71,19 @@ describe("shopping phrases from everyday memories", () => {
     expect(seed("Plays tennis every weekend")).toBe("tennis");
     expect(seed("Loves hiking and camping")).toBe("hiking");
     expect(seed("Collects vinyl records")).toBe("vinyl records");
+  });
+});
+
+describe("what kind of thing a listing is", () => {
+  // Titles observed in live Google Shopping results on October 24, 2026.
+  it.each([
+    ["Merrell Moab 3 Soft Toe Hiking Boots, for Men, Size 10.5, Brown", "hiking boots"],
+    ["Columbia Women's Newton Ridge Plus Waterproof Amped Hiking Boot, 5 / Stratus/Canyon Rose", "hiking boot"],
+    ["AE Low-Rise Baggy Straight Jean Women's Black Blaze 10 Regular", "straight jean"],
+    ["Patagonia Men's Torrentshell 3L Rain Jacket", "rain jacket"],
+    ["Arc'teryx Atom Hoody Men's", "atom hoody"],
+    ["Nature Meditations Deck", "meditations deck"],
+  ])("%s -> %s", (title, category) => {
+    expect(productCategory(title)).toBe(category);
   });
 });

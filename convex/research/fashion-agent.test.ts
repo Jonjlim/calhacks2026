@@ -69,7 +69,7 @@ describe("fashion discovery → Alan buyer → product worker", () => {
     await t.action(internal.research.research.runResearch, { jobId: jobs[0]!._id });
     const sourceCalls = fetcher.mock.calls.filter(([url]) => String(url).includes("api.apify.com"));
     expect(sourceCalls).toHaveLength(1);
-    expect(JSON.parse(String(sourceCalls[0]?.[1]?.body))).toMatchObject({ q: "vintage loose fit jeans", max_price: 60 });
+    expect(JSON.parse(String(sourceCalls[0]?.[1]?.body))).toMatchObject({ queries: ["vintage loose fit jeans"], maxPrice: 60 });
     expect(String(sourceCalls[0]?.[0])).not.toContain("tiktok");
     const current = await t.run(ctx => ctx.db.get(room._id));
     expect(current?.knowledgeRevision).toBe(room.knowledgeRevision + 2);
