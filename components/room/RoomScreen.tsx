@@ -121,6 +121,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const withdrawApproval = useMutation(api.proposals.withdrawApproval);
   const findTrends = useMutation(api.research.trendJobs.startDiscovery);
   const researchTrend = useMutation(api.research.research.startResearch);
+  const passTrend = useMutation(api.research.trendJobs.setTrendPass);
 
   const actions = useMemo<RoomActions>(
     () => ({
@@ -156,11 +157,12 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
         roomId, publishedClueIds: clueIds as Id<"publishedClues">[], trendJobId: trendJobId as Id<"trendJobs">,
         discoveryQuery: query, idempotencyKey: newRequestKey(),
       }),
+      passTrend: (trendJobId, query, passed) => passTrend({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query, passed }),
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval, findTrends, researchTrend,
+      selectGift, clearSelection, setLimit, approve, withdrawApproval, findTrends, researchTrend, passTrend,
     ],
   );
 

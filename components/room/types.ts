@@ -78,4 +78,6 @@ export interface RoomActions {
   findTrends?: Run<[publishedClueId: string]>;
   /** Research one sourced trend suggestion; the server refuses any query the trend job did not return. */
   researchTrend?: Run<[trendJobId: string, query: string, publishedClueIds: string[]]>;
+  /** Shared, attributed "doesn't fit" on a trend idea; `false` takes it back. */
+  passTrend?: Run<[trendJobId: string, query: string, passed: boolean]>;
 }

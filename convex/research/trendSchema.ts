@@ -25,4 +25,10 @@ export const trendTables = {
   }).index("by_room", ["roomId"])
     .index("by_room_seed", ["roomId", "seedTerm"])
     .index("by_room_key", ["roomId", "idempotencyKey"]),
+  // One row per member per suggestion; deleting it takes the pass back.
+  trendPasses: defineTable({
+    roomId: v.id("rooms"), trendJobId: v.id("trendJobs"), query: v.string(),
+    participantId: v.id("participants"), createdAt: v.number(),
+  }).index("by_room", ["roomId"])
+    .index("by_job_query_participant", ["trendJobId", "query", "participantId"]),
 };

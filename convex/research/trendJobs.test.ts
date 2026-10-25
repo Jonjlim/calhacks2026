@@ -5,6 +5,7 @@ import type { Result } from "../../lib/contracts";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import { modules } from "../test.setup";
+import { trendAgentContext } from "./trendJobs";
 import recorded from "../../lib/research/fixtures/google-trends.json";
 
 const f = api.research.trendJobs;
@@ -19,7 +20,7 @@ async function setup(text = "Loves pottery tools") {
   const roomId = created.room._id;
   const clue = value(await alex.mutation(api.clues.upsertManualPreference, { roomId, kind: "interest", text }));
   const args = { roomId, publishedClueId: clue._id, idempotencyKey: "trend-request" };
-  return { t, alex, outsider, roomId, clue, args };
+  return { t, alex, outsider, roomId, clue, args, inviteToken: created.inviteToken };
 }
 async function completed() {
   const s = await setup();
@@ -66,7 +67,7 @@ describe("persisted live Google Trends discovery", () => {
     });
     const view = value(await s.alex.query(f.getDiscovery, { roomId: s.roomId }));
     const suggestion = view.sample!.suggestions.find(x => x.query === "mkm pottery tools")!;
-    expect(view.listingLinks).toEqual([{ listingId: found, query: "mkm pottery tools", sourceUrl: suggestion.sourceUrl }]);
+    expect(view.listingLinks).toEqual([{ listingId: found, trendJobId: s.jobId, query: "mkm pottery tools", sourceUrl: suggestion.sourceUrl }]);
     expect(view.listingLinks!.map(l => l.listingId)).not.toContain(gone);
     expect(view.listingLinks!.map(l => l.listingId)).not.toContain(unrelated);
   });
@@ -138,10 +139,13 @@ describe("persisted live Google Trends discovery", () => {
       roomId: s.roomId, publishedClueIds: [s.clue._id], idempotencyKey: "trend-shopping", trendJobId: s.jobId,
     }));
     expect((await s.t.run(ctx => ctx.db.get(shopping.jobId)))?.brief?.queryTerms).toEqual(["dirty girls pottery tools"]);
+    // Another memory keeps these ideas; withdrawing their own memory retires them.
     await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "ownership", text: "Owns a pottery wheel" });
+    expect(value(await s.alex.query(f.getDiscovery, { roomId: s.roomId })).sample?.jobId).toBe(s.jobId);
+    await s.alex.mutation(api.clues.withdrawClue, { publishedClueId: s.clue._id });
     expect(await s.alex.mutation(api.research.research.startResearch, {
       roomId: s.roomId, publishedClueIds: [s.clue._id], idempotencyKey: "after-change", trendJobId: s.jobId,
-    })).toMatchObject({ ok: false, error: { code: "stale_job" } });
+    })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
     expect(value(await s.alex.query(f.getDiscovery, { roomId: s.roomId })).sample).toBeNull();
   });
   it("runs the scheduled start, poll and dataset read with exactly one paid start", async () => {
@@ -159,6 +163,49 @@ describe("persisted live Google Trends discovery", () => {
     await s.t.finishInProgressScheduledFunctions();
     expect((await s.t.run(ctx => ctx.db.get(job.jobId)))?.status).toBe("succeeded");
     expect(fetcher.mock.calls.filter(([, o]) => o?.method === "POST")).toHaveLength(1);
+  });
+  it("looks up trends automatically for a new memory, once, within the room limit", async () => {
+    vi.stubEnv("TREND_AUTO_DISCOVERY", "on");
+    const s = await setup();
+    await s.t.mutation(worker.autoDiscover, { publishedClueId: s.clue._id });
+    await s.t.mutation(worker.autoDiscover, { publishedClueId: s.clue._id });
+    let jobs = await s.t.run(ctx => ctx.db.query("trendJobs").collect());
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ seedTerm: "pottery tools", idempotencyKey: `auto:${s.clue._id}`, status: "pending" });
+    for (const text of ["Loves knitting yarn", "Loves trail running", "Loves board games"]) {
+      const clue = value(await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "interest", text }));
+      await s.t.mutation(worker.autoDiscover, { publishedClueId: clue._id });
+    }
+    jobs = await s.t.run(ctx => ctx.db.query("trendJobs").collect());
+    expect(jobs).toHaveLength(3);
+    const exclusion = value(await s.alex.mutation(api.clues.upsertManualPreference, { roomId: s.roomId, kind: "exclusion", text: "No candles" }));
+    await s.t.mutation(worker.autoDiscover, { publishedClueId: exclusion._id });
+    expect(await s.t.run(ctx => ctx.db.query("trendJobs").collect())).toHaveLength(3);
+    expect(await s.alex.mutation(f.startDiscovery, { ...s.args, idempotencyKey: "auto:spoofed" })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
+  });
+  it("respects the automatic lookup kill switch", async () => {
+    const s = await setup();
+    vi.stubEnv("TREND_AUTO_DISCOVERY", "off");
+    await s.t.mutation(worker.autoDiscover, { publishedClueId: s.clue._id });
+    expect(await s.t.run(ctx => ctx.db.query("trendJobs").collect())).toEqual([]);
+  });
+  it("shares attributed passes that fade, never remove, an idea; the agent skips passed ideas", async () => {
+    const s = await completed();
+    const bob = s.t.withIdentity({ subject: "bob|session" });
+    value(await bob.mutation(api.rooms.joinRoom, { inviteToken: s.inviteToken, displayName: "Bob" }));
+    const pass = { roomId: s.roomId, trendJobId: s.jobId, query: "mkm pottery tools", passed: true };
+    expect(value(await bob.mutation(f.setTrendPass, pass))).toEqual({ count: 1, mine: true });
+    expect(value(await bob.mutation(f.setTrendPass, pass))).toEqual({ count: 1, mine: true });
+    const seen = value(await s.alex.query(f.getDiscovery, { roomId: s.roomId }));
+    expect(seen.passes).toEqual([{ trendJobId: s.jobId, query: "mkm pottery tools", count: 1, mine: false, passerNames: ["Bob"] }]);
+    expect(seen.sample?.suggestions.map(x => x.query)).toContain("mkm pottery tools");
+    const context = await s.t.run(ctx => trendAgentContext(ctx, s.roomId));
+    expect(context?.ideas.map(i => i.query)).not.toContain("mkm pottery tools");
+    expect(context?.ideas.length).toBeGreaterThan(0);
+    expect(await bob.mutation(f.setTrendPass, { ...pass, query: "invented idea" })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
+    expect(await s.outsider.mutation(f.setTrendPass, pass)).toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    expect(value(await bob.mutation(f.setTrendPass, { ...pass, passed: false }))).toEqual({ count: 0, mine: false });
+    expect(value(await s.alex.query(f.getDiscovery, { roomId: s.roomId })).passes).toEqual([]);
   });
   it("purges trend jobs with the room", async () => {
     const s = await completed();

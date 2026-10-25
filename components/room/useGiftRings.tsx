@@ -5,7 +5,7 @@ import type { RingAction, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "@/components/world/room/gift-rings.module.css";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
-import { isTrendKey, layoutTrendIdeas, TREND_KEY_PREFIX } from "@/lib/map/trendIdeas";
+import { isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import type { RoomActions, RoomData } from "./types";
@@ -36,8 +36,6 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  // Passing a trend only hides it for this viewer; shared passes wait for MAP-012 direction signals.
-  const [passedTrends, setPassedTrends] = useState<Set<string>>(() => new Set());
   const lock = useRef(false);
 
   const run = useCallback(async (call: () => Promise<Result<unknown>>, success: string) => {
@@ -75,13 +73,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     ),
     [clues, recs, data.votes],
   );
-  const trendSample = data.trends?.sample ?? null;
-  const trendSource = trendSample ? clues.find((c) => c.id === trendSample.publishedClueId) ?? null : null;
-  const trendIdeas = useMemo(() => {
-    if (!trendSample || !trendSource) return [];
-    const at = layout.clues.find((c) => c.id === trendSource.id) ?? null;
-    return layoutTrendIdeas(trendSample.suggestions, at, passedTrends);
-  }, [trendSample, trendSource, layout.clues, passedTrends]);
+  // Each memory with a sourced trend sample sprouts its own ideas beside it.
+  const trendIdeas = useMemo(() => (data.trends?.samples ?? (data.trends?.sample ? [data.trends.sample] : [])).flatMap((sample) => {
+    const source = clues.find((c) => c.id === sample.publishedClueId);
+    if (!source) return [];
+    const at = layout.clues.find((c) => c.id === source.id) ?? null;
+    return layoutTrendIdeas(sample.jobId, sample.suggestions, at).map((node) => ({ ...node, source }));
+  }), [data.trends?.samples, data.trends?.sample, clues, layout.clues]);
+  const passByKey = useMemo(() => new Map((data.trends?.passes ?? []).map((p) => [trendKey(p.trendJobId, p.query), p])), [data.trends?.passes]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   if (!active) return { rings: null, notice, error };
@@ -105,7 +104,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     const rec = recs.find((r) => r.listingId === selection.listingId);
     const cited = (rec?.publishedClueIds ?? []).filter((id) => clues.some((c) => c.id === id));
     const trend = trendByListing.get(selection.listingId);
-    highlight = new Set(["box", `gift:${selection.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeForKind(clues.find((c) => c.id === id)!.kind)}`), ...(trend ? [TREND_KEY_PREFIX + trend.query] : [])]);
+    highlight = new Set(["box", `gift:${selection.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeForKind(clues.find((c) => c.id === id)!.kind)}`), ...(trend ? [trendKey(trend.trendJobId, trend.query)] : [])]);
   }
 
   const vote = (listingId: string, value: "up" | "down") => {
@@ -160,14 +159,16 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     }
     if (isTrendKey(key)) {
       const node = trendIdeas.find((t) => t.key === key);
-      if (!node || !trendSample || !trendSource) return null;
-      const jobId = trendSample.jobId;
+      if (!node) return null;
+      const jobId = node.trendJobId;
+      const pass = passByKey.get(key);
       return {
-        caption: <><b>{node.query}</b> · {node.signal}<br />A Google Trends search related to “{trendSource.text}”. An idea to explore, not a fact about her.</>,
+        caption: <><b>{node.query}</b> · {node.signal}<br />A Google Trends search related to “{node.source.text}”. An idea to explore, not a fact about her.{pass && pass.count > 0 && <><br />✕ {pass.passerNames.join(", ") || `${pass.count} people`} passed on it.</>}</>,
         actions: [
           ...(actions?.researchTrend ? [{ icon: "🌱", label: "Research this direction", tone: "gold" as const, disabled: pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
           { icon: "↗", label: "See the source", run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
-          { icon: "✕", label: "Doesn’t fit", tone: "pass" as const, run: () => { setPassedTrends((p) => new Set(p).add(node.query)); setSelectedKey(null); setNotice("Hidden for you. Her memories didn’t change."); } },
+          ...(actions?.passTrend ? [{ icon: "✕", label: pass?.mine ? "Take back my pass" : "Doesn’t fit", tone: "pass" as const, on: !!pass?.mine, disabled: pending,
+            run: () => void run(() => actions.passTrend!(jobId, node.query, !pass?.mine), pass?.mine ? "Pass taken back." : "Passed for the room. It stays faded on the map; her memories didn’t change.") }] : []),
         ],
       };
     }
@@ -246,7 +247,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
       return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarFor(participants, idea.publisherId), x, z };
-    }).concat(trendSource ? trendIdeas.map((t) => ({ key: t.key, text: t.query, author: name(trendSource.publisherId), avatar: avatarFor(participants, trendSource.publisherId), x: t.x, z: t.z, tag: `trend · ${t.signal}` })) : []),
+    }).concat(trendIdeas.map((t) => {
+      const passes = passByKey.get(t.key)?.count ?? 0;
+      return { key: t.key, text: t.query, author: name(t.source.publisherId), avatar: avatarFor(participants, t.source.publisherId), x: t.x, z: t.z,
+        tag: passes ? `trend · ✕ ${passes} passed` : `trend · ${t.signal}`, faded: passes > 0 };
+    })),
     themes: layout.themes.map((t) => ({ key: `theme:${t.id}`, theme: t.id, label: RING_THEMES[t.id].label, count: t.count, x: t.x, z: t.z })),
     gifts: layout.gifts.map((g, i) => {
       const l = listingById.get(g.listingId)!;

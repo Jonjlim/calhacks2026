@@ -37,7 +37,7 @@ export interface RingsWorld {
   clues: { key: string; text: string; author: string; avatar: AvatarId; theme: RingTheme; x: number; z: number }[];
   themes: { key: string; theme: RingTheme; label: string; count: number; x: number; z: number }[];
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
-  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; /** Replaces the "gift idea" caption, e.g. for sourced trend suggestions. */ tag?: string }[];
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; /** Replaces the "gift idea" caption, e.g. for sourced trend suggestions. */ tag?: string; /** Shown smaller and quieter, e.g. after someone passed. */ faded?: boolean }[];
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: RingTheme[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean }[];
   selectedListingId?: string;
   boxLabel: string;
@@ -379,8 +379,8 @@ export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: bool
       })}
 
       {rings.ideas.map((idea, i) => (
-        <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)}>
-          <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={dim(idea.key)} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea`}
+        <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key) || idea.faded}>
+          <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={dim(idea.key) || !!idea.faded} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea`}
             face={<span className={s.idea}><img src={portraitUrl(idea.avatar)} alt="" /><span><b>{idea.text}</b><small>{idea.tag ?? `gift idea · ${idea.author}`}</small></span></span>} />
         </RingIsland>
       ))}

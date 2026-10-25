@@ -1584,10 +1584,37 @@ On the map (`lib/map/trendIdeas.ts`, `useGiftRings`): a memory's **Look for tren
 calls `startDiscovery`; its suggestions sprout between the theme and gift rings at that
 memory's angle, labelled by observed signal ("breakout search", "searches +N%").
 **Research this direction** calls `startResearch` with `trendJobId` + `discoveryQuery`.
-**Doesn't fit** hides the suggestion for that viewer only (no persisted pass until
-MAP-012 signals). Gifts with a link say "found while researching [query]" and can open
-the Trends source; "Why this?" lights the sprout. Never a per-product trending claim.
-Optional `RoomData.trends` and `RoomActions.findTrends` / `researchTrend` keep preview mode unchanged.
+Gifts with a link say "found while researching [query]" and can open the Trends
+source; "Why this?" lights the sprout. Never a per-product trending claim. Optional
+`RoomData.trends` and `RoomActions.findTrends` / `researchTrend` / `passTrend` keep preview mode unchanged.
+
+**Several memories.** `getDiscovery` adds `samples` (newest usable sample per memory, at
+most 6; `sample` is the first). Trend jobs are no longer fenced on room
+`knowledgeRevision`: a new memory keeps other memories' ideas. A job still goes stale
+when its own memory is withdrawn or its seed changes, or the requester leaves.
+
+**Shared passes.** Additive table `trendPasses {roomId, trendJobId, query, participantId,
+createdAt}` (indexes `by_room`, `by_job_query_participant`; purged with the room).
+`research/trendJobs.setTrendPass({roomId, trendJobId, query, passed})` is a member
+mutation, one row per member per suggestion, idempotent; `passed: false` takes it back.
+The query must be one of that job's suggestions. `getDiscovery.passes:
+TrendPassSummary[]` (`{trendJobId, query, count, mine, passerNames}`). A pass fades the
+idea and shows "✕ N passed" for everyone; it never hides or deletes the idea or any memory.
+This is interim until MAP-012 direction signals cover trend ideas.
+
+**Automatic lookup.** After `publishClue`, `upsertManualPreference` and `map.plantSprout`
+insert a memory, they call `scheduleAutoTrend` (one line each in Dev 2/Dev 3 files).
+`internal.research.trendJobs.autoDiscover` then runs the normal `startDiscovery` path
+with key `auto:<clueId>` for a confirmed interest/wish with a safe seed. At most
+`AUTO_TRENDS_PER_ROOM = 3` automatic jobs per room (about $0.60 worst case); cached
+24 h samples and open jobs are reused and do not count. Clients cannot use `auto:` keys.
+Set Convex env `TREND_AUTO_DISCOVERY=off` to disable.
+
+**Buyer agent.** `BuyerSnapshot.trendDiscovery?: TrendAgentContext`
+(`{mode, label, ideas: {publishedClueId, query, signal, retrievedAt}[]}`) lists current
+ideas minus any with a pass; it participates in the buyer input version. The prompt lets
+the agent put one supplied query first in a search or mention one idea as a related
+search, never as a preference, popularity claim or invented query.
 
 ### Shared contribution simulation (Dev 4, demo only)
 

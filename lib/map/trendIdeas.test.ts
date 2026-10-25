@@ -14,7 +14,7 @@ describe("trend sprouts", () => {
 
   it("floats near the source memory, between the theme and gift rings", () => {
     const [x, z] = ringPoint(40, RING_RADII.input);
-    const nodes = layoutTrendIdeas([s("a"), s("b"), s("c")], { x, z }, new Set());
+    const nodes = layoutTrendIdeas("job1", [s("a"), s("b"), s("c")], { x, z });
     expect(nodes.map((n) => n.query)).toEqual(["a", "b", "c"]);
     for (const n of nodes) {
       expect(isTrendKey(n.key)).toBe(true);
@@ -26,8 +26,9 @@ describe("trend sprouts", () => {
     }
   });
 
-  it("leaves out passed suggestions and keeps at most five", () => {
-    const nodes = layoutTrendIdeas(["a", "b", "c", "d", "e", "f", "g"].map((q) => s(q)), null, new Set(["b"]));
-    expect(nodes.map((n) => n.query)).toEqual(["a", "c", "d", "e", "f"]);
+  it("keeps at most five, with keys unique per trend job", () => {
+    const nodes = layoutTrendIdeas("job1", ["a", "b", "c", "d", "e", "f", "g"].map((q) => s(q)), null);
+    expect(nodes.map((n) => n.query)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(layoutTrendIdeas("job2", [s("a")], null)[0]!.key).not.toBe(nodes[0]!.key);
   });
 });

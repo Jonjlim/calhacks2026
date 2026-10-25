@@ -16,6 +16,7 @@ import type { Result } from "../lib/contracts";
 import { requireMember } from "./lib/auth";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
+import { scheduleAutoTrend } from "./research/trendJobs";
 import { err, memberError, ok } from "./lib/result";
 import { cleanIdeas, ideasFor } from "./agents/ideas";
 
@@ -219,6 +220,7 @@ export const plantSprout = mutation({
     await ctx.db.delete(sproutId);
     // Same path as any new memory: the shortlist re-evaluates against it.
     await bumpKnowledgeRevision(ctx, sprout.roomId);
+    await scheduleAutoTrend(ctx, id);
     return ok<Out>((await ctx.db.get(id))!);
   },
 });

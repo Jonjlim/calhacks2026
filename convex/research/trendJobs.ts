@@ -1,6 +1,7 @@
 /** Explicit, persisted Google Trends discovery for one published interest. Dev 4; no model, payment or UI writes. */
 import { v } from "convex/values";
-import type { Result, TrendDiscoveryView, TrendListingLink, TrendSignal, TrendSuggestion } from "../../lib/contracts";
+import { signalLabel } from "../../lib/map/trendIdeas";
+import type { Result, TrendAgentContext, TrendDiscoveryView, TrendListingLink, TrendPassSummary, TrendSignal, TrendSuggestion } from "../../lib/contracts";
 import { discoverShoppingQueries, normalizeTrendDataset } from "../../lib/research/trends";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -23,7 +24,9 @@ async function currentSeed(ctx: QueryCtx, room: Doc<"rooms">, clueId: Id<"publis
 export async function isTrendJobCurrent(ctx: QueryCtx, job: Doc<"trendJobs">): Promise<boolean> {
   const room = await ctx.db.get(job.roomId);
   const member = await ctx.db.get(job.actingParticipantId);
-  if (!room || room.deletedAt !== undefined || !member || member.roomId !== job.roomId || room.knowledgeRevision !== job.knowledgeRevision) return false;
+  // Not fenced on knowledgeRevision: a new memory must not erase another memory's ideas.
+  // The seed check below still retires them when their own memory is withdrawn or changed.
+  if (!room || room.deletedAt !== undefined || !member || member.roomId !== job.roomId) return false;
   return await currentSeed(ctx, room, job.publishedClueId) === job.seedTerm;
 }
 
@@ -63,10 +66,42 @@ async function trendListingLinks(ctx: QueryCtx, roomId: Id<"rooms">, trendJobId:
     for (const listing of listings) {
       if (listing.status !== "active" || seen.has(listing._id)) continue;
       seen.add(listing._id);
-      links.push({ listingId: listing._id, query: query!, sourceUrl });
+      links.push({ listingId: listing._id, trendJobId, query: query!, sourceUrl });
     }
   }
   return links;
+}
+
+/** Automatic lookups per room, so sharing many memories cannot run up the Apify bill. */
+export const AUTO_TRENDS_PER_ROOM = 3;
+const AUTO_KEY_PREFIX = "auto:";
+
+async function requestTrend(ctx: MutationCtx, room: Doc<"rooms">, participantId: Id<"participants">,
+  publishedClueId: Id<"publishedClues">, key: string): Promise<Result<{ jobId: Id<"trendJobs"> }>> {
+  const roomId = room._id;
+  const seedTerm = await currentSeed(ctx, room, publishedClueId);
+  if (!seedTerm) return err("validation_failed", "Choose a confirmed published interest or wish with a short, name-free product phrase.");
+  const previous = await ctx.db.query("trendJobs").withIndex("by_room_key", q => q.eq("roomId", roomId).eq("idempotencyKey", key)).unique();
+  if (previous) return previous.seedTerm === seedTerm && previous.publishedClueId === publishedClueId
+    && previous.knowledgeRevision === room.knowledgeRevision
+    ? ok({ jobId: previous._id }) : err("validation_failed", "Use a new request key when published interests change.");
+  // An uncertain start can already be billable. Another key must not repeat it.
+  const open = await ctx.db.query("trendJobs").withIndex("by_room_seed", q => q.eq("roomId", roomId).eq("seedTerm", seedTerm))
+    .order("desc").filter(q => q.or(q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain"))).first();
+  if (open) {
+    if (await isTrendJobCurrent(ctx, open)) return ok({ jobId: open._id });
+    if (["running", "uncertain"].includes(open.status) && !open.providerRunId) return ok({ jobId: open._id });
+    await ctx.db.patch(open._id, { status: "stale", lastError: "Published interests changed; the earlier trend search cannot be applied." });
+  }
+  const cached = await ctx.db.query("trendJobs").withIndex("by_room_seed", q => q.eq("roomId", roomId).eq("seedTerm", seedTerm))
+    .order("desc").filter(q => q.eq(q.field("status"), "succeeded")).first();
+  if (cached && await usableTrendJob(ctx, roomId, cached._id)) return ok({ jobId: cached._id });
+  const jobId = await ctx.db.insert("trendJobs", {
+    roomId, knowledgeRevision: room.knowledgeRevision, actingParticipantId: participantId,
+    publishedClueId, seedTerm, status: "pending", idempotencyKey: key, createdAt: Date.now(),
+  });
+  await ctx.scheduler.runAfter(0, internal.research.trendJobs.runDiscovery, { jobId });
+  return ok({ jobId });
 }
 
 export const startDiscovery = mutation({
@@ -75,32 +110,83 @@ export const startDiscovery = mutation({
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room before requesting trends.");
     const key = args.idempotencyKey.trim();
-    if (!key || key.length > 200) return err("validation_failed", "Provide a trend request key of at most 200 characters.");
-    const seedTerm = await currentSeed(ctx, member.room, args.publishedClueId);
-    if (!seedTerm) return err("validation_failed", "Choose a confirmed published interest or wish with a short, name-free product phrase.");
-    const previous = await ctx.db.query("trendJobs").withIndex("by_room_key", q => q.eq("roomId", args.roomId).eq("idempotencyKey", key)).unique();
-    if (previous) return previous.seedTerm === seedTerm && previous.publishedClueId === args.publishedClueId
-      && previous.knowledgeRevision === member.room.knowledgeRevision
-      ? ok({ jobId: previous._id }) : err("validation_failed", "Use a new request key when published interests change.");
-    // An uncertain start can already be billable. Another key must not repeat it.
-    const open = await ctx.db.query("trendJobs").withIndex("by_room_seed", q => q.eq("roomId", args.roomId).eq("seedTerm", seedTerm))
-      .order("desc").filter(q => q.or(q.eq(q.field("status"), "pending"), q.eq(q.field("status"), "running"), q.eq(q.field("status"), "uncertain"))).first();
-    if (open) {
-      if (await isTrendJobCurrent(ctx, open)) return ok({ jobId: open._id });
-      if (["running", "uncertain"].includes(open.status) && !open.providerRunId) return ok({ jobId: open._id });
-      await ctx.db.patch(open._id, { status: "stale", lastError: "Published interests changed; the earlier trend search cannot be applied." });
-    }
-    const cached = await ctx.db.query("trendJobs").withIndex("by_room_seed", q => q.eq("roomId", args.roomId).eq("seedTerm", seedTerm))
-      .order("desc").filter(q => q.eq(q.field("status"), "succeeded")).first();
-    if (cached && await usableTrendJob(ctx, args.roomId, cached._id)) return ok({ jobId: cached._id });
-    const jobId = await ctx.db.insert("trendJobs", {
-      roomId: args.roomId, knowledgeRevision: member.room.knowledgeRevision, actingParticipantId: member.me._id,
-      publishedClueId: args.publishedClueId, seedTerm, status: "pending", idempotencyKey: key, createdAt: Date.now(),
-    });
-    await ctx.scheduler.runAfter(0, internal.research.trendJobs.runDiscovery, { jobId });
-    return ok({ jobId });
+    if (!key || key.length > 200 || key.startsWith(AUTO_KEY_PREFIX)) return err("validation_failed", "Provide a trend request key of at most 200 characters.");
+    return requestTrend(ctx, member.room, member.me._id, args.publishedClueId, key);
   },
 });
+
+/** Call right after a member publishes a memory. Runs after commit, so it sees the new knowledge revision. */
+export async function scheduleAutoTrend(ctx: MutationCtx, publishedClueId: Id<"publishedClues">) {
+  await ctx.scheduler.runAfter(0, internal.research.trendJobs.autoDiscover, { publishedClueId });
+}
+
+/**
+ * Looks up related searches for a newly shared interest or wish, without a click.
+ * Skips quietly when disabled, when the memory has no safe seed, or past the room limit.
+ */
+export const autoDiscover = internalMutation({
+  args: { publishedClueId: v.id("publishedClues") },
+  handler: async (ctx, { publishedClueId }): Promise<null> => {
+    if (process.env.TREND_AUTO_DISCOVERY === "off") return null;
+    const clue = await ctx.db.get(publishedClueId);
+    if (!clue || clue.status !== "active") return null;
+    const room = await ctx.db.get(clue.roomId);
+    const member = await ctx.db.get(clue.publisherId);
+    if (!room || room.deletedAt !== undefined || !member || member.roomId !== room._id) return null;
+    if (!await currentSeed(ctx, room, publishedClueId)) return null;
+    const jobs = await ctx.db.query("trendJobs").withIndex("by_room", q => q.eq("roomId", room._id)).take(200);
+    if (jobs.filter(j => j.idempotencyKey.startsWith(AUTO_KEY_PREFIX)).length >= AUTO_TRENDS_PER_ROOM) return null;
+    await requestTrend(ctx, room, member._id, publishedClueId, AUTO_KEY_PREFIX + publishedClueId);
+    return null;
+  },
+});
+
+/** Shared, attributed "doesn't fit" on one sourced suggestion. It fades the idea for everyone; it never deletes it or any memory. */
+export const setTrendPass = mutation({
+  args: { roomId: v.id("rooms"), trendJobId: v.id("trendJobs"), query: v.string(), passed: v.boolean() },
+  handler: async (ctx, args): Promise<Result<{ count: number; mine: boolean }>> => {
+    const member = await requireMember(ctx, args.roomId);
+    if (!member.ok) return err(member.code, "Join this room before passing on ideas.");
+    const job = await ctx.db.get(args.trendJobId);
+    if (!job || job.roomId !== args.roomId || !job.sample?.suggestions.some(s => s.query === args.query))
+      return err("validation_failed", "Pass on one of this trend search's sourced suggestions.");
+    const existing = await ctx.db.query("trendPasses")
+      .withIndex("by_job_query_participant", q => q.eq("trendJobId", args.trendJobId).eq("query", args.query).eq("participantId", member.me._id)).unique();
+    if (args.passed && !existing) await ctx.db.insert("trendPasses", {
+      roomId: args.roomId, trendJobId: args.trendJobId, query: args.query, participantId: member.me._id, createdAt: Date.now(),
+    });
+    if (!args.passed && existing) await ctx.db.delete(existing._id);
+    const count = (await ctx.db.query("trendPasses").withIndex("by_job_query_participant", q => q.eq("trendJobId", args.trendJobId).eq("query", args.query)).take(100)).length;
+    return ok({ count, mine: args.passed });
+  },
+});
+
+/** Newest usable sample per memory, newest first. */
+async function usableSamples(ctx: QueryCtx, roomId: Id<"rooms">) {
+  const succeeded = await ctx.db.query("trendJobs").withIndex("by_room", q => q.eq("roomId", roomId)).order("desc")
+    .filter(q => q.eq(q.field("status"), "succeeded")).take(30);
+  const seen = new Set<string>();
+  const out: Doc<"trendJobs">[] = [];
+  for (const job of succeeded) {
+    if (seen.has(job.publishedClueId) || out.length >= 6) continue;
+    if (!await usableTrendJob(ctx, roomId, job._id)) continue;
+    seen.add(job.publishedClueId);
+    out.push(job);
+  }
+  return out;
+}
+
+/** Buyer-agent context: current sourced ideas per memory, minus any someone passed on. */
+export async function trendAgentContext(ctx: QueryCtx, roomId: Id<"rooms">): Promise<TrendAgentContext | undefined> {
+  const ideas: TrendAgentContext["ideas"] = [];
+  for (const job of await usableSamples(ctx, roomId)) {
+    const passed = new Set((await ctx.db.query("trendPasses").withIndex("by_job_query_participant", q => q.eq("trendJobId", job._id)).take(200)).map(p => p.query));
+    for (const s of job.sample!.suggestions.slice(0, 5)) if (!passed.has(s.query)) ideas.push({
+      publishedClueId: job.publishedClueId, query: s.query, signal: signalLabel(s.signals), retrievedAt: job.sample!.context.retrievedAt,
+    });
+  }
+  return ideas.length ? { mode: "live_sample", label: "Related Google Trends searches (US, past 3 months); search interest, not sales or preferences", ideas } : undefined;
+}
 
 export const getDiscovery = query({
   args: { roomId: v.id("rooms") },
@@ -108,18 +194,28 @@ export const getDiscovery = query({
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return err(member.code, "Join this room to view trends.");
     const latest = await ctx.db.query("trendJobs").withIndex("by_room", q => q.eq("roomId", roomId)).order("desc").first();
-    const candidate = await ctx.db.query("trendJobs").withIndex("by_room", q => q.eq("roomId", roomId)).order("desc")
-      .filter(q => q.eq(q.field("status"), "succeeded")).first();
-    const usable = candidate ? await usableTrendJob(ctx, roomId, candidate._id) : null;
+    const jobs = await usableSamples(ctx, roomId);
     const latestCurrent = latest ? await isTrendJobCurrent(ctx, latest) : false;
-    const listingLinks = usable?.sample ? await trendListingLinks(ctx, roomId, usable._id, usable.sample.suggestions) : [];
-    return ok({ listingLinks, latestJob: latest ? { id: latest._id, status: latestCurrent ? latest.status : "stale", createdAt: latest.createdAt,
+    const samples = jobs.map(job => ({ ...job.sample!, jobId: job._id }));
+    const listingLinks = (await Promise.all(jobs.map(job => trendListingLinks(ctx, roomId, job._id, job.sample!.suggestions)))).flat();
+    const participants = await ctx.db.query("participants").withIndex("by_room", q => q.eq("roomId", roomId)).collect();
+    const nameOf = new Map(participants.map(p => [p._id as string, p.displayName]));
+    const passes: TrendPassSummary[] = [];
+    for (const job of jobs) {
+      const rows = await ctx.db.query("trendPasses").withIndex("by_job_query_participant", q => q.eq("trendJobId", job._id)).take(200);
+      const byQuery = new Map<string, typeof rows>();
+      for (const row of rows) byQuery.set(row.query, [...(byQuery.get(row.query) ?? []), row]);
+      for (const [query, list] of byQuery) passes.push({
+        trendJobId: job._id, query, count: list.length, mine: list.some(r => r.participantId === member.me._id),
+        passerNames: list.map(r => nameOf.get(r.participantId)).filter((n): n is string => !!n),
+      });
+    }
+    return ok({ listingLinks, samples, passes, latestJob: latest ? { id: latest._id, status: latestCurrent ? latest.status : "stale", createdAt: latest.createdAt,
       ...(latest.lastError ? { lastError: latest.lastError } : {}),
       canResume: latest.status === "uncertain" && !!latest.providerRunId && latestCurrent,
-    } : null, sample: usable?.sample ? { ...usable.sample, jobId: usable._id } : null });
+    } : null, sample: samples[0] ?? null });
   },
 });
-
 export const resumeDiscovery = mutation({
   args: { roomId: v.id("rooms"), jobId: v.id("trendJobs") },
   handler: async (ctx, { roomId, jobId }): Promise<Result<null>> => {

@@ -19,6 +19,7 @@ import {
 import { RECIPIENT_GUIDANCE } from "./recipientPolicy";
 import { readCatalog } from "../research/catalog";
 import { recordedFashionContext } from "../../lib/research/fashionContext";
+import { trendAgentContext } from "../research/trendJobs";
 import {
   renderRecommendation,
   renderReply,
@@ -84,8 +85,10 @@ export async function readBuyerSnapshot(
     enabled: process.env.DEMO_SEED_ENABLED === "true",
     clues: catalog.clues, now: Date.now(),
   });
+  const trendDiscovery = await trendAgentContext(ctx, room._id);
   return {
     ...(fashionDiscovery ? { fashionDiscovery } : {}),
+    ...(trendDiscovery ? { trendDiscovery } : {}),
     roomId: room._id,
     jobId: job._id,
     recipientDisplayName: room.recipientDisplayName,
@@ -191,6 +194,7 @@ export function buyerInputVersion(snapshot: BuyerSnapshot): string {
     recipientEnabled: snapshot.recipientAgentEnabled,
     research: snapshot.research,
     fashionDiscovery: snapshot.fashionDiscovery,
+    trendDiscovery: snapshot.trendDiscovery,
     excluded: snapshot.excluded,
   });
 }

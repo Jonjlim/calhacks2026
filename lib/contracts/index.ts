@@ -106,12 +106,30 @@ export interface TrendDiscoverySample {
 export interface TrendDiscoveryView {
   latestJob: FashionDiscoveryJobView | null;
   sample: (TrendDiscoverySample & { jobId: string }) | null;
+  /** Newest usable sample per memory (at most 6), newest first; `sample` is the first. */
+  samples?: (TrendDiscoverySample & { jobId: string })[];
+  /** Shared "doesn't fit" counts. A pass fades an idea for everyone; it never hides or deletes it. */
+  passes?: TrendPassSummary[];
   /** Active listings found by research that shopped one of the current sample's suggestions. */
   listingLinks?: TrendListingLink[];
 }
 /** Search context only: the listing was found while researching this trend query, not proven trending itself. */
+/** Sourced trend ideas the buyer agent may mention or shop. Passed ideas are left out. */
+export interface TrendAgentContext {
+  mode: "live_sample";
+  label: string;
+  ideas: { publishedClueId: string; query: string; signal: string; retrievedAt: number }[];
+}
+export interface TrendPassSummary {
+  trendJobId: string;
+  query: string;
+  count: number;
+  mine: boolean;
+  passerNames: string[];
+}
 export interface TrendListingLink {
   listingId: string;
+  trendJobId: string;
   query: string;
   sourceUrl: string;
 }
