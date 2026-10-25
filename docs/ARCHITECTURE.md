@@ -6,9 +6,11 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
-### D24 — Google Shopping actor switched to automation-lab (unverified, 2026-10-25)
+### D24 — Google Shopping actor switched to automation-lab (live no-go, 2026-10-25)
 
-The pinned `johnvc` Google Shopping actor stopped returning products mid-session: on a free Apify plan it caps each account at a $1.00 monthly allowance and answers with a notice row instead of products. Research now calls `automation-lab/google-shopping-scraper` on the same Apify account and token (`queries`, `country: "us"`, `language: "en"`, `maxResults: 20`, `maxPrice` from the room budget; charge cap $0.40 per run, about $0.04 per run plus $0.011 per product). It returns one row per product with the store's own `productUrl`, a numeric and a shown price, `currency`, `merchant` and `imageUrl`. The listing rules are unchanged: a public source link, an exact USD price that agrees with the shown one (ranges and "from" stay unknown), a retrieval time, no invented shipping or stock. The old SerpApi-style page parser stays for recorded fixtures. A source that answers with a notice now says so in the job error and the decision log. **Unverified** until the first live run succeeds; no build is pinned yet. Same provider, same service boundary; Google Trends discovery is a separate actor and is unaffected.
+The previous `johnvc` actor returned a monthly-allowance notice. Research was switched to `automation-lab/google-shopping-scraper`, using the same Apify token with `queries`, US/English localization, `maxResults: 20`, optional budget `maxPrice`, and a $0.40 run charge cap. The cap does not guarantee a result count. No successful build is pinned.
+
+**Live verification failed:** one synthetic `hiking backpack` search (run `ESUSgJwQdzf1qxyi2`, dataset `DfO8vaVlmz9XMtT1f`) ended `SUCCEEDED` at the provider but returned 16 rows with empty `productUrl` and `imageUrl` on every row. Zero met the listing contract. This actor is **not ready for live gift discovery** in the tested configuration. Do not turn titles into invented merchant links, approve a build based only on provider status, or automatically repeat paid runs. The recorded response is `convex/research/fixtures/automation-lab-missing-links.json`; the job now explains the missing-link failure. Previously verified fixtures remain useful for an explicitly labelled offline rehearsal, not a fresh live result. The old page parser remains for historical observations. The direct Python council fallback still references the historical actor; configured room research uses the Convex bridge. Google Trends uses a separate actor.
 
 ### D23 — Directions between memories and gifts (trial, 2026-10-24)
 

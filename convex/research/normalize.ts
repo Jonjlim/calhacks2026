@@ -1,5 +1,5 @@
 /**
- * Verified johnvc Google Shopping payload → shared ProductListing fields.
+ * Google Shopping payloads → shared ProductListing fields (recorded and documented shapes).
  * Owner: Dev 4 (RC-001, RC-003). No network calls or database writes.
  */
 import { z } from "zod";
@@ -132,6 +132,14 @@ export function providerNotice(raw: unknown): string | null {
         return value.replace(/\s+/g, " ").trim().slice(0, 160);
       }
     }
+  }
+  // A successful Actor status is not proof of usable product data. The live
+  // automation-lab response contained titles/prices but empty links on every row.
+  const products = raw.filter((item): item is Record<string, unknown> =>
+    !!item && typeof item === "object" && "productUrl" in item && "title" in item &&
+    typeof item.title === "string" && item.title.trim().length > 0);
+  if (products.length && products.every(item => !publicHttpUrlSchema.safeParse(item.productUrl).success)) {
+    return `Returned ${products.length} products without usable product links. Check the shopping actor before retrying.`;
   }
   return null;
 }

@@ -212,10 +212,10 @@ export const completeJob = internalMutation({
       // A source that answers with a notice (a usage limit, a block) says so, instead of "nothing found".
       const notice = providerNotice(args.raw);
       await ctx.db.patch(job._id, { status: "failed", lastError: notice
-        ? `The shopping source sent a notice instead of products: “${notice}”`
+        ? `The shopping source returned no usable listings: “${notice}”`
         : "No usable product listings were returned." });
       await logSearch(ctx, job, "rejected", notice
-        ? `Searched Google Shopping for “${query}”, but the source answered with a notice instead of products: “${notice}”`
+        ? `Searched Google Shopping for “${query}”, but the source returned no usable listings: “${notice}”`
         : `Searched Google Shopping for “${query}”, but no listing had a source, a US price and a retrieval time, so none were kept.`);
       await enqueueResearchContinuation(ctx, job._id);
       return null;

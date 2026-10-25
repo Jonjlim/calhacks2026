@@ -1,6 +1,6 @@
 # Dev 4 source spike (RC-002)
 
-Status: **conditional go for discovery** — two authenticated live searches succeeded. Direct merchant URLs and final checkout prices remain unverified.
+Current status: **live discovery blocked**. The replacement automation-lab actor returned 16 products but no usable links in the 2026-10-25 check; see D24 in [ARCHITECTURE.md](ARCHITECTURE.md). The results below describe the historical johnvc spike, whose account allowance is now exhausted.
 
 Candidate: [johnvc Google Shopping API](https://apify.com/johnvc/google-shopping-api-google-shopping-products-prices-deals).
 Chosen for documented keyword search, US targeting, one-page limit, and nested shopping_results with product_link/extracted_price/source. This is a community Actor; documentation is not evidence of live reliability.

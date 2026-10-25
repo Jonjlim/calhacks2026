@@ -6,12 +6,12 @@ import { z } from "zod";
 import type { SearchBrief } from "../../lib/contracts";
 
 /**
- * automation-lab's Google Shopping scraper (D24): one row per product with the store's own link.
+ * automation-lab's Google Shopping scraper (D24): one row per product.
  * Replaced johnvc's actor, whose free-plan monthly allowance ($1) ran out mid-session.
- * Unverified until a live run succeeds; no build is pinned yet, so the actor's default build runs.
+ * Live check failed: all 16 rows had empty product URLs. No build is approved/pinned yet.
  */
 export const VERIFIED_ACTOR = "automation-lab~google-shopping-scraper";
-/** Products asked for per search; the run's charge cap below covers this many. */
+/** Maximum requested count; the charge cap can end a run before this count. */
 export const SHOPPING_MAX_RESULTS = 20;
 export const PROVIDER_DEADLINE_MS = 180_000;
 export const PROVIDER_MAX_RESPONSE_BYTES = 750_000;
@@ -75,7 +75,7 @@ export function createProvider(token: string, fetcher: typeof fetch = fetch) {
       // One complete direction per run; do not combine unrelated hobbies/styles.
       const q = (brief.queryTerms.map(term => term.trim()).find(Boolean) ?? "").slice(0, 200);
       if (!q) return Promise.resolve({ kind: "failed", message: "Publish an interest or wish before searching." });
-      // About $0.04 per run plus about $0.011 per product: 20 products stay under the $0.40 cap.
+      // Bound each paid run; this cap does not guarantee a result count or usable links.
       return runRequest("acts/" + VERIFIED_ACTOR + "/runs?timeout=120&maxTotalChargeUsd=0.40",
       "POST", {
         queries: [q], country: "us", language: "en", maxResults: SHOPPING_MAX_RESULTS,

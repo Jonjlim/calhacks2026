@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import recorded from "./fixtures/automation-lab-missing-links.json";
 import { normalizeDataset, normalizeShoppingRow, providerNotice } from "./normalize";
 
 // Shaped like automation-lab/google-shopping-scraper's documented output (D24). A documented example, not a recorded live run.
@@ -50,4 +51,12 @@ describe("a source that answers with a notice instead of products", () => {
   it("stays quiet when products came back", () => {
     expect(providerNotice([row()])).toBeNull();
   });
+});
+
+// Actual single paid run, 2026-10-25. SUCCEEDED at Apify but unusable for gifts.
+it("rejects the recorded missing-link response and explains the source failure", () => {
+  expect(recorded.raw).toHaveLength(16);
+  expect(recorded.raw.every(item => item.productUrl === "")).toBe(true);
+  expect(normalizeDataset(recorded.raw, recorded.retrievedAt)).toEqual([]);
+  expect(providerNotice(recorded.raw)).toContain("16 products without usable product links");
 });
