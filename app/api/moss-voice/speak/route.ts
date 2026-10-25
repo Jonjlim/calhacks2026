@@ -8,12 +8,14 @@
  * Only room members may use it (checked in Convex with their own token), so the
  * paid voice can't be spent by strangers. Text is the guide's own line (at most
  * 400 characters). Repeated lines are served from a small in-memory cache. The
- * API key never reaches the browser and provider errors are never echoed.
+ * API key never reaches the browser (the SDK reads ELEVENLABS_API_KEY from the
+ * server environment) and provider errors are never echoed.
  */
 import { ConvexHttpClient } from "convex/browser";
 import { z } from "zod";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
+import { elevenLabs } from "@/lib/elevenlabs";
 import { cleanSpeechText, DEFAULT_ELEVENLABS_MODEL, DEFAULT_ELEVENLABS_VOICE, SPEECH_MAX_CHARS, speechRequest } from "@/lib/room/mossSpeech";
 
 const bodySchema = z.strictObject({ roomId: z.string().min(1).max(64), text: z.string().min(1).max(SPEECH_MAX_CHARS) });
@@ -24,10 +26,10 @@ const audioCache = new Map<string, ArrayBuffer>();
 const members = new Map<string, number>();
 
 function config() {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const client = elevenLabs();
   const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-  return apiKey && convexUrl
-    ? { apiKey, convexUrl, voiceId: process.env.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE, modelId: process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVENLABS_MODEL }
+  return client && convexUrl
+    ? { client, convexUrl, voiceId: process.env.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE, modelId: process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVENLABS_MODEL }
     : null;
 }
 
@@ -67,11 +69,10 @@ export async function POST(request: Request) {
   const key = `${cfg.voiceId}:${cfg.modelId}:${text}`;
   let audio = audioCache.get(key);
   if (!audio) {
-    const { url, init } = speechRequest(text, cfg);
+    const { voiceId, request } = speechRequest(text, cfg);
     try {
-      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
-      if (!res.ok) return fail(502, "provider_timeout", "Moss's voice didn't answer.");
-      audio = await res.arrayBuffer();
+      const stream = await cfg.client.textToSpeech.convert(voiceId, request, { timeoutInSeconds: 10, maxRetries: 1 });
+      audio = await new Response(stream).arrayBuffer();
     } catch {
       return fail(502, "provider_timeout", "Moss's voice didn't answer.");
     }

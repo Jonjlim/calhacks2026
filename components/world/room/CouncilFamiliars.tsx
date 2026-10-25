@@ -269,6 +269,9 @@ interface CompanionProps {
   onTrail: (actor: CouncilActor, group: THREE.Group) => void;
 }
 
+/** How long a clicked robot keeps its name tag. */
+const NAME_AFTER_CLICK_MS = 4000;
+
 function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet, focused, inWorld, goal, badge, note, onPick, onTrail }: CompanionProps) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const size = useThree((st) => st.size);
@@ -291,6 +294,13 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
     at: [home[0], home[1]] as P2, yaw: Math.atan2(-home[0], -home[1]), path: [home] as P2[], s: 0, speed: WALK_SPEED, goalKey: "home", arrived: true,
   });
   const [offscreen, setOffscreen] = useState(false);
+  // Its name shows on hover, and for a few seconds after a click; otherwise the island stays uncluttered.
+  const [named, setNamed] = useState(false);
+  useEffect(() => {
+    if (!named) return;
+    const t = setTimeout(() => setNamed(false), NAME_AFTER_CLICK_MS);
+    return () => clearTimeout(t);
+  }, [named]);
   const [paused, setPaused] = useState(false);
   const chevron = useRef<HTMLButtonElement>(null);
   const [walking, setWalking] = useState(false);
@@ -466,7 +476,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       <Suspense fallback={null}>
         <StorybookAvatar avatar={COUNCIL_AVATAR[actor]} clip={clip} robot={{ tint: role, working }} castShadow={false} timeScale={animate && !paused ? 1 : 0} onClipFinished={(c) => { if (c === "Celebrate") setCelebrating(false); if (c === "Wave") setGesture(undefined); }} />
       </Suspense>
-      <mesh position={[0, 1.05, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPick?.(actor); }}>
+      <mesh position={[0, 1.05, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setNamed(true); onPick?.(actor); }}>
         <sphereGeometry args={[1.2, 12, 10]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
@@ -505,8 +515,8 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
           </button>
         </Html>
       )}
-      {/* Its name, always, on a small tag under it. */}
-      {!quiet && (
+      {/* Its name on a small tag under it, only while hovered or just after it was clicked. */}
+      {!quiet && (hover || named || focused) && (
         <Html position={[0, 0.1, 0]} center zIndexRange={[36, 30]} style={{ pointerEvents: "none" }}>
           <span data-map-token className={s.familiarName} style={{ ["--tint" as string]: tint }}>{COUNCIL_LABEL[actor]}</span>
         </Html>

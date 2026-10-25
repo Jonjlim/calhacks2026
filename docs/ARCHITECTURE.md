@@ -606,9 +606,11 @@ minute limits and cost.
 ### D30 — ElevenLabs voice for Moss's narration (2026-10-25; fallback verified, real voice **unverified**)
 
 New external API: ElevenLabs text-to-speech, called from the Next.js route
-`/api/moss-voice/speak` with `fetch` (no SDK). Default voice "Sarah"
-(`EXAVITQu4vr4xnSDxMaL`, young female) on `eleven_v4_turbo`; both overridable by
-env. Only the guide's own lines are sent: recipient name, a friend's display name
+`/api/moss-voice/speak` through `@elevenlabs/elevenlabs-js@2.71.0`
+(`lib/elevenlabs.ts`, server only; the SDK reads `ELEVENLABS_API_KEY`, set by the
+ElevenLabs CLI onboarding into `.env.local`). Default voice "Sarah"
+(`EXAVITQu4vr4xnSDxMaL`, young female) on `eleven_v4` with stability 0.42 and
+similarity 0.8 (the only settings v4 accepts); voice and model overridable by env. Only the guide's own lines are sent: recipient name, a friend's display name
 and quoted published memory in a nudge line, nothing private. Members only;
 an in-memory cache of 200 lines avoids paying twice for the same line. The key
 stays on the server. Any failure falls back to the browser voice for that line.

@@ -90,7 +90,7 @@ export function useMossVoice({ roomId, active, contextText }: { roomId: string; 
     } catch (e) {
       stop();
       setState("error");
-      setError(e instanceof Error && /microphone|permission|NotAllowed/i.test(e.message) ? "Moss needs your microphone. Allow it and try again." : e instanceof Error ? e.message : "Moss couldn't start a call.");
+      setError(e instanceof Error && /microphone|permission|NotAllowed/i.test(e.message) ? "Ssom needs your microphone. Allow it and try again." : e instanceof Error ? e.message : "Moss couldn't start a call.");
     }
   }, [authToken, roomId, stop]);
 

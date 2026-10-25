@@ -23,6 +23,7 @@
   "dependencies": {
     "@auth/core": "0.41.3",
     "@convex-dev/auth": "0.0.96",
+    "@elevenlabs/elevenlabs-js": "2.71.0",
     "@moss-js/moss": "1.21.0",
     "@moss-tools/voice-server": "1.0.0-beta.3",
     "@react-three/drei": "10.7.9",

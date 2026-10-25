@@ -427,7 +427,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} data-sfx="reveal" onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
-                {stage === "map" && !preview && actions && <button role="menuitem" className={menuItem} onClick={guide.restart}>Explore with Moss</button>}
+                {stage === "map" && !preview && actions && <button role="menuitem" className={menuItem} onClick={guide.restart}>Explore with Ssom</button>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
                 {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => setFinaleOpen(true)}>Plan contributions</button>}
                 {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Backstage: notes, agents and sharing</button>}

@@ -75,7 +75,7 @@ export const COUNCIL_TINT: Record<CouncilActor, string> = {
 
 export const COUNCIL_LABEL: Record<CouncilActor, string> = {
   archivist: "Archivist",
-  muse: "Muse",
+  muse: "Esum",
   scout: "Scout",
   keeper: "Keeper",
   courier: "Courier",

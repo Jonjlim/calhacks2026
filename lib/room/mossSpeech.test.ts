@@ -9,19 +9,17 @@ describe("Moss's ElevenLabs voice", () => {
     expect(cleanSpeechText("x".repeat(SPEECH_MAX_CHARS + 1))).toBeNull();
   });
 
-  it("asks ElevenLabs for Sarah on the expressive turbo model by default, key in a header only", () => {
-    const { url, init } = speechRequest("Hi, I'm Moss.", { apiKey: "secret-key" });
-    expect(url).toBe(`https://api.elevenlabs.io/v1/text-to-speech/${DEFAULT_ELEVENLABS_VOICE}?output_format=mp3_44100_64`);
-    expect(url).not.toContain("secret-key");
-    expect((init.headers as Record<string, string>)["xi-api-key"]).toBe("secret-key");
-    const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({ text: "Hi, I'm Moss.", model_id: DEFAULT_ELEVENLABS_MODEL });
-    expect(body.voice_settings.stability).toBeLessThan(0.5);
+  it("asks for Sarah on eleven_v4 by default, with only the settings v4 accepts", () => {
+    const { voiceId, request } = speechRequest("Hi, I'm Moss.", {});
+    expect(voiceId).toBe(DEFAULT_ELEVENLABS_VOICE);
+    expect(request).toMatchObject({ text: "Hi, I'm Moss.", modelId: DEFAULT_ELEVENLABS_MODEL, outputFormat: "mp3_44100_64" });
+    expect(Object.keys(request.voiceSettings).sort()).toEqual(["similarityBoost", "stability"]);
+    expect(request.voiceSettings.stability).toBeLessThan(0.5);
   });
 
   it("uses a configured voice and model", () => {
-    const { url, init } = speechRequest("Hi", { apiKey: "k", voiceId: "voice/x", modelId: "eleven_flash_v2_5" });
-    expect(url).toContain("/text-to-speech/voice%2Fx?");
-    expect(JSON.parse(init.body as string).model_id).toBe("eleven_flash_v2_5");
+    const { voiceId, request } = speechRequest("Hi", { voiceId: "voice-x", modelId: "eleven_flash_v2_5" });
+    expect(voiceId).toBe("voice-x");
+    expect(request.modelId).toBe("eleven_flash_v2_5");
   });
 });

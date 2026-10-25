@@ -235,8 +235,8 @@ export function useRoomGuide({ data, map, enabled, paused, nudge, warm, sound = 
   let controls = <div className={s.choices}>
     <button onClick={() => begin("text")}><span>01</span><b>Type a thought<small>A hobby, a wish, a little habit</small></b><i>↗</i></button>
     <button onClick={() => begin("photo")}><span>02</span><b>Drop a photo<small>Find the clues in a real moment</small></b><i>↗</i></button>
-    <button onClick={() => begin("text", currentQuestion.prompt, true)}><span>03</span><b>I don’t know<small>Moss, give me a little nudge</small></b><i>↗</i></button>
-    {call.available && <button onClick={talk} className={s.talkChoice}><span>04</span><b>Talk to Moss<small>Say it out loud, she’ll help you find the words</small></b><i>↗</i></button>}
+    <button onClick={() => begin("text", currentQuestion.prompt, true)}><span>03</span><b>I don’t know<small>Ssom, give me a little nudge</small></b><i>↗</i></button>
+    {call.available && <button onClick={talk} className={s.talkChoice}><span>04</span><b>Talk to Ssom<small>Say it out loud, she’ll help you find the words</small></b><i>↗</i></button>}
   </div>;
   if (step === "arrival") {
     title = `Welcome to ${room.recipientDisplayName}’s world.`;
@@ -249,12 +249,12 @@ export function useRoomGuide({ data, map, enabled, paused, nudge, warm, sound = 
       : recalled ? nudgeLine(recalled)
       : "Nothing coming to mind? Let’s take a step back. Think of a real moment together.";
     controls = <><div className={s.questionTabs}>{MOSS_QUESTIONS.map((q, i) => <button key={q.label} aria-pressed={question === i} onClick={() => { setQuestion(i); map.beginMemory("text", q.prompt); }}>{q.label}</button>)}</div>
-      {call.available && !call.live && <button onClick={talk}>Talk it through with Moss</button>}
+      {call.available && !call.live && <button onClick={talk}>Talk it through with Ssom</button>}
       <button onClick={() => { setStep("compose"); approachSeed(); }}>Bring me back to my island ↗</button></>;
   } else if (step === "compose") {
     title = helped ? currentQuestion.title : "What comes to mind?";
     text = map.rings?.composer?.photo ? "A photo can hold a little story. You’ll review its clues before publishing them." : mossWritingCue(map.draftLength, helped);
-    controls = composing ? <><button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 }); }}>Moss, I’m a little stuck</button>{call.available && !call.live && <button onClick={talk}>Talk to Moss</button>}</> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
+    controls = composing ? <><button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 }); }}>Ssom, I’m a little stuck</button>{call.available && !call.live && <button onClick={talk}>Talk to Ssom</button>}</> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
   } else if (step === "saved") {
     title = "A little memory. A new possibility.";
     text = "There it is. Your memory has a place in this world.";
@@ -287,11 +287,11 @@ export function useRoomGuide({ data, map, enabled, paused, nudge, warm, sound = 
     panel: <AnimatePresence>{visible && <motion.div key="room-guide" className={`${s.shell} ${cinematic ? s.cinematic : ""} ${step === "connect" ? s.held : ""}`}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduced ? 0 : 0.35 }}>
       <div className={s.vignette} aria-hidden />
-      {seedStep && <div className={s.rail}><span>WITH MOSS <i /> YOUR FIRST MEMORY</span><button onClick={finish}>Explore on my own ↗</button></div>}
-      {step === "connect" && <div className={s.heldPill} role="status"><i />Moss paused the room for a moment</div>}
-      {step !== "arrival" && step !== "live" && step !== "saved" && <motion.section aria-label="Moss room guide" className={`${s.guide} ${s.stageCard}`}
+      {seedStep && <div className={s.rail}><span>WITH SSOM <i /> YOUR FIRST MEMORY</span><button onClick={finish}>Explore on my own ↗</button></div>}
+      {step === "connect" && <div className={s.heldPill} role="status"><i />Ssom paused the room for a moment</div>}
+      {step !== "arrival" && step !== "live" && step !== "saved" && <motion.section aria-label="Ssom room guide" className={`${s.guide} ${s.stageCard}`}
         initial={{ opacity: 0, x: reduced ? 0 : 18 }} animate={{ opacity: 1, x: 0 }}>
-        <span className={s.eyebrow}>{step === "help" ? "A LITTLE NUDGE FROM MOSS" : step === "compose" ? `A MEMORY OF ${room.recipientDisplayName}` : step === "connect" ? "HOW CONNECTIONS WORK" : "YOUR FIRST MEMORY"}</span>
+        <span className={s.eyebrow}>{step === "help" ? "A LITTLE NUDGE FROM SSOM" : step === "compose" ? `A MEMORY OF ${room.recipientDisplayName}` : step === "connect" ? "HOW CONNECTIONS WORK" : "YOUR FIRST MEMORY"}</span>
         <h2>{title}</h2>
         {step === "welcome" && <p>There’s no right way to remember someone.</p>}
         {step === "connect" && <div className={s.flow} aria-hidden>
@@ -306,14 +306,14 @@ export function useRoomGuide({ data, map, enabled, paused, nudge, warm, sound = 
         {step === "connect" && <div className={s.hold}><i style={{ animationDuration: `${reduced ? CONNECT_HOLD_MS * 1.5 : CONNECT_HOLD_MS}ms` }} /><span>Continues on its own</span></div>}
         {map.error && <p role="alert" className={s.error}>{map.error}</p>}
       </motion.section>}
-      <div className={s.narration} aria-live="polite"><img src={portraitUrl("calm")} alt="Moss" /><div><span>MOSS</span><p>{text}</p></div></div>
+      <div className={s.narration} aria-live="polite"><img src={portraitUrl("calm")} alt="Ssom" /><div><span>SSOM</span><p>{text}</p></div></div>
     </motion.div>}</AnimatePresence>,
   };
 }
 
 /** The memory Moss found for this question, quoted as shared, with how it was found. */
 function MossRecall({ recall }: { recall: { state: "loading" | "done"; view: MossNudgeView | null } }) {
-  if (recall.state === "loading") return <div className={s.recall} role="status"><i className={s.recallDots} aria-hidden><em /><em /><em /></i><span>Moss is looking through what friends shared…</span></div>;
+  if (recall.state === "loading") return <div className={s.recall} role="status"><i className={s.recallDots} aria-hidden><em /><em /><em /></i><span>Ssom is looking through what friends shared…</span></div>;
   if (!recall.view) return <div className={s.recall} role="status"><span>No one else has shared a memory yet. Start with a real moment you remember.</span></div>;
   const v = recall.view;
   return (
@@ -326,22 +326,22 @@ function MossRecall({ recall }: { recall: { state: "loading" | "done"; view: Mos
 
 /** The live call: who's talking, the last few lines, and the person's own words to keep. */
 function MossCall({ call, onUse, recipient }: { call: ReturnType<typeof useMossVoice>; onUse(): void; recipient: string }) {
-  const status = call.state === "connecting" ? "Calling Moss…"
-    : call.state === "live" ? (call.speaking === "moss" ? "Moss is speaking" : call.speaking === "me" ? "Moss is listening" : "Say something about " + recipient)
-    : call.state === "error" ? call.error ?? "Moss couldn’t start a call."
+  const status = call.state === "connecting" ? "Calling Ssom…"
+    : call.state === "live" ? (call.speaking === "moss" ? "Ssom is speaking" : call.speaking === "me" ? "Ssom is listening" : "Say something about " + recipient)
+    : call.state === "error" ? call.error ?? "Ssom couldn’t start a call."
     : "Call ended";
   const recent: MossLine[] = call.lines.slice(-3);
   return (
-    <section className={s.call} aria-label="Call with Moss" data-state={call.state} data-speaking={call.speaking ?? "none"}>
+    <section className={s.call} aria-label="Call with Ssom" data-state={call.state} data-speaking={call.speaking ?? "none"}>
       <header>
         <i className={s.callOrb} aria-hidden><em /><em /><em /></i>
         <span role="status">{status}</span>
         {call.live && <button onClick={call.stop} className={s.hangUp}>Hang up</button>}
         {!call.live && <button onClick={() => void call.start()}>{call.state === "error" ? "Try again" : "Call again"}</button>}
       </header>
-      {recent.length > 0 && <ol className={s.lines}>{recent.map((l) => <li key={l.id} data-who={l.who}><b>{l.who === "me" ? "You" : "Moss"}</b> {l.text}</li>)}</ol>}
+      {recent.length > 0 && <ol className={s.lines}>{recent.map((l) => <li key={l.id} data-who={l.who}><b>{l.who === "me" ? "You" : "Ssom"}</b> {l.text}</li>)}</ol>}
       {call.myWords && <button className={s.useWords} onClick={onUse}>Use what I said</button>}
-      <small className={s.callFine}>Moss hears you only during this call. Nothing is shared until you press share.</small>
+      <small className={s.callFine}>Ssom hears you only during this call. Nothing is shared until you press share.</small>
     </section>
   );
 }
