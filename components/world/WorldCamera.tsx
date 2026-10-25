@@ -6,8 +6,8 @@ import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
 import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { convergence } from "@/components/convergence/convergenceClock";
-import { cameraPush as pushProgress, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
-import { CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
+import { boomAmount, cameraPush as pushProgress, cameraShake, CONVERGENCE_TIMES, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
+import { boomPose, CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
 import { giftTag } from "./giftTag/giftTagStore";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
 import { lobbyPose, topPose } from "./unwrap/invitationLayout";
@@ -155,7 +155,19 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         }
         if (convergence.instant && !convergence.leaving) applyPose(end, end, 1);
         else if (convergence.leaving) applyPose(end, scenePose, smoother(tspan(convergence.exit, 0, EXIT_TIME)));
-        else applyPose(convergence.startPose ?? scenePose, end, pushProgress(convergence.t));
+        else {
+          const t = convergence.t;
+          const boom = boomAmount(t);
+          if (t < CONVERGENCE_TIMES.boom[0]) applyPose(convergence.startPose ?? scenePose, end, pushProgress(t));
+          else applyPose(end, boomPose(w, size.height), boom);
+          // The charge and the explosion shake the whole screen.
+          if (!convergence.instant && !reducedMotion && !convergence.leaving) {
+            const sh = cameraShake(t);
+            camera.translateX(sh.x);
+            camera.translateY(sh.y);
+            camera.rotateZ(sh.roll);
+          }
+        }
         return;
       }
       if (roomStage.glide && !reducedMotion) {

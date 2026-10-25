@@ -59,6 +59,19 @@ export function convergencePose(width: number, height: number): CameraPose {
   return { ...pose, shiftX: wide ? -(1 - WORLD_SHARE) / 2 : 0, shiftY: wide ? 0 : -0.14 };
 }
 
+/**
+ * The explosion's framing: the present dead centre in the screen and the
+ * camera closer, so the burst fills the view. The reveal then eases back to
+ * `convergencePose`.
+ */
+export function boomPose(width: number, height: number): CameraPose {
+  const pose = convergencePose(width, height);
+  const k = 0.8;
+  const [px, py, pz] = pose.position;
+  const [tx, ty, tz] = pose.target;
+  return { ...pose, position: [tx + (px - tx) * k, ty + (py - ty) * k + 0.25, tz + (pz - tz) * k], target: [tx, ty + 0.35, tz], shiftX: 0, shiftY: 0 };
+}
+
 const lerp3 = (a: Vec3, b: Vec3, k: number): Vec3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 
 function monotoneTangents(xs: number[], ys: number[]): number[] {

@@ -42,6 +42,11 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
   const reduced = useReducedMotion() ?? false;
   const [size, setSize] = useState({ w: 1440, h: 900 });
   const heading = useRef<HTMLHeadingElement>(null);
+  // The gift frame appears in the middle of the screen where the box burst, then slides to the left as the camera settles.
+  const [docked, setDocked] = useState(false);
+  useEffect(() => {
+    if (!active) setDocked(false);
+  }, [active]);
 
   // The one frame loop for the whole sequence.
   useEffect(() => {
@@ -50,6 +55,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
     let last = performance.now();
     const loop = (now: number) => {
       convergence.advance((now - last) / 1000);
+      setDocked(convergence.t >= CONVERGENCE_TIMES.reveal[0] + 0.9);
       last = now;
       raf = requestAnimationFrame(loop);
     };
@@ -138,7 +144,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
             exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.35 } }}
             transition={reduced ? { duration: 0.25 } : { type: "spring", stiffness: 130, damping: 13, mass: 0.9 }}
             className="pointer-events-none absolute z-20 m-0"
-            style={{ left: cx - frameW / 2, top: cy - (frameW * 1.18) / 2, width: frameW }}
+            style={{ left: (docked ? cx : size.w / 2) - frameW / 2, top: cy - (frameW * 1.18) / 2, width: frameW, transition: "left 0.95s cubic-bezier(0.22, 1, 0.36, 1)" }}
           >
             <motion.div animate={reduced ? undefined : { y: [0, -7, 0] }} transition={{ duration: 4.2, repeat: Infinity, ease: "easeInOut" }} className="relative rounded-[10px] bg-[#fbf3e3] p-3 pb-9 shadow-[0_28px_50px_-22px_rgba(60,36,30,0.65),0_0_0_1px_rgba(120,84,60,0.18)]">
               <span aria-hidden className="absolute -top-3 left-1/2 h-6 w-20 -translate-x-1/2 -rotate-2 rounded-[3px] bg-[#f3b9c4]/80 shadow-sm" />
