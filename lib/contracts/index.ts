@@ -155,6 +155,15 @@ export interface AppError {
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: AppError };
 
+export interface MemberBudgetRange {
+  roomId: string; participantId: string;
+  minMinor: number; maxMinor: number; currency: "USD"; updatedAt: number;
+}
+export interface GroupBudgetGuidance {
+  lowerMinor: number; upperMinor: number; currency: "USD";
+  responseCount: number; participantCount: number; conflicting: boolean;
+}
+
 // ---------- Rooms ----------
 
 export interface Room {
@@ -165,6 +174,7 @@ export interface Room {
   deadlineAt?: number;
   currency: Currency;
   budgetMinor?: number;
+  budgetGuidance?: GroupBudgetGuidance;
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;
@@ -618,6 +628,7 @@ export interface SearchBrief {
   queryTerms: string[];
   mustExclude: string[];
   budgetMinor?: number;
+  budgetGuidance?: GroupBudgetGuidance;
   occasion?: string;
   listingLimit: number;
 }
