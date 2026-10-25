@@ -10,12 +10,11 @@ export function inviteUrl(joinPath: string, origin: string): string {
 }
 
 /**
- * Origin for links other devices open (QR codes, copied invites): a
- * configured public origin (NEXT_PUBLIC_APP_URL — a tunnel or deployment)
- * wins over the page's own, which may be localhost.
+ * QR codes and shared invitations always use the address the host opened.
+ * A stale deployment/tunnel setting must never redirect friends elsewhere.
  */
 export function appOrigin(pageOrigin: string): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || pageOrigin).replace(/\/+$/, "");
+  return pageOrigin.replace(/\/+$/, "");
 }
 
 /** A phone on the network can't open these. */
