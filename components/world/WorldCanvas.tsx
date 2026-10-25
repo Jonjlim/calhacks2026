@@ -99,7 +99,8 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <DistantScenery animate={animate} />
 
       <FloatingIsland />
-      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council} />
+      {/* The landing page shows only players who have really joined (unwrap/LobbySpirits). */}
+      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />

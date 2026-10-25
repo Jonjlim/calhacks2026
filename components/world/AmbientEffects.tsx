@@ -27,6 +27,8 @@ const particleVertex = /* glsl */ `
     gl_Position = projectionMatrix * mv;
     float alive = step(0.0, age) * step(age, aLife);
     vFade = alive * smoothstep(0.0, 0.12, k) * (1.0 - smoothstep(0.55, 1.0, k));
+    // Fade out right in front of the lens, where a point would balloon into a blurry disc.
+    vFade *= smoothstep(1.5, 3.5, -mv.z);
     vColor = aColor;
     gl_PointSize = aSize * uPixelRatio * (1300.0 / -mv.z) * (0.6 + 0.4 * sin(age * 9.0 + aBirth * 3.0));
   }

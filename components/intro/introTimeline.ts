@@ -16,9 +16,8 @@ export type IntroPhase =
   | "sketching"
   | "watercolor"
   | "enteringWorld"
-  | "giftReveal"
-  | "worldFlythrough"
-  | "returningToLanding"
+  | "approachingGift"
+  | "cameraSettling"
   | "landingReady";
 
 export const INTRO_TIMES = {
@@ -26,10 +25,11 @@ export const INTRO_TIMES = {
   sketching: 2.0,
   watercolor: 5.5,
   enteringWorld: 7.5,
-  giftReveal: 9.0,
-  worldFlythrough: 10.2,
-  returningToLanding: 12.6,
-  end: 15.2,
+  /** The camera glides toward the present... */
+  approachingGift: 8.4,
+  /** ...and eases to a full stop on the close-up, where the "Begin" tag waits. */
+  cameraSettling: 9.4,
+  end: 10.6,
 } as const;
 
 const SCHEDULE: [IntroPhase, number][] = [
@@ -37,9 +37,8 @@ const SCHEDULE: [IntroPhase, number][] = [
   ["sketching", INTRO_TIMES.sketching],
   ["watercolor", INTRO_TIMES.watercolor],
   ["enteringWorld", INTRO_TIMES.enteringWorld],
-  ["giftReveal", INTRO_TIMES.giftReveal],
-  ["worldFlythrough", INTRO_TIMES.worldFlythrough],
-  ["returningToLanding", INTRO_TIMES.returningToLanding],
+  ["approachingGift", INTRO_TIMES.approachingGift],
+  ["cameraSettling", INTRO_TIMES.cameraSettling],
 ];
 
 /** When the watercolour snapshot is captured: late, so the live scene has barely drifted by the hand-off. */

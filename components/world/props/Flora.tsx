@@ -18,7 +18,7 @@ const CANOPY_STOPS: [number, string][] = [
   [1, "#d9e47a"],
 ];
 
-export type TreeKind = "round" | "tall" | "windswept" | "blossom";
+export type TreeKind = "round" | "tall" | "windswept" | "blossom" | "square";
 
 interface CanopyMass {
   x: number;
@@ -54,6 +54,26 @@ function canopyLayout(kind: TreeKind, seed: number, blobs: number): { masses: Ca
       masses.push({ x: -0.3 + t * 1.6 + (rng() - 0.5) * 0.2, y: 0.25 + Math.sin(t * Math.PI) * 0.45 + (rng() - 0.5) * 0.15, z: (rng() - 0.5) * 0.9, r: 0.45 + rng() * 0.32 - t * 0.12 });
     }
     return { masses, trunkH, lean: 0.38 };
+  }
+  if (kind === "square") {
+    // A tall, fluffy crown on a square plan (the present's tree, whose crown becomes its square
+    // QR code): three tiers of lumpy boughs, 3×3 under a 4×4 middle under a 3×3 top, filled through.
+    const trunkH = 1.5;
+    masses.push({ x: 0, y: 0.55, z: 0, r: 0.72 });
+    for (const [n, span, y, r] of [
+      [3, 0.58, 0.1, 0.42],
+      [4, 0.76, 0.52, 0.42],
+      [3, 0.5, 0.98, 0.4],
+    ] as const) {
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          const u = (i / (n - 1)) * 2 - 1;
+          const v = (j / (n - 1)) * 2 - 1;
+          masses.push({ x: u * span + (rng() - 0.5) * 0.08, y: y + rng() * 0.12, z: v * span + (rng() - 0.5) * 0.08, r: r + rng() * 0.08 });
+        }
+      }
+    }
+    return { masses, trunkH, lean: 0.03 };
   }
   // Round & blossom: a crown of boughs, a big upper mass, smaller lower lobes.
   const trunkH = 1.6 + rng() * 0.2;
