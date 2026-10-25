@@ -314,6 +314,12 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
           )}
         </div>
       </Html>
+      {/* Its name, always, on a small tag under it. */}
+      {!quiet && (
+        <Html position={[0, -0.35, 0]} center zIndexRange={[36, 30]} style={{ pointerEvents: "none" }}>
+          <span data-map-token className={s.familiarName} style={{ ["--tint" as string]: tint }}>{COUNCIL_LABEL[actor]}</span>
+        </Html>
+      )}
       {!quiet && active && !speaking && !hover && (
         <Html position={[1.6, 3.4, 0]} style={{ pointerEvents: "none" }}>
           <i data-map-token className={s.statusDot} style={{ background: tint }} aria-hidden />

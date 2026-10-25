@@ -79,7 +79,11 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
           soft.emissive.set("#70cfea");
           soft.emissiveIntensity = 0.65;
         }
-        else if (m.name === "Ivory" || m.name === "Accent") soft.roughness = 0.64;
+        else if (m.name === "Ivory" || m.name === "Accent") {
+          soft.roughness = 0.64;
+          // More of the role colour on the front: the cream belly is washed with it.
+          if (m.name === "Ivory") soft.color.lerp(tint, 0.3);
+        }
         capsuleMaterials.set(m.uuid, soft);
         return soft;
       }
