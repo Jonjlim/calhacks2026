@@ -46,7 +46,8 @@ async def archivist_step(rs: RoleSink, memories: list[Memory], budget_minor: int
     await rs.emit("started")
     try:
         analysis = await archivist.analyze(memories)
-        if room_run:
+        if room_run and budget_minor is not None:
+            # The room's explicit budget wins; otherwise keep what the Archivist read.
             analysis = analysis.model_copy(update={"budget_minor": budget_minor})
     except Exception as err:
         log.exception("archivist failed")
