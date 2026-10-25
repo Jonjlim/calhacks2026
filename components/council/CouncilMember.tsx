@@ -111,10 +111,10 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
     });
     // Slimmer and cuter: a narrower, rounder body (its flippers and face come with it), set on the clone only.
     if (capsule) {
-      c.scale.set(c.scale.x * 0.7, c.scale.y * 0.97, c.scale.z * 0.7);
+      c.scale.set(c.scale.x * 0.84, c.scale.y * 0.95, c.scale.z * 0.84);
       roundCorners(c);
       // The arms follow the narrower body in.
-      for (const n of ["LeftFlipper", "RightFlipper"]) c.getObjectsByProperty("name", n).forEach((o) => { if (!(o as THREE.Mesh).isMesh) o.position.x *= 0.82; });
+      for (const n of ["LeftFlipper", "RightFlipper"]) c.getObjectsByProperty("name", n).forEach((o) => { if (!(o as THREE.Mesh).isMesh) o.position.x *= 0.9; });
     }
     return c;
   }, [scene, state.actor]);
