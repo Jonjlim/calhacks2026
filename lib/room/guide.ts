@@ -1,5 +1,5 @@
-import type { PublishedClue } from "@/lib/contracts";
-import { isGiftIdea } from "@/lib/map/rings";
+import type { PublishedClue } from "../contracts";
+import { isGiftIdea } from "../map/rings";
 
 /** Guidance only observes published, room-visible memories. Private proposals never count. */
 export function guideMemories(clues: readonly PublishedClue[]) {

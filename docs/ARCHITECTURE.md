@@ -562,6 +562,63 @@ passed with a published first finding at 518 ms and reviewed evaluation of a new
 message at 790 ms (client/network included). The temporary room was deleted.
 These timings cover deterministic evidence, not model-only or shopping latency.
 
+### D28 — Moss recall for the room guide (2026-10-25; keyword path verified live, Moss path verified with a mocked SDK)
+
+The guide's *I don't know* step calls `moss.recall.nudge`, a public Node action
+with a membership check. It ranks only the room's active published memories
+(room-visible by definition; gift ideas, private imports, proposed clues, limits
+and Gift Twin vault text excluded) and returns one memory shared by another
+member, quoted as published. Moss runs only when `MOSS_ROOM_ENABLED=true` and
+`MOSS_PROJECT_ID`/`MOSS_PROJECT_KEY` are set; each call opens a throwaway local
+session with random names and local document IDs, then closes it. No cloud
+index, push, load or disk save. Over 5 s or on any failure, word overlap ranks
+instead. `moss.recall.warm` loads the model with synthetic text only. Nothing is
+saved, published or attributed to the asker, and the result never fills the draft.
+This is a second, separate use of the D26 SDK; the two never share a session.
+Live check on dev `compassionate-alpaca-531` (Moss off): keyword nudge returned in
+about 1 ms; non-members were refused. Real Moss ranking on a deployment with
+credentials, cold-start time there, and voice (MOSS_AGENT_PLAN.md M3) remain
+**unverified**.
+
+### D29 — Moss voice for the room guide (2026-10-25; our side built, live Moss call **unverified**)
+
+"Talk to Moss" opens a voice call with Moss's hosted voice agent (Moss Platform,
+on LiveKit). We host no voice service: `scripts/moss-voice/deploy.py` uploads the
+prompt and greeting once (`moss-voice-agent-manager==1.0.0b3`, the version with
+the deploy client), and the Next.js route `/api/moss-voice` mints a 15-minute call
+pass with `@moss-tools/voice-server@1.0.0-beta.3` after a Convex membership check.
+The browser joins with `livekit-client@2.22.4`. New external processor: during a
+call, the person's audio, its transcript, the agent's replies and the room context
+message (recipient name, the caller's name, room-visible published memories) are
+processed by Moss and its providers. No private import, proposed clue, limit,
+Gift Twin vault text or room/user ID is sent. No tools are deployed, so the agent
+can't read or write Convex. Outputs only reach the room when the person copies
+their own words into the draft and shares it. The speaking voice (a young female
+voice) is set on the agent in the Moss Platform. Fallback: browser
+`speechSynthesis` reads the guide's own lines, with no audio leaving the device.
+
+Verified locally: availability flag, refusal without a token or for non-members,
+the provider-failure state with placeholder credentials, the call panel, and the
+fallback voice (macOS "Samantha", pitch 1.15). Not verified: a real Moss call
+(no voice agent ID yet), the hosted agent's model and speech providers, latency,
+minute limits and cost.
+
+### D30 — ElevenLabs voice for Moss's narration (2026-10-25; fallback verified, real voice **unverified**)
+
+New external API: ElevenLabs text-to-speech, called from the Next.js route
+`/api/moss-voice/speak` with `fetch` (no SDK). Default voice "Sarah"
+(`EXAVITQu4vr4xnSDxMaL`, young female) on `eleven_v4_turbo`; both overridable by
+env. Only the guide's own lines are sent: recipient name, a friend's display name
+and quoted published memory in a nudge line, nothing private. Members only;
+an in-memory cache of 200 lines avoids paying twice for the same line. The key
+stays on the server. Any failure falls back to the browser voice for that line.
+The hosted Moss voice agent (D29) can use the same ElevenLabs voice through its
+platform settings, so narration and calls sound like one person.
+
+Verified locally with a placeholder key: availability flag, the route's 502 on a
+rejected key, and per-line fallback to the browser voice. Not verified: real
+audio, latency, the free tier's access to this voice/model, and cost.
+
 ## Bounded multi-gift box — Alex-authorized integration
 
 Alex requested both single and multiple gifts in the buying flow. Keep one

@@ -224,7 +224,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
   ringsRef.current = map.rings;
-  const guide = useRoomGuide({ data, map, enabled: stage === "map" && !preview && !!actions, paused: engaged || !!drawer });
+  const guide = useRoomGuide({ data, map, enabled: stage === "map" && !preview && !!actions, paused: engaged || !!drawer, nudge: actions?.mossNudge, warm: actions?.mossWarm, sound: soundEnabled });
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {

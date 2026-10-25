@@ -65,7 +65,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null; beginMemory(mode: "text" | "photo", prompt?: string): void; showConnection(themeId: string): void; setGuideScene(scene: RingGuideScene | null): void; draftLength: number } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; startAdd(what: "memory" | "wish" | "idea"): void; tools: ReactNode; story: ReactNode | null; beginMemory(mode: "text" | "photo", prompt?: string): void; showConnection(themeId: string): void; setGuideScene(scene: RingGuideScene | null): void; draftLength: number; fillDraft(text: string): void } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -73,6 +73,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [guideScene, setGuideScene] = useState<RingGuideScene | null>(null);
   const draft = useRef("");
   const [draftLength, setDraftLength] = useState(0);
+  // Bumped when something other than typing fills the draft (Moss voice), so the uncontrolled box shows it.
+  const [draftVersion, setDraftVersion] = useState(0);
   // Photos picked in the add box before they're sent.
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
   // “Why?” on one gift: its memories, themes and the gift light up together.
@@ -234,6 +236,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     mapView.focus(x * 0.6, z * 0.6, 0.8);
   };
   const showConnection = (themeId: string) => setGuideTheme(themeId);
+  /** Puts words into the memory draft for the person to review; never shares them. */
+  const fillDraft = (text: string) => {
+    if (!actions) return;
+    const clean = text.trim().slice(0, 8000);
+    if (!composer) setComposer({ x: 12, z: 11, zone: "memory", kind: "interest" });
+    draft.current = clean;
+    setDraftLength(clean.length);
+    setDraftVersion((v) => v + 1);
+  };
   const beginMemory = (mode: "text" | "photo", prompt?: string) => {
     if (!actions || lock.current) return;
     if (composer) { setComposer({ ...composer, prompt: prompt ?? composer.prompt }); return; }
@@ -245,7 +256,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     setGuideTheme(null);
     setComposer({ x: 12, z: 11, zone: "memory", kind: "interest", photo: mode === "photo", prompt });
   };
-  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null, story: null, beginMemory, showConnection, setGuideScene, draftLength };
+  if (!active) return { rings: null, notice, error, openBox, startAdd, tools: null, story: null, beginMemory, showConnection, setGuideScene, draftLength, fillDraft };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -607,7 +618,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (input) add(input.value);
     }}>
       <span className={`${s.cloud} ${s.writeCloud} ${composer.zone === "gift" ? s.ideaCloud : ""}`}>
-      <textarea autoFocus defaultValue={draft.current} maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
+      <textarea key={draftVersion} autoFocus defaultValue={draft.current} maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
         className={composer.zone === "gift" ? s.ideaInput : s.memoryInput}
         onChange={(e) => { draft.current = e.currentTarget.value; setDraftLength(e.currentTarget.value.trim().length); }}
         placeholder={composer.prompt ?? (composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat")}
@@ -997,5 +1008,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const look = (data.tiktokLooks ?? []).findLast((l) => l.query === tiktok.query);
     storyNode = <TikTokBoard query={tiktok.query} look={look} onClose={closeTiktok} />;
   }
-  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode, beginMemory, showConnection, setGuideScene, draftLength };
+  return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode, beginMemory, showConnection, setGuideScene, draftLength, fillDraft };
 }

@@ -6,15 +6,23 @@ import { fanOut } from "@/components/world/room/GiftRings";
 import { mapView } from "@/components/world/room/mapView";
 import { guideMemories, initialGuideStep, sharedGuideTheme, CONNECT_HOLD_MS, MOSS_QUESTIONS, mossWritingCue, type GuideStep } from "@/lib/room/guide";
 import { avatarFor, portraitUrl } from "@/lib/room/avatars";
-import type { RoomData } from "./types";
+import { matchCaption, nudgeLine, type MossNudgeView } from "@/lib/room/mossRecall";
+import { callContextText } from "@/lib/room/mossVoice";
+import type { RoomActions, RoomData } from "./types";
+import { useMossNarrator } from "./useMossNarrator";
+import { useMossVoice, type MossLine } from "./useMossVoice";
 import type { useGiftRings } from "./useGiftRings";
 import s from "./room-guide.module.css";
 
 const LIVE_CUE_MS = 4500;
 
 /** Local guidance observes Convex state; it never publishes, votes, selects or approves for a member. */
-export function useRoomGuide({ data, map, enabled, paused }: {
+export function useRoomGuide({ data, map, enabled, paused, nudge, warm, sound = false }: {
   data: RoomData; map: ReturnType<typeof useGiftRings>; enabled: boolean; paused: boolean;
+  /** Room sound is on: Moss may read her lines aloud (browser voice) when no call is live. */
+  sound?: boolean;
+  /** Moss recall (MAP-024). Optional: without it the nudge keeps its written prompts. */
+  nudge?: RoomActions["mossNudge"]; warm?: RoomActions["mossWarm"];
 }) {
   const { room, me, participants } = data.view;
   const key = `unwrap:room-guide:v2:${room.id}:${me.id}`;
@@ -26,6 +34,9 @@ export function useRoomGuide({ data, map, enabled, paused }: {
   const [question, setQuestion] = useState(0);
   const [helped, setHelped] = useState(false);
   const [bornMemoryId, setBornMemoryId] = useState<string | null>(null);
+  // What Moss recalled for the current question; shown to this member only, never saved.
+  const [recall, setRecall] = useState<{ question: number; state: "loading" | "done"; view: MossNudgeView | null } | null>(null);
+  const warmed = useRef(false);
   const known = useRef(new Set<string>());
   const latest = useRef({ data, map });
   latest.current = { data, map };
@@ -97,6 +108,24 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     setReady(true);
     return () => { setReady(false); if (!mapView.locked && !mapView.dragging) mapView.reset(); };
   }, [enabled, key]);
+
+  // Load Moss's model once while the guide is on screen, so the first nudge is quick.
+  useEffect(() => {
+    if (!enabled || !ready || !warm || warmed.current) return;
+    warmed.current = true;
+    void warm().catch(() => undefined);
+  }, [enabled, ready, warm]);
+
+  // "I don't know": Moss searches friends' published memories for the chosen question.
+  useEffect(() => {
+    if (step !== "help" || !nudge) return;
+    let live = true;
+    setRecall({ question, state: "loading", view: null });
+    nudge(question)
+      .then((r) => { if (live) setRecall({ question, state: "done", view: r.ok ? r.value : null }); })
+      .catch(() => { if (live) setRecall({ question, state: "done", view: null }); });
+    return () => { live = false; };
+  }, [step, question, nudge, data.publishedClues.length]);
 
   // Only the subscription confirming a published memory advances guidance; a failed save keeps the composer open.
   useEffect(() => {
@@ -179,6 +208,27 @@ export function useRoomGuide({ data, map, enabled, paused }: {
   const visible = ready && enabled && !paused && (
     (seedStep && (!composing || step === "compose" || step === "help")) || step === "connect" || (step === "live" && liveCue));
   const cinematic = visible && (seedStep || step === "connect");
+  // Moss voice (MAP-026): a live call with the hosted Moss agent, only from an explicit tap.
+  const call = useMossVoice({
+    roomId: room.id,
+    active: ready && enabled && !paused && visible,
+    contextText: () => callContextText({
+      recipient: room.recipientDisplayName,
+      me: me.displayName || "a friend",
+      memories: guideMemories(latest.current.data.publishedClues).map((c) => ({ author: participants.find((p) => p.id === c.publisherId)?.displayName ?? "A friend", text: c.text })).reverse(),
+    }),
+  });
+  useMossNarrator(sound && !call.live, room.id);
+  function talk() {
+    if (!composing) begin("text");
+    void call.start();
+  }
+  function useWords() {
+    if (!call.myWords) return;
+    map.fillDraft(call.myWords);
+    if (step !== "compose" && step !== "help") setStep("compose");
+  }
+  const callPanel = call.state !== "idle" && <MossCall call={call} onUse={useWords} recipient={room.recipientDisplayName} />;
   const editor = (step === "compose" || step === "help") && composing ? map.rings?.composer?.node : null;
   let title = "Start with a little thing.";
   let text = `This little island is yours. Let’s give it a memory of ${room.recipientDisplayName}.`;
@@ -186,6 +236,7 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     <button onClick={() => begin("text")}><span>01</span><b>Type a thought<small>A hobby, a wish, a little habit</small></b><i>↗</i></button>
     <button onClick={() => begin("photo")}><span>02</span><b>Drop a photo<small>Find the clues in a real moment</small></b><i>↗</i></button>
     <button onClick={() => begin("text", currentQuestion.prompt, true)}><span>03</span><b>I don’t know<small>Moss, give me a little nudge</small></b><i>↗</i></button>
+    {call.available && <button onClick={talk} className={s.talkChoice}><span>04</span><b>Talk to Moss<small>Say it out loud, she’ll help you find the words</small></b><i>↗</i></button>}
   </div>;
   if (step === "arrival") {
     title = `Welcome to ${room.recipientDisplayName}’s world.`;
@@ -193,13 +244,17 @@ export function useRoomGuide({ data, map, enabled, paused }: {
     controls = <></>;
   } else if (step === "help") {
     title = currentQuestion.title;
-    text = map.draftLength ? mossWritingCue(map.draftLength, true) : "Nothing coming to mind? Let’s take a step back. Think of a real moment together.";
+    const recalled = recall?.question === question && recall.state === "done" ? recall.view : null;
+    text = map.draftLength ? mossWritingCue(map.draftLength, true)
+      : recalled ? nudgeLine(recalled)
+      : "Nothing coming to mind? Let’s take a step back. Think of a real moment together.";
     controls = <><div className={s.questionTabs}>{MOSS_QUESTIONS.map((q, i) => <button key={q.label} aria-pressed={question === i} onClick={() => { setQuestion(i); map.beginMemory("text", q.prompt); }}>{q.label}</button>)}</div>
+      {call.available && !call.live && <button onClick={talk}>Talk it through with Moss</button>}
       <button onClick={() => { setStep("compose"); approachSeed(); }}>Bring me back to my island ↗</button></>;
   } else if (step === "compose") {
     title = helped ? currentQuestion.title : "What comes to mind?";
     text = map.rings?.composer?.photo ? "A photo can hold a little story. You’ll review its clues before publishing them." : mossWritingCue(map.draftLength, helped);
-    controls = composing ? <button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 }); }}>Moss, I’m a little stuck</button> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
+    controls = composing ? <><button onClick={() => { setHelped(true); map.beginMemory("text", currentQuestion.prompt); setStep("help"); mapView.focus(0, 0, 1.1, { yaw: -0.28, pitch: 0.1 }); }}>Moss, I’m a little stuck</button>{call.available && !call.live && <button onClick={talk}>Talk to Moss</button>}</> : <><button onClick={() => begin("text")}>Write a memory</button><button onClick={() => begin("photo")}>Add a photo</button></>;
   } else if (step === "saved") {
     title = "A little memory. A new possibility.";
     text = "There it is. Your memory has a place in this world.";
@@ -218,7 +273,9 @@ export function useRoomGuide({ data, map, enabled, paused }: {
 
   // One semantic cue per visible change. A narrator can cancel when a drawer/reveal takes over.
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("unwrap:room-guide", { detail: { roomId: room.id, step, peerId: peer?.id ?? null, title, text, active: visible } }));
+    // Typing feedback changes as someone writes; a narrator reads the step's first line, not each nudge mid-sentence.
+    const typing = (step === "compose" || step === "help") && map.draftLength > 0;
+    window.dispatchEvent(new CustomEvent("unwrap:room-guide", { detail: { roomId: room.id, step, peerId: peer?.id ?? null, title, text, active: visible, typing } }));
     return () => { window.dispatchEvent(new CustomEvent("unwrap:room-guide", { detail: { roomId: room.id, step: null, peerId: null, title: "", text: "", active: false } })); };
   }, [step, peer?.id, visible, room.id, title, text]);
 
@@ -242,6 +299,8 @@ export function useRoomGuide({ data, map, enabled, paused }: {
           <div><b className={s.cloud}>{shared?.label ?? "A theme"}</b><span>{shared ? "What they share" : "Forms as memories connect"}</span></div><i>→</i>
           <div><b className={s.gifts}><em /><em /><em /></b><span>More real gifts</span></div>
         </div>}
+        {step === "help" && nudge && recall?.question === question && <MossRecall recall={recall} />}
+        {callPanel}
         <div className={s.editor}>{editor}</div>
         <div className={s.actions}>{controls}</div>
         {step === "connect" && <div className={s.hold}><i style={{ animationDuration: `${reduced ? CONNECT_HOLD_MS * 1.5 : CONNECT_HOLD_MS}ms` }} /><span>Continues on its own</span></div>}
@@ -250,4 +309,39 @@ export function useRoomGuide({ data, map, enabled, paused }: {
       <div className={s.narration} aria-live="polite"><img src={portraitUrl("calm")} alt="Moss" /><div><span>MOSS</span><p>{text}</p></div></div>
     </motion.div>}</AnimatePresence>,
   };
+}
+
+/** The memory Moss found for this question, quoted as shared, with how it was found. */
+function MossRecall({ recall }: { recall: { state: "loading" | "done"; view: MossNudgeView | null } }) {
+  if (recall.state === "loading") return <div className={s.recall} role="status"><i className={s.recallDots} aria-hidden><em /><em /><em /></i><span>Moss is looking through what friends shared…</span></div>;
+  if (!recall.view) return <div className={s.recall} role="status"><span>No one else has shared a memory yet. Start with a real moment you remember.</span></div>;
+  const v = recall.view;
+  return (
+    <figure className={s.recall} aria-label={`${v.author} remembered`}>
+      <blockquote>“{v.text}”</blockquote>
+      <figcaption><b>{v.author}</b><span>{matchCaption(v)}</span></figcaption>
+    </figure>
+  );
+}
+
+/** The live call: who's talking, the last few lines, and the person's own words to keep. */
+function MossCall({ call, onUse, recipient }: { call: ReturnType<typeof useMossVoice>; onUse(): void; recipient: string }) {
+  const status = call.state === "connecting" ? "Calling Moss…"
+    : call.state === "live" ? (call.speaking === "moss" ? "Moss is speaking" : call.speaking === "me" ? "Moss is listening" : "Say something about " + recipient)
+    : call.state === "error" ? call.error ?? "Moss couldn’t start a call."
+    : "Call ended";
+  const recent: MossLine[] = call.lines.slice(-3);
+  return (
+    <section className={s.call} aria-label="Call with Moss" data-state={call.state} data-speaking={call.speaking ?? "none"}>
+      <header>
+        <i className={s.callOrb} aria-hidden><em /><em /><em /></i>
+        <span role="status">{status}</span>
+        {call.live && <button onClick={call.stop} className={s.hangUp}>Hang up</button>}
+        {!call.live && <button onClick={() => void call.start()}>{call.state === "error" ? "Try again" : "Call again"}</button>}
+      </header>
+      {recent.length > 0 && <ol className={s.lines}>{recent.map((l) => <li key={l.id} data-who={l.who}><b>{l.who === "me" ? "You" : "Moss"}</b> {l.text}</li>)}</ol>}
+      {call.myWords && <button className={s.useWords} onClick={onUse}>Use what I said</button>}
+      <small className={s.callFine}>Moss hears you only during this call. Nothing is shared until you press share.</small>
+    </section>
+  );
 }

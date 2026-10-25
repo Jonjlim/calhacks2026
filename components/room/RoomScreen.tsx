@@ -134,6 +134,8 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const passTrend = useMutation(api.research.trendJobs.setTrendPass);
   const setDirection = useMutation(api.mapSignals.setDirection);
   const suggestThemes = useAction(api.agents.themes.suggestThemes);
+  const mossNudge = useAction(api.moss.recall.nudge);
+  const mossWarm = useAction(api.moss.recall.warm);
   const sharpen = useAction(api.agents.themes.sharpen);
   const answerSharpen = useMutation(api.agents.themes.answerSharpen);
   const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
@@ -182,6 +184,8 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       passTrend: (trendJobId, query, passed) => passTrend({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query, passed }),
       setDirection: (targetKind, targetId, value, reason) => setDirection({ roomId, targetKind, targetId, value, ...(reason ? { reason } : {}) }),
       suggestThemes: () => suggestThemes({ roomId }),
+      mossNudge: (questionIndex: number) => mossNudge({ roomId, questionIndex }),
+      mossWarm: () => mossWarm({ roomId }),
       sharpen: () => sharpen({ roomId }),
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
@@ -228,7 +232,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
+      selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, mossNudge, mossWarm, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
       proposeDirections, lookTikTok,
     ],
   );

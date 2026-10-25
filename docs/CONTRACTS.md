@@ -2035,9 +2035,9 @@ connection. The connection pause waits behind an active composer, drawer or
 reveal; it never takes over someone's draft.
 
 The client emits `unwrap:room-guide` as a `CustomEvent` for the optional Moss
-narrator. Detail is `{ roomId, step, peerId, title, text, active }`; `step` is
+narrator. Detail is `{ roomId, step, peerId, title, text, active, typing }`; `step` is
 `arrival | welcome | help | compose | saved | live | connect | null`.
-`peerId` is a published clue ID or null. `active: false` cancels narration when
+`peerId` is a published clue ID or null. `typing: true` marks feedback that changes while someone writes; narrators skip it. `active: false` cancels narration when
 the guide is hidden, paused or unmounted. This event is presentation only and
 never authorizes a room action or external data access. Narrator consumers must
 not publish, vote, select gifts or approve shares in response. Existing Convex
@@ -2050,3 +2050,77 @@ only one editor is mounted. Help questions and topic choices are local prompts,
 not inferred recipient preferences: no suggested answer is automatically saved.
 Draft-length feedback stays local and raw drafts are never included in narrator
 events. Authored camera framing yields to user gestures and reveal ownership.
+
+### Moss room recall (Dev 3, MAP-024; plan in MOSS_AGENT_PLAN.md)
+
+`moss.recall.nudge({ roomId, questionIndex })` is a public Node action behind the
+guide's *I don't know* step. `questionIndex` selects one of `MOSS_QUESTIONS`
+(`lib/room/guide.ts`); free text is not accepted. The server checks membership,
+then searches only the room's active published memories (gift ideas excluded,
+at most 256, newest first) and returns one memory shared by **another** member:
+
+```ts
+type MossNudgeView = {
+  clueId: Id<"publishedClues">;
+  text: string;            // the published memory, already room-visible
+  author: string;          // its publisher's display name
+  match: "moss" | "keyword" | "recent";
+  ms: number;              // server time for the search, rounded
+} | null;                  // null when no other member has shared a memory
+```
+
+`match` is `moss` when the Moss SDK ranked it (`MOSS_ROOM_ENABLED=true` plus
+`MOSS_PROJECT_ID`/`MOSS_PROJECT_KEY`), `keyword` when word overlap did (SDK off or
+failing), and `recent` when nothing overlapped and the newest friend's memory is
+offered instead. Errors: `unauthorized`, `not_found`, `validation_failed`.
+
+`moss.recall.warm({ roomId })` loads the embedding model with synthetic text so
+the first nudge doesn't pay the cold setup; it returns `{ warmed: boolean }` and
+never touches room text. Members only.
+
+Rules: the Moss session is rebuilt per call from Convex rows and always closed;
+no `pushIndex`, `loadIndex`, cloud index or disk save. Session names and document
+IDs are random and local; no room ID, user ID or text is put in them. The room
+index never contains private imports, proposed clues, contribution limits,
+Gift Twin vault text or another room's data, and stays separate from Gift Twin's
+own sessions (D26). A nudge is a suggestion shown to the person who asked; it is
+never saved, published or attributed to them, and the guide never fills the
+draft with it.
+
+### Moss voice (Dev 3, MAP-026 / MAP-027; D29)
+
+`GET /api/moss-voice` → `{ available: boolean }`: true only when the Next.js
+server has `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` and `MOSS_VOICE_AGENT_ID`. The
+"Talk to Moss" choices are hidden otherwise.
+
+`POST /api/moss-voice` with body `{ roomId }` and `Authorization: Bearer <the
+caller's Convex auth token>` → `{ ok: true, value: { serverUrl, roomName,
+participantToken } }` or `{ ok: false, error }` with `unauthorized` (401/403),
+`validation_failed` (400), `unavailable` (503) or `provider_timeout` (502).
+Membership is checked by `moss.voice.canCall({ roomId })` with the caller's own
+token. Room and participant names in the call are random (`unwrap-voice-<uuid>`,
+`friend-<uuid>`); no room ID, user ID or name is sent to Moss. The pass lasts 15
+minutes.
+
+In a call, the browser sends one text message on topic `lk.chat` first: the
+room context from `callContextText` (recipient name, the caller's display name,
+up to 30 active published memories with authors, one line each, quoted, as
+data). Nothing else from Convex is sent. Live captions arrive on
+`lk.transcription` and stay in the browser. "Use what I said" copies the
+caller's own latest words into the memory draft (`fillDraft`); the person still
+presses share. The call never publishes, votes, selects gifts or approves shares,
+and ends when the guide hides, a drawer or reveal opens, or the person hangs up.
+
+The agent's prompt and greeting live in `scripts/moss-voice/agent.json` and are
+deployed with `scripts/moss-voice/deploy.py`. Its voice is chosen on the Moss
+Platform (a young female voice). Browser-voice fallback: with room sound on and
+no live call, `useMossNarrator` speaks the guide's own `unwrap:room-guide` text
+with `speechSynthesis`, preferring a female English system voice.
+
+Natural narration (D30): `GET /api/moss-voice/speak` → `{ available }` (true when
+`ELEVENLABS_API_KEY` is set). `POST /api/moss-voice/speak` with `{ roomId, text }`
+(text ≤ 400 characters, one guide line) and the caller's Convex token returns
+`audio/mpeg` in Moss's ElevenLabs voice, or `{ ok: false, error }` with
+`unauthorized`, `validation_failed`, `unavailable` or `provider_timeout`. Members
+only. The narrator uses it when available and falls back to `speechSynthesis` per
+line on any failure. Lines marked `typing: true` are never spoken.
