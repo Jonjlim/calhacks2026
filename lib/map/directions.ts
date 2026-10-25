@@ -97,19 +97,29 @@ export function trendClouds(
   return [...caught.slice(0, MAX_DRIFTING), ...drifting];
 }
 
-/** Enough threads to read as considering, few enough to stay calm. */
-export const MAX_REACH = 14;
+/** Memories a seeking branch sweeps toward, at most; and refused ideas shown fraying. */
+export const MAX_SEEK_TARGETS = 4;
 export const MAX_FRAYED = 3;
 
-export interface WeaveThreadSpec { from: string; to: string; mode: "reach" | "kept" | "frayed"; label?: string; delay?: number }
+export interface WeaveThreadSpec {
+  from: string;
+  to: string;
+  mode: "seek" | "kept" | "retract" | "frayed";
+  /** For "seek": the other memories its tip sweeps between. */
+  targets?: string[];
+  label?: string;
+  delay?: number;
+}
 export interface WeaveState { id: number; phase: "reaching" | "weaving"; since: number; fresh: string[] }
 
 /**
- * The weave's threads, by node key (D23 trial). Every thread is a real link:
- * while the council thinks, memories reach toward two neighbours each; when it
- * answers, each new direction gathers the memories it actually combines, and
- * up to three refused ideas fray between the memories they cited, labelled
- * with the checks' reason. Opening a direction grows its own threads again.
+ * The weave's branches, by node key (D23 trial), as one continuous motion.
+ * The moment someone asks, every memory sends out a branch that seeks among
+ * the other memories. When the council answers, each memory's branch either
+ * latches onto a new direction that combines it ("kept"; extra branches when it
+ * feeds several) or pulls back home ("retract"), and up to three refused ideas
+ * fray between the memories they cited, labelled with the checks' reason.
+ * Every target is a real node. Opening a direction grows its branches again.
  */
 export function weaveThreads({ weave, memoryKeys, directions, trail, selectedKey }: {
   weave: WeaveState | null;
@@ -120,28 +130,24 @@ export function weaveThreads({ weave, memoryKeys, directions, trail, selectedKey
 }): { id: number; threads: WeaveThreadSpec[] } | null {
   if (weave?.phase === "reaching") {
     if (memoryKeys.length < 2) return null;
-    const threads: WeaveThreadSpec[] = [];
-    const seen = new Set<string>();
-    memoryKeys.forEach((from, i) => {
-      for (const step of [1, 2]) {
-        const to = memoryKeys[(i + step) % memoryKeys.length]!;
-        const pair = [from, to].sort().join("|");
-        if (to === from || seen.has(pair) || threads.length >= MAX_REACH) continue;
-        seen.add(pair);
-        threads.push({ from, to, mode: "reach", delay: (i % 5) * 0.15 });
-      }
+    const threads = memoryKeys.map((from, i): WeaveThreadSpec => {
+      const others = [...memoryKeys.slice(i + 1), ...memoryKeys.slice(0, i)].slice(0, MAX_SEEK_TARGETS);
+      return { from, to: others[0]!, mode: "seek", targets: others, delay: (i % 6) * 0.08 };
     });
     return { id: weave.id, threads };
   }
   if (weave?.phase === "weaving") {
+    const fresh = directions.filter((d) => weave.fresh.includes(d.id));
     const threads: WeaveThreadSpec[] = [];
-    directions.filter((d) => weave.fresh.includes(d.id)).forEach((d, i) => {
-      d.clueIds.forEach((id, j) => threads.push({ from: `clue:${id}`, to: d.key, mode: "kept", delay: i * 0.35 + j * 0.12 }));
-    });
+    for (const from of memoryKeys) {
+      const joins = fresh.filter((d) => d.clueIds.some((id) => `clue:${id}` === from));
+      if (!joins.length) threads.push({ from, to: from, mode: "retract" });
+      joins.forEach((d, j) => threads.push({ from, to: d.key, mode: "kept", delay: j * 0.25 }));
+    }
     trail.filter((e) => e.actor === "checks" && e.outcome === "rejected" && e.at >= weave.since - 2000 && (e.clueIds?.length ?? 0) >= 2)
       .slice(-MAX_FRAYED).forEach((e, i) => {
         const [a, b] = e.clueIds!;
-        threads.push({ from: `clue:${a}`, to: `clue:${b}`, mode: "frayed", delay: 0.6 + i * 0.4, label: e.text.replace(/^Threw out “[^”]*”: /, "").replace(/\.$/, "") });
+        threads.push({ from: `clue:${a}`, to: `clue:${b}`, mode: "frayed", delay: 0.5 + i * 0.4, label: e.text.replace(/^Threw out “[^”]*”: /, "").replace(/\.$/, "") });
       });
     return { id: weave.id, threads };
   }
@@ -151,4 +157,3 @@ export function weaveThreads({ weave, memoryKeys, directions, trail, selectedKey
   }
   return null;
 }
-

@@ -70,21 +70,22 @@ describe("the council's weave", () => {
   ];
   const base = { memoryKeys, directions, trail, selectedKey: null };
 
-  it("reaches between memories while the council thinks, each pair once", () => {
+  it("sends out a branch from every memory at once, seeking only among the other real memories", () => {
     const w = weaveThreads({ ...base, weave: { id: 1, phase: "reaching", since: 49_000, fresh: [] } })!;
-    expect(w.threads.every((t) => t.mode === "reach" && memoryKeys.includes(t.from) && memoryKeys.includes(t.to))).toBe(true);
-    expect(new Set(w.threads.map((t) => [t.from, t.to].sort().join("|"))).size).toBe(w.threads.length);
+    expect(w.threads.map((t) => t.from)).toEqual(memoryKeys);
+    expect(w.threads.every((t) => t.mode === "seek" && !t.targets!.includes(t.from) && t.targets!.every((k) => memoryKeys.includes(k)))).toBe(true);
   });
 
-  it("weaves only the memories each new direction combines, and frays only this round's refused ideas", () => {
-    const w = weaveThreads({ ...base, weave: { id: 2, phase: "weaving", since: 49_000, fresh: ["d1"] } })!;
+  it("latches the memories a new direction combines onto it, pulls the rest home, and frays this round's refusals", () => {
+    const w = weaveThreads({ ...base, weave: { id: 1, phase: "weaving", since: 49_000, fresh: ["d1"] } })!;
     expect(w.threads.filter((t) => t.mode === "kept").map((t) => `${t.from}>${t.to}`)).toEqual(["clue:a>direction:d1", "clue:c>direction:d1"]);
+    expect(w.threads.filter((t) => t.mode === "retract").map((t) => t.from)).toEqual(["clue:b", "clue:d"]);
     expect(w.threads.filter((t) => t.mode === "frayed")).toEqual([
-      { from: "clue:c", to: "clue:d", mode: "frayed", delay: 0.6, label: "it repeated another direction's search" },
+      { from: "clue:c", to: "clue:d", mode: "frayed", delay: 0.5, label: "it repeated another direction's search" },
     ]);
   });
 
-  it("grows an opened direction's threads again, and stays empty otherwise", () => {
+  it("grows an opened direction's branches again, and stays empty otherwise", () => {
     expect(weaveThreads({ ...base, weave: null, selectedKey: "direction:d2" })?.threads.map((t) => t.from)).toEqual(["clue:b", "clue:d"]);
     expect(weaveThreads({ ...base, weave: null })).toBeNull();
   });

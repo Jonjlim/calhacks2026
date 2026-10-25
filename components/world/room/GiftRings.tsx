@@ -74,7 +74,7 @@ export interface RingsWorld {
    * direction combines ("kept"), and links a refused idea cited ("frayed", with the checks' reason).
    * `id` changes for each weave so every thread grows again from the start.
    */
-  weave?: { id: number; threads: { from: string; to: string; mode: WeaveMode; label?: string; delay?: number }[] } | null;
+  weave?: { id: number; threads: { from: string; to: string; mode: WeaveMode; targets?: string[]; label?: string; delay?: number }[] } | null;
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -831,14 +831,22 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         </RingIsland>
       ))}
 
-      {rings.weave && !revealing && rings.weave.threads.map((w, i) => {
-        // Each thread ties where its nodes are drawn now: a resting memory sits on its theme's cloud.
-        const a = anchorOf(w.from);
-        const b = anchorOf(w.to);
-        if (!a || !b) return null;
-        return <WeaveThread key={`${rings.weave!.id}:${i}`} start={world(a[0], a[1], 0.5)} end={world(b[0], b[1], 0.5)}
-          mid={world((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, w.mode === "reach" ? 1.6 : 2.8)} mode={w.mode} label={w.label} delay={w.delay} animate={animate} />;
-      })}
+      {rings.weave && !revealing && (() => {
+        // Each branch ties where its nodes are drawn now (a resting memory sits on its theme's cloud), and keeps
+        // its key from seeking to attaching, so the same branch swings onto its direction instead of restarting.
+        const slots = new Map<string, number>();
+        return rings.weave.threads.map((w) => {
+          const a = anchorOf(w.from);
+          const b = anchorOf(w.to);
+          if (!a || !b) return null;
+          const n = w.mode === "frayed" ? 0 : slots.get(w.from) ?? 0;
+          if (w.mode !== "frayed") slots.set(w.from, n + 1);
+          const key = w.mode === "frayed" ? `${rings.weave!.id}:fray:${w.from}:${w.to}` : `${rings.weave!.id}:${w.from}#${n}`;
+          const targets = w.targets?.flatMap((k) => { const at = anchorOf(k); return at ? [world(at[0], at[1], 0.5)] : []; });
+          return <WeaveThread key={key} start={world(a[0], a[1], 0.5)} end={world(b[0], b[1], 0.5)}
+            mid={world((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 2.6)} mode={w.mode} targets={targets} label={w.label} delay={w.delay} animate={animate} />;
+        });
+      })()}
 
       {rings.ideas.map((idea, i) => {
         // Its attached card already reads the idea out, so a selected idea keeps its small face.

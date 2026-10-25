@@ -190,7 +190,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const fresh = [...ids].filter((id) => !before.has(id));
     if (!fresh.length) return;
     playChoose();
-    setWeave((w) => ({ id: Date.now(), phase: "weaving", since: w?.since ?? Date.now() - 30_000, fresh }));
+    // The branches already seeking carry on into the weave: same session, so they attach instead of restarting.
+    setWeave((w) => ({ id: w?.id ?? Date.now(), phase: "weaving", since: w?.since ?? Date.now() - 30_000, fresh }));
   }, [data.directions]);
   // A weave settles after a few seconds; a request that never produced directions stops reaching.
   useEffect(() => {
