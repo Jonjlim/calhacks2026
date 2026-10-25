@@ -28,7 +28,7 @@ const MAX_SPROUTS_PER_SEED = 12;
 const finite = (n: number) => Number.isFinite(n) && Math.abs(n) <= COORD_LIMIT;
 
 export const moveCursor = mutation({
-  args: { roomId: v.id("rooms"), x: v.number(), y: v.number(), space: v.optional(v.union(v.literal("sky"), v.literal("diagram"))) },
+  args: { roomId: v.id("rooms"), x: v.number(), y: v.number(), space: v.optional(v.union(v.literal("sky"), v.literal("diagram"), v.literal("rings"))) },
   handler: async (ctx, { roomId, x, y, space }) => {
     if (!finite(x) || !finite(y)) return err<null>("validation_failed", "Cursor is off the map.");
     const member = await requireMember(ctx, roomId);
@@ -47,7 +47,7 @@ export const moveCursor = mutation({
 export const listCursors = query({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    type Row = { participantId: Id<"participants">; displayName: string; x: number; y: number; space: "sky" | "diagram"; updatedAt: number };
+    type Row = { participantId: Id<"participants">; displayName: string; x: number; y: number; space: "sky" | "diagram" | "rings"; updatedAt: number };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Row[]>(member.code);
     // Readers drop cursors older than CURSOR_TTL_MS themselves, so this query stays stable and reactive.

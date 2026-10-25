@@ -1,6 +1,6 @@
 "use client";
 
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -118,6 +118,12 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const setLimit = useMutation(api.proposals.setContributionLimit);
   const approve = useMutation(api.proposals.approveRevision);
   const withdrawApproval = useMutation(api.proposals.withdrawApproval);
+  const setDirection = useMutation(api.mapSignals.setDirection);
+  const suggestThemes = useAction(api.agents.themes.suggestThemes);
+  const sharpen = useAction(api.agents.themes.sharpen);
+  const answerSharpen = useMutation(api.agents.themes.answerSharpen);
+  const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
+  const moveCursor = useMutation(api.map.moveCursor);
 
   const actions = useMemo<RoomActions>(
     () => ({
@@ -148,11 +154,17 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       setLimit: (amountMinor) => setLimit({ roomId, amountMinor }),
       approve: (revisionId) => approve({ revisionId: revisionId as Id<"proposalRevisions"> }),
       withdrawApproval: (revisionId) => withdrawApproval({ revisionId: revisionId as Id<"proposalRevisions"> }),
+      setDirection: (targetKind, targetId, value) => setDirection({ roomId, targetKind, targetId, value }),
+      suggestThemes: () => suggestThemes({ roomId }),
+      sharpen: () => sharpen({ roomId }),
+      answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
+      dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
+      moveCursor: (x, z) => moveCursor({ roomId, x, y: z, space: "rings" }),
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval,
+      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor,
     ],
   );
 
@@ -189,7 +201,29 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
 /** An optional council query must not turn a valid gift room into “not found”. */
 function RoomWithCouncil({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
   const result = useQuery(api.councilRoom.state, { roomId });
-  return <RoomSurfaceView surface={surface} data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
+  const withCouncil = { ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok };
+  return (
+    <ErrorBoundary fallback={<RoomSurfaceView surface={surface} data={withCouncil} actions={actions} />}>
+      <RoomWithMap roomId={roomId} data={withCouncil} actions={actions} surface={surface} />
+    </ErrorBoundary>
+  );
+}
+
+/** Gift map extras: votes on memories and themes, council themes, the sharpen round, and live cursors. Optional by design. */
+function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
+  const args = { roomId };
+  const signals = useQuery(api.mapSignals.listSignals, args);
+  const themes = useQuery(api.agents.themes.listThemes, args);
+  const sharpen = useQuery(api.agents.themes.getSharpen, args);
+  const cursors = useQuery(api.map.listCursors, args);
+  const extras: RoomData = {
+    ...data,
+    mapSignals: signals?.ok ? signals.value : undefined,
+    mapThemes: themes?.ok ? themes.value : undefined,
+    sharpen: sharpen?.ok ? sharpen.value : undefined,
+    cursors: cursors?.ok ? cursors.value : undefined,
+  };
+  return <RoomSurfaceView surface={surface} data={extras} actions={actions} />;
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {

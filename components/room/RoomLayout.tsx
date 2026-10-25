@@ -179,6 +179,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <div className="flex gap-2">
           <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
           <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
+          {stage === "map" && map.tools}
           {stage === "map" && <button className={chip} onClick={() => mapView.reset()} title="Drag the sky to move · scroll to zoom · 0 recenters">Recenter</button>}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}

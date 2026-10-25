@@ -172,6 +172,24 @@ const giftDecorations: Purger = async (ctx, roomId, limit) =>
 const giftWorlds: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("giftWorlds").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
+// The gift map's own tables: shared layout, reactions, cursors, ideas, signals, themes and sharpen rounds.
+const mapFeedback: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapFeedback").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapCursors: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapCursors").withIndex("by_room_participant", (q) => q.eq("roomId", roomId)).take(limit));
+const mapPositions: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapPositions").withIndex("by_room_node", (q) => q.eq("roomId", roomId)).take(limit));
+const mapSprouts: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSprouts").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const ideaCalls: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("ideaCalls").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapSignals: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSignals").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapThemes: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapSharpens: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+
 const participants: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
@@ -199,6 +217,14 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["productListings", productListings],
   ["giftDecorations", giftDecorations],
   ["giftWorlds", giftWorlds],
+  ["mapFeedback", mapFeedback],
+  ["mapCursors", mapCursors],
+  ["mapPositions", mapPositions],
+  ["mapSprouts", mapSprouts],
+  ["ideaCalls", ideaCalls],
+  ["mapSignals", mapSignals],
+  ["mapThemes", mapThemes],
+  ["mapSharpens", mapSharpens],
   ["participants", participants],
 ];
 
