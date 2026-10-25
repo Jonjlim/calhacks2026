@@ -16,6 +16,7 @@ import { platformTop } from "../props/Stonework";
 import { GIFT_SPOT } from "../sceneConfig";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
+import { mapView } from "./mapView";
 import s from "./gift-rings.module.css";
 
 /**
@@ -200,8 +201,8 @@ function workSpot(actor: CouncilActor, rings: ReturnType<typeof useRings>): THRE
     const g = rings?.gifts[0];
     return g ? at(g.x * 0.85, g.z * 0.85, ringBase()) : at(3.4, 2.2);
   }
-  // Keeper beside the box, Courier at the centre; offset so the two never stand inside the present.
-  return actor === "keeper" ? at(-1.9, 1.2) : at(1.9, 1.6);
+  // Kept beyond radius 3.2 of the present: the player garden spots (2.45-2.8) and their mini spirits live inside it.
+  return actor === "keeper" ? at(-3.4, 0.8) : at(0.6, -3.6);
 }
 
 /** Model height in its own units (hood top of the storybook exports). */
@@ -217,6 +218,9 @@ const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _qy = new THREE.Quaternion();
 const _yAxis = new THREE.Vector3(0, 1, 0);
+const _ndc = new THREE.Vector3();
+/** Inset of the off-screen chevron from the viewport edge, in px. */
+const EDGE_INSET = 28;
 
 function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet, focused, spot, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; /** During the gift reveal: how they feel about it. */ mood?: CouncilClip; quiet: boolean; /** The branch in focus concerns this companion (memories: Archivist, themes: Muse, gifts: Scout). */ focused?: boolean; /** Where it goes to work while its task runs. */ spot: THREE.Vector3 | null; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
@@ -231,7 +235,9 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
   const tint = failed ? FAILED : role;
   const glowMat = useMemo(() => new THREE.SpriteMaterial({ map: sparkleTexture(), color: tint, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }), [tint]);
   useEffect(() => () => glowMat.dispose(), [glowMat]);
-  const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1, pos: new THREE.Vector3(), mode: "dock" as "dock" | "out" | "there" | "back", init: false });
+  const state = useRef({ out: 0, react: -10, lastAt: bubble?.at ?? 0, scale: 1, pos: new THREE.Vector3(), mode: "dock" as "dock" | "out" | "there" | "back", init: false, dest: new THREE.Vector3(), edge: { x: 0, y: 0, angle: 0 } });
+  const [offscreen, setOffscreen] = useState(false);
+  const chevron = useRef<HTMLButtonElement>(null);
   const [walking, setWalking] = useState(false);
   // Only a completion that arrives live celebrates; a refresh restores a quiet pose.
   const [celebrating, setCelebrating] = useState(false);
@@ -253,7 +259,8 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
   const gentle = useGentle(!quiet && speaking && said ? said : null);
   const narrow = size.width < NARROW;
   const active = !!bubble;
-  const away = working && !!spot && !narrow && !mood;
+  // Narrow screens and reduced motion never walk: they stay docked and the trail points instead.
+  const away = working && !!spot && !narrow && !mood && animate;
 
   useEffect(() => {
     if (!animate || member.status !== "idle") return;
@@ -309,9 +316,13 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
     if (!st.init) { st.pos.copy(_dock); st.init = true; }
 
     // Docked: fixed on the screen. Away: a real walk in world space to the work spot and back.
-    if (away && (st.mode === "dock" || st.mode === "back")) st.mode = "out";
+    if (away && (st.mode === "dock" || st.mode === "back")) {
+      st.mode = "out";
+      // Frozen for the whole walk, so a map relayout mid-task does not redirect it.
+      st.dest.copy(spot!);
+    }
     if (!away && (st.mode === "out" || st.mode === "there")) st.mode = "back";
-    const dest = st.mode === "out" || st.mode === "there" ? spot! : _dock;
+    const dest = st.mode === "out" || st.mode === "there" ? st.dest : _dock;
     let moving = false;
     if (st.mode === "dock") st.pos.copy(_dock);
     else {
@@ -340,6 +351,23 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       _e.set(0, Math.atan2(look.x, look.z), 0);
       g.quaternion.copy(_q).multiply(_qy.setFromAxisAngle(_yAxis, 0.4)).slerp(_qy.setFromEuler(_e), w);
     }
+    let off = false;
+    if (speaking && !quiet && st.mode !== "dock") {
+      _ndc.copy(st.pos).project(camera);
+      const behind = _ndc.z > 1;
+      if (behind) _ndc.multiplyScalar(-1);
+      off = behind || Math.abs(_ndc.x) > 1 || Math.abs(_ndc.y) > 1;
+      if (off) {
+        const m = Math.max(Math.abs(_ndc.x), Math.abs(_ndc.y), 1e-6);
+        const hx = size.width / 2 - EDGE_INSET, hy = size.height / 2 - EDGE_INSET;
+        st.edge.x = size.width / 2 + (_ndc.x / m) * hx;
+        st.edge.y = size.height / 2 - (_ndc.y / m) * hy;
+        st.edge.angle = Math.atan2(-_ndc.y, _ndc.x);
+        const el = chevron.current;
+        if (el) el.style.transform = `translate(-50%, -50%) rotate(${st.edge.angle}rad)`;
+      }
+    }
+    if (off !== offscreen) setOffscreen(off);
     st.scale = THREE.MathUtils.lerp(dockScale, WORLD_SCALE, w);
     g.scale.setScalar(st.scale);
     const sc = glow.current;
@@ -393,6 +421,20 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
           )}
         </div>
       </Html>
+      {offscreen && (
+        <Html calculatePosition={() => [state.current.edge.x, state.current.edge.y]} zIndexRange={[40, 39]}>
+          <button
+            ref={chevron}
+            type="button"
+            data-map-token
+            aria-label={`Show ${COUNCIL_LABEL[actor]}`}
+            onClick={() => mapView.focus(state.current.pos.x - GIFT_SPOT.x, state.current.pos.z - GIFT_SPOT.z)}
+            style={{ position: "absolute", width: 28, height: 28, border: 0, borderRadius: 14, background: "rgba(20,24,32,0.55)", color: tint, cursor: "pointer", fontSize: 18, lineHeight: "28px", padding: 0, pointerEvents: "auto", transform: `translate(-50%, -50%) rotate(${state.current.edge.angle}rad)` }}
+          >
+            ›
+          </button>
+        </Html>
+      )}
       {!quiet && active && !speaking && !hover && (
         <Html position={[0.95, 2.0, 0]} style={{ pointerEvents: "none" }}>
           <i data-map-token className={s.statusDot} style={{ background: tint }} aria-hidden />
@@ -415,6 +457,8 @@ export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate
   const groups = useRef<Partial<Record<CouncilActor, THREE.Group>>>({});
   const registered = useMemo(() => (actor: CouncilActor, group: THREE.Group) => void (groups.current[actor] = group), []);
   // One prominent voice at a time: whoever's task changed most recently.
+  // Moss's guide owns the speech while it shows a cue.
+  const hush = revealing || rings?.guideScene != null;
   const voices = COUNCIL_ACTORS.filter((a) => bubbles[a]).sort((a, b) => bubbles[b]!.at - bubbles[a]!.at || (members[b].sequence - members[a].sequence)).slice(0, 2);
   const speaker = voices[0] ?? null;
   // A trail only follows a live event whose object is clear, and only for the one that is speaking.
@@ -425,7 +469,7 @@ export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate
   return (
     <group>
       {COUNCIL_ACTORS.map((actor, i) => (
-        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={voices.includes(actor) && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} spot={spots[actor]} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
+        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={voices.includes(actor) && !hush} animate={animate} mood={mood} quiet={hush} focused={focusActor === actor} spot={spots[actor]} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
       ))}
       {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={ROBOT_TINT[trail.actor]} startedAt={trail.at} />}
     </group>
