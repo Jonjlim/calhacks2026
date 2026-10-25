@@ -110,3 +110,28 @@ Offline verification of the new runner: two Node tests passed (isolated config,
 missing credentials/model refusal); invoking without `--run` sent no requests;
 the four live checks skip by default. Frontend and Convex TypeScript checks pass.
 No live application-level Bitdeer check has been run by this agent.
+
+## Application and personal-deployment verification
+
+Alex supplied a passing application-run summary: all four checks passed
+(extraction 2554 ms, unmarked-image/photo-schema 5840 ms, grounded recommendation
+5280 ms, recipient response 718 ms; 8.84 s total). These requests used the
+unchanged application adapter, including `max_completion_tokens`; no parameter
+rewrite was needed for the tested GLM Flash requests.
+
+After Alex configured cool-bat-724, a read-only comparison confirmed the Bitdeer
+base URL and GLM Flash model, nonempty API key, 2400 output-token limit and absent
+reasoning option. Environment values/secrets were not printed. The original
+frontend's NEXT_PUBLIC_CONVEX_URL also points to cool-bat-724.
+
+This agent then ran the existing deployed `agents/smoke:all` on cool-bat-724,
+without --push/codegen or database/room writes. It returned three grounded
+extracted clues, a recommendation citing the supplied listing/clue, and a yes
+recipient answer with `leaksRawText: false`. These are live personal-backend
+synthetic checks, not production or full browser acceptance. No new code was
+deployed and no Apify, Stripe or real user data was used.
+
+The `/demo/contributions` preview remains a local fixture and does not call the
+model. Remaining acceptance is a real-room text/photo flow using the personal
+backend (review, selective publication, source-linked research). Real-photo
+activity/style quality and the new ring UI remain separate checks.
