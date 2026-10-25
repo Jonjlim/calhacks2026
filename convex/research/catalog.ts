@@ -5,7 +5,9 @@ import type {
 } from "../../lib/contracts";
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { searchOrigin, withSearchNote } from "./foundBy";
 import { filterListings, rankListings, type ExcludedListing } from "./score";
+import { trendJobIdInFingerprint } from "./trendJobs";
 
 export interface CatalogState extends RecommendationsView {
   clues: PublishedClue[];
@@ -58,9 +60,19 @@ export async function readCatalog(
     budgetMinor: room.budgetMinor,
     limit: candidatePool?.brief?.listingLimit ?? 12,
   });
+  const trendId = candidatePool ? trendJobIdInFingerprint(candidatePool.inputHash) : null;
+  const trendJobId = trendId ? ctx.db.normalizeId("trendJobs", trendId) : null;
+  const trendJob = trendJobId ? await ctx.db.get(trendJobId) : null;
+  const foundBy = candidatePool ? searchOrigin({
+    query: candidatePool.brief?.queryTerms[0],
+    clues,
+    poolClueIds: candidatePool.publishedClueIds,
+    trendClueId: trendId ? (trendJob?.publishedClueId ?? "") : null,
+  }) : undefined;
   const recommendations = ranked.map((row) => ({
     ...row,
-    explanation: [row.explanation, ...(approved.get(row.listingId) ?? [])].join(" "),
+    explanation: [withSearchNote(row.explanation, row.publishedClueIds, foundBy, clues), ...(approved.get(row.listingId) ?? [])].join(" "),
+    ...(foundBy ? { foundBy } : {}),
     id: `${candidatePool!._id}:${row.listingId}`,
     roomId: room._id,
     createdAt: candidatePool!.createdAt,

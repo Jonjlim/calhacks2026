@@ -418,6 +418,19 @@ export interface Recommendation {
   trendSignal: number; // 0 unless sourced
   explanation: string;
   createdAt: number;
+  /** The one search that found this listing. Provenance only: never a clue match or citation. */
+  foundBy?: SearchOrigin;
+}
+
+/**
+ * Where a research pool's single search came from. `memory`: a published clue's
+ * search phrase. `trend`: a chosen Google Trends suggestion for that clue.
+ * `discovery`: any other sourced direction (for example a public style sample).
+ */
+export interface SearchOrigin {
+  query: string;
+  source: "memory" | "trend" | "discovery";
+  publishedClueId?: string;
 }
 
 // ---------- Selection, contributions, proposals ----------

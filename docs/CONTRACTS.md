@@ -497,6 +497,13 @@ interface Recommendation {
   trendSignal: number; // 0 unless sourced
   explanation: string;
   createdAt: number;
+  foundBy?: SearchOrigin; // provenance only; see "Search provenance and variety" below
+}
+
+interface SearchOrigin {
+  query: string;
+  source: "memory" | "trend" | "discovery";
+  publishedClueId?: string;
 }
 ```
 
@@ -1731,3 +1738,13 @@ reselect the remaining valid items. Simulation follows the combined revision and
 therefore resets with it; a real charge/order is never created. Each item keeps
 its own source link. Dev 1 must render `revision.items` for approval and
 `selection.items` for the current box, with the one-item fallback for old rows.
+
+
+### Search provenance and variety (Dev 4, Phase 2)
+
+Owner: Dev 4. Consumers: Dev 1 (gift captions, "Why this?" MAP-016), Dev 3 (catalog reads). Additive: one optional `Recommendation.foundBy` field; no schema, endpoint or validator change. Migration: none.
+
+- **`foundBy`.** Each research pool comes from exactly one provider search (the first query term), so every recommendation in it carries that `query`. `source: "memory"` names the active published clue whose search phrase it was; `"trend"` names the chosen Google Trends suggestion and its clue; `"discovery"` is any other sourced direction, or a memory since withdrawn (no `publishedClueId` then). It says how a listing was **found**. It is never a clue citation: `publishedClueIds`, scores and exclusions are unchanged, and the buyer agent's citation rules still read only `publishedClueIds`.
+- **Explanation.** A listing that no clue matches, found by a memory search, now reads `Found by searching "hiking" from "we hiked mt hood". No published clue matches this directly`. Matched listings and trend finds keep their existing wording (the map already captions trend finds).
+- **Variety.** `rankListings` keeps the best-ranked listing of each product and at most `MAX_PER_SELLER` (3) per seller before other sellers' products. A product is its title before any `|`, without size, fit, colour, pure-number or catalog-code words; titles match when equal or when one extends the other by at least three leading words. Men's and women's versions stay separate. A seller's further distinct products fill only slots nobody else can. This changes which rows are shown and their order, never a score or citation. It applies everywhere ranking runs (room catalog, council, agents).
+- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`) and drops enthusiast suffixes (`matcha drinker` → `matcha`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.

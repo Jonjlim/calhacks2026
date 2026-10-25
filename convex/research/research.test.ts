@@ -97,6 +97,18 @@ describe("research pipeline", () => {
     expect(results.recommendations.every(rec => results.listings.some(listing => listing.id === rec.listingId))).toBe(true);
   });
 
+  it("says which search found every listing, from which memory", async () => {
+    const { t, alex, input, clue } = await setup();
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    await t.mutation(research.completeJob, { jobId, raw: fixture.pages, retrievedAt: fixture.retrievedAt });
+    const { recommendations } = unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId }));
+    expect(recommendations.length).toBeGreaterThan(0);
+    for (const rec of recommendations) {
+      expect(rec.foundBy).toEqual({ query: "pottery", source: "memory", publishedClueId: clue._id });
+    }
+  });
+
   it("re-ranks cached candidates immediately when ownership is published, without another search", async () => {
     const { t, alex, input } = await setup();
     const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));

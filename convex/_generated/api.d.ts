@@ -69,6 +69,7 @@ import type * as research_fashionPolicy from "../research/fashionPolicy.js";
 import type * as research_fashionProvider from "../research/fashionProvider.js";
 import type * as research_fashionSchema from "../research/fashionSchema.js";
 import type * as research_fixtures_maya from "../research/fixtures/maya.js";
+import type * as research_foundBy from "../research/foundBy.js";
 import type * as research_normalize from "../research/normalize.js";
 import type * as research_provider from "../research/provider.js";
 import type * as research_research from "../research/research.js";
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   "research/fashionProvider": typeof research_fashionProvider;
   "research/fashionSchema": typeof research_fashionSchema;
   "research/fixtures/maya": typeof research_fixtures_maya;
+  "research/foundBy": typeof research_foundBy;
   "research/normalize": typeof research_normalize;
   "research/provider": typeof research_provider;
   "research/research": typeof research_research;
