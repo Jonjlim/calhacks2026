@@ -220,6 +220,12 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   }, [data.trends?.samples, data.trends?.sample, clues, layout.clues, trendNet, usedTrends, now]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
+  const focusedGift = selectedKey?.startsWith("gift:") ? layout.gifts.find(g => `gift:${g.listingId}` === selectedKey) : undefined;
+  useEffect(() => {
+    if (focusedGift) mapView.trackGift(focusedGift.x, focusedGift.z);
+    else if (mapView.target.giftFocus === 1) mapView.returnFromGift();
+  }, [selectedKey, focusedGift?.x, focusedGift?.z]);
+
   const openBox = () => setSelectedKey("box");
   // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
   const startAdd = (what: "memory" | "wish" | "idea") => {
@@ -908,8 +914,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (key !== "box" && key !== `gift:${whyListing}`) setWhyListing(null);
       // Choosing a memory, theme, gift or direction glides the camera to it, keeping the viewer's angle.
       const at = key ? layout.clues.find((c) => `clue:${c.id}` === key) ?? layout.themes.find((t) => `theme:${t.id}` === key) ?? layout.gifts.find((g) => `gift:${g.listingId}` === key) ?? directionNodes.find((d) => d.key === key) : undefined;
-      if (at) mapView.focus(at.x, at.z, key?.startsWith("gift:") ? 0.38 : 0.55);
-      else if (key === null && selectedKey?.startsWith("gift:")) mapView.reset();
+      if (at && key?.startsWith("gift:")) mapView.focusGift(at.x, at.z);
+      else if (at) mapView.focus(at.x, at.z);
+      else if (key === null && selectedKey?.startsWith("gift:")) mapView.returnFromGift();
     },
     onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);

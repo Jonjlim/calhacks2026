@@ -293,7 +293,7 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
           </div>
         </Html>
         {info && (k.startsWith("gift:") ? (
-          <Html fullscreen zIndexRange={[90, 80]} style={{ pointerEvents: "none" }}><GiftOrbitMenu gift={rings.gifts.find(g => g.key === k)!} detail={info}
+          <Html fullscreen zIndexRange={[90, 80]} style={{ pointerEvents: "none" }}><GiftOrbitMenu gift={rings.gifts.find(g => g.key === k)!} detail={info} onMap
             evaluations={rings.evaluations?.[k]} onClose={() => rings.onSelect(null)} /></Html>
         ) : (
           <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>

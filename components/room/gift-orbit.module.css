@@ -34,3 +34,12 @@
 @media (max-width: 560px) { .stage { min-height: min(660px, calc(100dvh - 24px)); } .header h2 { font-size: 20px; } .header { inset-inline: 34px; } .item { top: 43%; } .photo { width: 112px; height: 112px; } .action { top: 43%; width: 132px; min-height: 47px; font-size: 12px; --y: -132px; } .action:nth-child(2) { --x: -76px; --y: 145px; } .action:nth-child(3) { --x: 76px; --y: 145px; } .action:nth-child(4) { --y: 207px; min-height: 48px; width: 224px; } .footer { top: calc(43% + 246px); gap: 5px; } .feedback { top: calc(100% + 4px); } }
 @media (max-height: 650px) { .stage { min-height: 580px; max-height: none; } .backdrop { place-items: start center; } }
 @media (prefers-reduced-motion: reduce) { .backdrop, .action, .feedback { animation: none; } }
+
+/* The live map keeps its original island/photo visible throughout the camera flight. */
+.onMap { background: transparent; animation: none; }
+.onMap .photo, .onMap .item > strong { display: none; }
+.onMap .item { top: calc(50% + 96px); pointer-events: none; }
+.onMap .action { top: 50%; }
+.onMap .footer { top: calc(50% + 220px); }
+.arriving .stage { visibility: hidden; }
+@media (max-width: 560px) { .onMap .footer { top: calc(50% + 246px); } }

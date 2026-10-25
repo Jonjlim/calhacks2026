@@ -1,18 +1,31 @@
 "use client";
 
-import { type CSSProperties, useEffect, useRef } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { mapView } from "@/components/world/room/mapView";
 import { MapIcon } from "@/components/world/room/MapIcon";
 import type { RingAction, RingDetail, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "./gift-orbit.module.css";
 
 /** Four main choices around the real product; rare actions stay out of its orbit. */
-export function GiftOrbitMenu({ gift, detail, evaluations, onClose }: {
+export function GiftOrbitMenu({ gift, detail, evaluations, onClose, onMap = false }: {
   gift: RingsWorld["gifts"][number];
   detail: RingDetail;
   evaluations?: NonNullable<RingsWorld["evaluations"]>[string];
+  onMap?: boolean;
   onClose(): void;
 }) {
+  const [ready, setReady] = useState(!onMap);
+  useEffect(() => {
+    if (!onMap) return;
+    let frame = 0;
+    const check = () => {
+      if (mapView.giftArrived) setReady(true);
+      else frame = requestAnimationFrame(check);
+    };
+    frame = requestAnimationFrame(check);
+    return () => cancelAnimationFrame(frame);
+  }, [onMap, gift.key]);
   const close = useRef<HTMLButtonElement>(null);
   const [primary, support, pass] = [detail.actions.find(a => a.tone === "gold"), detail.actions.find(a => a.icon === "heart"), detail.actions.find(a => a.label === "Pass")];
   const why = detail.actions.find(a => a.label === "How we got here") ?? detail.actions.find(a => a.label === "Why?");
@@ -22,15 +35,15 @@ export function GiftOrbitMenu({ gift, detail, evaluations, onClose }: {
   const choosingReason = !primary;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    close.current?.focus({ preventScroll: true });
+    if (ready) close.current?.focus({ preventScroll: true });
     return () => { if (previous?.isConnected) previous.focus({ preventScroll: true }); };
-  }, [gift.key]);
+  }, [gift.key, ready]);
   const action = (a: RingAction, i: number, orbit = true) => <button key={a.label} type="button"
     className={`${orbit ? s.action : s.secondary} ${a.tone ? s[a.tone] : ""}`} style={{ "--slot": i } as CSSProperties}
     aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
     <MapIcon name={a.icon} size={21} /><span>{a === why ? "Why this gift?" : a.label}</span>
   </button>;
-  return createPortal(<div className={s.backdrop} onPointerDown={e => e.stopPropagation()} onClick={onClose}>
+  return createPortal(<div className={`${s.backdrop} ${onMap ? s.onMap : ""} ${ready ? "" : s.arriving}`} onPointerDown={e => e.stopPropagation()} onClick={onClose}>
     <section className={s.stage} role="dialog" aria-modal="true" aria-label={`Gift: ${gift.title}`}
       onClick={e => e.stopPropagation()} onKeyDown={e => {
         if (e.key === "Escape") { e.stopPropagation(); onClose(); }
@@ -48,7 +61,7 @@ export function GiftOrbitMenu({ gift, detail, evaluations, onClose }: {
         <span className={s.tally} aria-live="polite">{gift.up} feels right · {gift.down} {gift.down === 1 ? "pass" : "passes"}</span>
         {(support?.on || pass?.on) && <span className={s.feedback} key={`${support?.on}-${pass?.on}`}>{support?.on ? "You pulled this gift in" : "You passed on this gift"}</span>}
       </div>
-      {!choosingReason && <nav className={s.orbit} aria-label="Gift actions">{main.map((a, i) => action(a, i))}</nav>}
+      {ready && !choosingReason && <nav className={s.orbit} aria-label="Gift actions">{main.map((a, i) => action(a, i))}</nav>}
       <footer className={s.footer}>
         {detail.note && <div className={s.reason}>{detail.note}</div>}
         {choosingReason ? <div className={s.reason}><div>{detail.caption}</div><div className={s.extra}>{detail.actions.map((a, i) => action(a, i, false))}</div></div> : <>
