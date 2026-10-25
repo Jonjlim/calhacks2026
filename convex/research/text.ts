@@ -5,7 +5,7 @@
  */
 
 const FRAMING_PREFIX =
-  /^(?:(?:she|he|they|maya)\s+)?(?:(?:really|kind of|kinda|also)\s+)?(?:is\s+|are\s+)?(?:interested in|into|likes?|loves?|enjoys?|wants?(?: to)?(?: (?:try|take|learn|get|do))?|wishes?(?: for)?|would love(?: to)?(?: (?:try|take|learn|get))?|already (?:owns?|has|have|bought|got)|owns?|has|have|bought|got|hates?|dislikes?|(?:does not|doesn't|don't|do not) (?:like|want|need)|no more|not)\s+/i;
+  /^(?:(?:she|he|they|maya)\s+)?(?:(?:really|kind of|kinda|also)\s+)?(?:is\s+|are\s+)?(?:interested in|into|likes?|loves?|adores?|enjoys?|wants?(?: to)?(?: (?:try|take|learn|get|do))?|wishes?(?: for)?|would love(?: to)?(?: (?:try|take|learn|get))?|already (?:owns?|has|have|bought|got)|owns?|has|have|bought|got|hates?|dislikes?|(?:does not|doesn't|don't|do not) (?:like|want|need)|no more|not)\s+/i;
 
 const LEADING_ARTICLE = /^(?:a|an|the|some|more|another|any)\s+/i;
 const TRAILING_FILLER = /\s+(?:lately|recently|this year|next year|anymore|any more|again|too)$/i;
@@ -26,9 +26,31 @@ const CANONICAL: Record<string, string> = {
   workshop: "class",
 };
 
+// Framing words whose stretched spellings ("lovees", "obsesssed") are typos, not new words.
+const FRAMING_WORDS = [
+  "love", "loves", "like", "likes", "adore", "adores", "enjoy", "enjoys", "want", "wants",
+  "owns", "hates", "obsessed", "plays", "collects", "really", "already",
+];
+const squash = (word: string) => word.replace(/([a-z])\1+/g, "$1");
+const FRAMING_BY_SQUASH = new Map(FRAMING_WORDS.map((word) => [squash(word), word]));
+
+/**
+ * Repairs repeated-letter typos in the leading framing words only. Comparing
+ * squashed spellings keeps real words apart: "gloves" and "lives" never become "loves".
+ */
+function repairFramingTypos(text: string): string {
+  const words = text.split(/\s+/);
+  for (let i = 0; i < Math.min(3, words.length - 1); i++) {
+    const word = words[i]!;
+    const fixed = FRAMING_BY_SQUASH.get(squash(word));
+    if (fixed && fixed !== word) words[i] = fixed;
+  }
+  return words.join(" ");
+}
+
 /** Strips framing like "Already owns a" from a clue so only the subject remains. */
 export function cluePhrase(text: string): string {
-  let phrase = text.trim().replace(/[.!?]+$/, "").trim();
+  let phrase = repairFramingTypos(text.trim().toLowerCase().replace(/[.!?]+$/, "").trim());
   phrase = phrase.replace(FRAMING_PREFIX, "");
   phrase = phrase.replace(LEADING_ARTICLE, "");
   phrase = phrase.replace(TRAILING_FILLER, "");
@@ -81,7 +103,69 @@ export function shoppingPhrase(text: string): string {
   phrase = phrase.trim();
   // "Loves to bowl" is about bowling, not bowls: a lone verb after "to" becomes its activity.
   const verb = /^to ([a-z]+)$/.exec(phrase);
-  return verb ? activity(verb[1]!) : phrase.replace(/^to\s+/, "");
+  if (verb) return activity(verb[1]!);
+  phrase = phrase.replace(/^to\s+/, "");
+  return narrativeActivity(phrase) ?? phrase.replace(ENTHUSIAST_SUFFIX, "");
+}
+
+// "Matcha drinker", "coffee lover": the thing, not the person. ("Fan" stays: ceiling fans are things.)
+const ENTHUSIAST_SUFFIX = /\s+(?:drinkers?|lovers?|enthusiasts?|addicts?|junkies?|connoisseurs?|aficionados?)$/;
+
+/**
+ * Reviewed activity verbs only. A memory told as a story ("we hiked mt hood")
+ * or about the person ("avid climber") becomes the activity, so places and
+ * companions never reach a product search. Other wording passes through.
+ */
+const ACTIVITY_VERBS = new Set([
+  "hike", "climb", "boulder", "bowl", "camp", "fish", "ski", "snowboard", "surf", "swim", "run",
+  "bike", "cycle", "kayak", "sail", "skate", "golf", "garden", "bake", "cook", "knit", "crochet",
+  "sew", "paint", "draw", "dance", "sing", "hunt", "row",
+]);
+const IRREGULAR_PAST: Record<string, string> = { ran: "run", swam: "swim", sang: "sing", drew: "draw" };
+/** Agent nouns that name the person, never an object ("camper" and "bowler" are also things). */
+const AGENT_NOUNS: Record<string, string> = {
+  hiker: "hike", climber: "climb", boulderer: "boulder", skier: "ski", snowboarder: "snowboard", surfer: "surf",
+  swimmer: "swim", runner: "run", biker: "bike", cyclist: "cycle", kayaker: "kayak", sailor: "sail",
+  skater: "skate", golfer: "golf", gardener: "garden", baker: "bake", knitter: "knit", dancer: "dance", angler: "fish",
+};
+const PRONOUN = /^(?:we|i|she|he|they)\s+/;
+const STORY_ADVERB = /^(?:all|both|once|often|always|first|recently|finally|together)\s+/;
+// What follows a story verb: where, when or with whom. "Baked goods" and "knitted socks" stay products.
+const STORY_NEXT = /^(?:in|at|on|around|near|up|down|through|across|with|to|the|a|an|mt|mount|every|last|this|together|all)\b/;
+const WHERE_NEXT = /^(?:in|at|on|around|near|up|through|across|with|mt|mount)\b/;
+
+function pastTenseVerb(word: string): string | undefined {
+  if (IRREGULAR_PAST[word]) return IRREGULAR_PAST[word];
+  if (!word.endsWith("ed")) return undefined;
+  const stem = word.slice(0, -2);
+  return [stem, word.slice(0, -1), stem.replace(/([^aeiou])\1$/, "$1")].find((c) => ACTIVITY_VERBS.has(c));
+}
+
+/** "hiking", "swimming", "skiing" → whether it is a reviewed activity. */
+function isActivityIng(word: string): boolean {
+  if (!word.endsWith("ing")) return false;
+  const stem = word.slice(0, -3);
+  return [stem, stem + "e", stem.replace(/([^aeiou])\1$/, "$1")].some((v) => ACTIVITY_VERBS.has(v));
+}
+
+function narrativeActivity(phrase: string): string | undefined {
+  const person = /^(?:(?:an?\s+)?(?:avid|keen|big|huge|passionate|serious|weekend|casual)\s+)?([a-z]+)$/.exec(phrase);
+  const agent = person ? AGENT_NOUNS[person[1]!] : undefined;
+  if (agent) return activityNoun(agent);
+  const subject = PRONOUN.test(phrase);
+  const told = phrase.replace(PRONOUN, "").replace(STORY_ADVERB, "");
+  const went = /^(?:went|go|goes)\s+([a-z]+)\b/.exec(told)?.[1];
+  if (went && isActivityIng(went)) return went;
+  const [first = "", ...rest] = told.split(" ");
+  const past = pastTenseVerb(first);
+  if (past && (subject || STORY_NEXT.test(rest.join(" ")))) return activityNoun(past);
+  // "Hiking in Yosemite", "skiing at Tahoe": keep the activity, drop where.
+  if (isActivityIng(first) && WHERE_NEXT.test(rest.join(" "))) return first;
+  return undefined;
+}
+
+function activityNoun(verb: string): string {
+  return verb === "golf" ? "golf" : activity(verb);
 }
 
 function activity(verb: string): string {
