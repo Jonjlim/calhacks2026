@@ -26,7 +26,7 @@ export const CONVERGENCE_TIMES = {
   /** The shaking builds. */
   charge: [7.0, 9.25],
   /** Just before the burst the ribbon whips off the box, so the present bursts bare. */
-  ribbonOff: [8.4, 9.1],
+  ribbonOff: [8.05, 9.2],
   /** The camera swings to the middle of the screen and closes in, ready for the explosion. */
   boom: [8.2, 9.2],
   burst: [9.3, 10.1],
@@ -130,8 +130,8 @@ export interface GiftChoreography {
   glow: number;
   /** Warm pool of light beneath the present, 0..1. */
   halo: number;
-  /** 0..1 while the ribbon is whipped off the box, before the burst. */
-  ribbonLift: number;
+  /** 0..1 as the bow collapses into the knot, just before the ribbon is peeled off. */
+  ribbonKnot: number;
   /** 0..1 through the burst: the walls, lid, floor and ribbon fly outward. */
   burst: number;
 }
@@ -167,12 +167,17 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
   const wind = (a: number, b: number) => smooth(span(t, a, b));
   const wrapped = t >= T.wrap[0];
   const off = t >= T.ribbonOff[0];
+  // The bow collapses into the knot, then the bands hand over to the peeling strip (RibbonUnravel).
+  const knot = span(t, T.ribbonOff[0], T.ribbonOff[0] + 0.35);
+  const swapped = t >= T.ribbonOff[0] + 0.35;
   const ribbon = off
-    ? { bandX: 1, bandZ: 1, tails: 1, bow: 1 } // whipped off whole (see `ribbonLift`), not unwound
+    ? swapped
+      ? { bandX: 0, bandZ: 0, tails: 0, bow: 0 }
+      : { bandX: 1, bandZ: 1, tails: 1, bow: 1 - 0.92 * smooth(knot) }
     : wrapped
       ? { bandX: wind(4.65, 5.35), bandZ: wind(5.0, 5.75), tails: wind(5.5, 6.05), bow: easeOutBack(span(t, 5.8, 6.5)) }
       : { bandX: untie(0.35, 0.85), bandZ: untie(0.3, 0.8), tails: untie(0.2, 0.5), bow: untie(0.0, 0.35) };
-  const ribbonLift = smoother(span(t, T.ribbonOff[0], T.ribbonOff[1]));
+  const ribbonKnot = smooth(knot);
 
   // --- Levitation, charging, shaking. -----------------------------------
   const rise = smoother(span(t, T.levitate[0], T.levitate[1]));
@@ -216,7 +221,7 @@ export function giftChoreography(t: number, fill: number): GiftChoreography {
     charge,
     glow,
     halo,
-    ribbonLift,
+    ribbonKnot,
     burst,
   };
 }

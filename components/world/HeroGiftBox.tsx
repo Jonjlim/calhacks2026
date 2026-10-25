@@ -17,7 +17,7 @@ import { BASE_TOP, BOX_SHELL, GIFT_BOX } from "./unwrap/invitationLayout";
 import { FlyingTag } from "./unwrap/FlyingTag";
 import { GiftUnwrap, LID_OPEN_ANGLE } from "./unwrap/GiftUnwrap";
 import { LobbySpirits } from "./unwrap/LobbySpirits";
-import { RIBBON_SWAP, RibbonUnravel } from "./unwrap/RibbonUnravel";
+import { convergenceUnravel, RIBBON_SWAP, RibbonUnravel } from "./unwrap/RibbonUnravel";
 import { progress, span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { convergence } from "@/components/convergence/convergenceClock";
 import { type Artifact, buildArtifacts, filledAt } from "@/lib/convergence/artifacts";
@@ -454,32 +454,23 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       hollowBox.current.rotation.set(e * 4.2, e * 1.5, e * 3);
       hollowBox.current.visible = hollow && b < 0.8;
     }
-    // Before the burst the ribbon is whipped off the box: it unwinds as it lifts away in a spiral.
-    const whip = cv ? cv.ribbonLift : 0;
-    if (bands.current) {
-      bands.current.position.y = whip * whip * 6;
-      bands.current.rotation.y = whip * 6;
-      bands.current.scale.setScalar(1 + whip * 1.1);
-    }
-    if (tails.current) tails.current.position.y = ribbons.top + whip * whip * 6;
-
-    const whip2 = cv ? cv.ribbonLift : 0;
-    // Once whipped clear of the box the ribbon is gone.
-    if (whip2 >= 0.995) {
-      if (bands.current) bands.current.visible = false;
-      if (tails.current) tails.current.visible = false;
+    // Just before the burst the bow collapses into the knot and the ribbon peels off as one strip (RibbonUnravel).
+    const knot = cv ? cv.ribbonKnot : 0;
+    if (cv && knot > 0) {
+      if (tails.current) tails.current.scale.set(1, Math.max(0.01, 1 - knot * 0.85), 1);
+      if (sideTail.current) sideTail.current.rotation.z += knot * 1.1;
     }
     const sway = animate ? Math.sin(t * 2.1) * 0.03 : 0;
     const unfurl = rb ? (1 - Math.min(1, rb.bow)) * 0.9 : collapse * 0.9;
     if (loopL.current) loopL.current.rotation.z = -sway - flap - s.hover * 0.08 - unfurl;
     if (loopR.current) loopR.current.rotation.z = sway + flap + s.hover * 0.08 + unfurl;
     if (bow.current) {
-      bow.current.visible = wrapped && (!rb || rb.bow > 0.002) && whip2 < 0.995;
+      bow.current.visible = wrapped && (!rb || rb.bow > 0.002);
       // Loops fold down into the knot as the ribbon is pulled through it.
       bow.current.scale.setScalar(Math.max(0.0001, (1 + s.hover * 0.04 + Math.abs(flap) * 0.15) * (rb ? Math.max(0, rb.bow) : 1 - collapse * 0.92)));
       bow.current.position.set(0, ribbons.top + 0.02 + Math.sin(collapse * Math.PI) * 0.06, 0);
-      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + whip2 * 5, 0);
-      if (whip2 > 0) bow.current.position.y += whip2 * whip2 * 6;
+      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + knot * 0.8, 0);
+      if (knot > 0) bow.current.position.y += Math.sin(knot * Math.PI) * 0.06;
     }
   });
 
@@ -616,6 +607,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       <FlyingTag />
       <GiftUnwrap bodyRef={body} />
       <LobbySpirits animate={animate} />
+      <RibbonUnravel driver={convergenceUnravel} />
       <GiftConvergence />
     </>
   );

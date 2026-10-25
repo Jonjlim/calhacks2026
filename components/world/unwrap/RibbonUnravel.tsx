@@ -3,7 +3,9 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { convergence } from "@/components/convergence/convergenceClock";
 import { progress, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
+import { CONVERGENCE_TIMES } from "@/lib/convergence/timeline";
 import { paint } from "../painterly/materials";
 import { ribbonTexture } from "../painterly/textures";
 import { GIFT_BOX, RIBBON } from "./invitationLayout";
@@ -77,7 +79,37 @@ function bandLoop(halfA: number, halfB: number, plane: "xy" | "zy"): PathSample[
 
 const easeInOut = (x: number) => x * x * (3 - 2 * x);
 
-export function RibbonUnravel() {
+/** What drives the unravelling: the chapter-2 unwrap on the homepage, or the gift reveal's ribbon-off. */
+export interface UnravelClock {
+  on(): boolean;
+  t(): number;
+  run(): number;
+  swap: number;
+  peeled: number;
+  gone: number;
+}
+
+const unwrapUnravel: UnravelClock = {
+  on: () => unwrapClock.active && !unwrapClock.staticPreview,
+  t: () => unwrapClock.t,
+  run: () => unwrapClock.run,
+  swap: RIBBON_SWAP,
+  peeled: UNWRAP_TIMES.ribbonPeeled,
+  gone: UNWRAP_TIMES.ribbonGone,
+};
+
+/** The same peel, quicker: the bow collapses, then the strip comes away just before the burst. */
+export const CONVERGENCE_RIBBON_SWAP = CONVERGENCE_TIMES.ribbonOff[0] + 0.35;
+export const convergenceUnravel: UnravelClock = {
+  on: () => convergence.active && !convergence.instant && !convergence.leaving,
+  t: () => convergence.t,
+  run: () => convergence.run,
+  swap: CONVERGENCE_RIBBON_SWAP,
+  peeled: CONVERGENCE_TIMES.ribbonOff[1] - 0.2,
+  gone: CONVERGENCE_TIMES.ribbonOff[1] + 0.25,
+};
+
+export function RibbonUnravel({ driver = unwrapUnravel }: { driver?: UnravelClock }) {
   const mesh = useRef<THREE.Mesh>(null);
   const camera = useThree((s) => s.camera);
   const path = useMemo(() => {
@@ -128,16 +160,17 @@ export function RibbonUnravel() {
   useFrame(({ clock }) => {
     const m = mesh.current;
     if (!m) return;
-    const u = unwrapClock;
-    const on = u.active && !u.staticPreview && u.t >= RIBBON_SWAP && u.t < UNWRAP_TIMES.ribbonGone;
+    const c = driver;
+    const now = c.t();
+    const on = c.on() && now >= c.swap && now < c.gone;
     m.visible = on;
     if (!on) return;
     const parent = m.parent;
     if (!parent) return;
 
     // The pull heads up and across the left of the scene, a little toward the viewer, and out of frame.
-    if (tmp.run !== u.run) {
-      tmp.run = u.run;
+    if (tmp.run !== c.run()) {
+      tmp.run = c.run();
       camera.updateMatrixWorld();
       const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
       const back = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 2);
@@ -148,8 +181,8 @@ export function RibbonUnravel() {
     }
 
     const time = clock.elapsedTime;
-    const peel = length * easeInOut(progress(u.t, RIBBON_SWAP, UNWRAP_TIMES.ribbonPeeled));
-    const fly = progress(u.t, UNWRAP_TIMES.ribbonPeeled - 0.25, UNWRAP_TIMES.ribbonGone);
+    const peel = length * easeInOut(progress(now, c.swap, c.peeled));
+    const fly = progress(now, c.peeled - 0.25, c.gone);
     const flyDist = fly * fly * 14;
 
     // Where the ribbon is still lying on the box.

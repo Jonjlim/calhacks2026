@@ -91,7 +91,7 @@ describe("giftChoreography", () => {
 
   it("takes the ribbon off before the box bursts, and the box bursts whole", () => {
     const before = giftChoreography(CONVERGENCE_TIMES.burst[0] - 0.01, 1);
-    expect(before.ribbonLift).toBe(1);
+    expect(before.ribbon).toEqual({ bandX: 0, bandZ: 0, tails: 0, bow: 0 });
     expect(before.wall.every((w) => w === 0)).toBe(true);
     expect(before.lid).toBe(0);
     expect(giftChoreography(CONVERGENCE_TIMES.ribbonOff[0] - 0.01, 1).ribbon.bandX).toBe(1);
