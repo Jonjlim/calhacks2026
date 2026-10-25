@@ -293,8 +293,8 @@ export function StorybookIntro() {
             {/* The cover: cloth and gold outside, patterned endpaper inside. */}
             <div ref={coverRef} className="absolute top-0 right-0 h-full w-1/2" style={{ transformOrigin: "0% 50%", transformStyle: "preserve-3d", transform: "translateZ(2px)" }}>
               <div className="intro-face intro-cover flex flex-col items-center justify-center">
-                <p className="font-display text-[clamp(34px,3.6vw,58px)] leading-none font-semibold tracking-[-0.01em] text-[#e9cf93]">
-                  unwrap<span className="text-[#e7a58f]">.</span>
+                <p className="font-display text-[clamp(34px,3.6vw,58px)] leading-none font-semibold tracking-[-0.01em] text-[#ecd196]">
+                  unwrap<span className="text-[#e9a98a]">.</span>
                 </p>
                 <div className="mt-4 h-px w-1/3 bg-[#d9b66f]/60" />
                 <p className="font-hand mt-3 text-[clamp(14px,1.3vw,20px)] text-[#e9cf93]/80">thoughtful gifts, together</p>

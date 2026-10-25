@@ -169,17 +169,34 @@ body {
     14px 18px 36px -10px rgba(30, 14, 6, 0.55);
 }
 
+/* Hand-bound chestnut leather: grain, worn highlights, a stitched gold frame and a darker spine. */
 .intro-cover {
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(80% 60% at 70% 25%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 60%),
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 1px, rgba(0, 0, 0, 0.03) 1px 3px),
-    linear-gradient(160deg, #3f6f73 0%, #2f5a60 60%, #284d53 100%);
+    linear-gradient(90deg, rgba(20, 8, 2, 0.55) 0%, rgba(20, 8, 2, 0.12) 7%, rgba(20, 8, 2, 0) 16%),
+    radial-gradient(75% 55% at 68% 22%, rgba(255, 214, 160, 0.26), rgba(255, 214, 160, 0) 62%),
+    radial-gradient(90% 70% at 20% 95%, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0) 65%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' seed='4' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.12  0 0 0 0 0.05  0 0 0 0 0.02  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>"),
+    linear-gradient(160deg, #94593a 0%, #7a4429 45%, #5e3320 100%);
   box-shadow:
-    inset 0 0 0 7px rgba(0, 0, 0, 0.06),
-    inset 0 0 0 9px rgba(217, 182, 111, 0.65),
-    inset 0 0 0 11px rgba(0, 0, 0, 0.05),
-    16px 20px 40px -12px rgba(30, 14, 6, 0.6);
+    inset 0 0 0 6px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 8px rgba(222, 184, 112, 0.85),
+    inset 0 0 0 10px rgba(0, 0, 0, 0.18),
+    inset 0 0 0 14px rgba(222, 184, 112, 0.28),
+    inset 0 0 30px rgba(20, 8, 2, 0.45),
+    16px 20px 40px -12px rgba(30, 14, 6, 0.65);
 }
+/* Dashed gold stitching inside the frame. */
+.intro-cover::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border: 1.5px dashed rgba(236, 204, 140, 0.55);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.intro-cover p:first-child { text-shadow: 0 -1px 0 rgba(30, 12, 4, 0.7), 0 1px 0 rgba(255, 232, 180, 0.35); }
 
 .intro-endpaper {
   background-color: #e9d8c4;
