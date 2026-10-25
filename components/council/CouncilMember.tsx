@@ -9,6 +9,47 @@ import { toToon } from "@/components/characters/StorybookAvatar";
 import { COUNCIL_MODELS, COUNCIL_TINT, poseFor, type CouncilClip } from "@/lib/council/animation";
 import type { CouncilMemberState } from "@/lib/council/contracts";
 
+/**
+ * Rounds the capsule's boxy corners. The body is a squarish rounded block; every
+ * vertex (shell, face, trim) is pulled in by how far its corner sticks out past
+ * a circle, in height against distance from the axis, so the silhouette becomes
+ * a soft egg while the face and the shell still line up. Geometry is cloned first
+ * (the loaded model is shared), and only the bind pose is changed.
+ */
+function roundCorners(root: THREE.Object3D) {
+  const body = (root.getObjectByName("Shell") ?? root.getObjectByName("Body")) as THREE.Mesh | undefined;
+  if (!body?.geometry) return;
+  body.geometry.computeBoundingBox();
+  const bb = body.geometry.boundingBox!;
+  const a = Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x), Math.abs(bb.min.z), Math.abs(bb.max.z));
+  const b = (bb.max.y - bb.min.y) / 2;
+  const yc = (bb.max.y + bb.min.y) / 2;
+  const P = 4.2;
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !m.geometry || /Flipper|Antenna|RoleAccessory|SecondaryAccessory|Backpack/.test(m.name)) return;
+    m.geometry = m.geometry.clone();
+    const pos = m.geometry.getAttribute("position") as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const y = pos.getY(i) - yc;
+      const hu = Math.hypot(x, z) / a;
+      const vu = Math.abs(y) / b;
+      // Only the body proper: leave anything far outside it (arms, props) alone.
+      if (hu > 1.12 || vu > 1.12) continue;
+      const rp = Math.pow(Math.pow(hu, P) + Math.pow(vu, P), 1 / P);
+      const r2 = Math.hypot(hu, vu);
+      if (rp < 0.01) continue;
+      const k = THREE.MathUtils.lerp(1, Math.min(1, rp / r2), 0.9);
+      // Keep the face on the front: pull in sideways and in height, never push the front back.
+      pos.setXYZ(i, x * k, yc + y * (0.5 + 0.5 * k), z * (0.55 + 0.45 * k));
+    }
+    pos.needsUpdate = true;
+    m.geometry.computeBoundingSphere();
+  });
+}
+
 /** A private skeleton/mixer per instance; shared immutable geometry and painterly materials. */
 export function CouncilMember({ state, position, rotationY = 0, scale = 1, animate = true, onReady, clipOverride }: {
   state: CouncilMemberState; position: [number, number, number]; rotationY?: number; scale?: number; animate?: boolean; onReady?: () => void; clipOverride?: CouncilClip;
@@ -69,7 +110,12 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
       mesh.frustumCulled = false;
     });
     // Slimmer and cuter: a narrower, rounder body (its flippers and face come with it), set on the clone only.
-    if (capsule) c.scale.set(c.scale.x * 0.82, c.scale.y * 0.97, c.scale.z * 0.82);
+    if (capsule) {
+      c.scale.set(c.scale.x * 0.7, c.scale.y * 0.97, c.scale.z * 0.7);
+      roundCorners(c);
+      // The arms follow the narrower body in.
+      for (const n of ["LeftFlipper", "RightFlipper"]) c.getObjectsByProperty("name", n).forEach((o) => { if (!(o as THREE.Mesh).isMesh) o.position.x *= 0.82; });
+    }
     return c;
   }, [scene, state.actor]);
   const antenna = useMemo(() => instance.getObjectByName("Antenna") ?? null, [instance]);
