@@ -4,6 +4,39 @@ Four workstreams. One repo. Contracts in [CONTRACTS.md](CONTRACTS.md). Schedule 
 
 Developer numbers are roles, not ranked importance.
 
+## Phase 2 — map-first room (current)
+
+Phase 1 is complete. Phase 2 moves the whole room onto the gift map: lobby in front of the present → zoom out → the map. See [EXECUTION_PLAN.md](EXECUTION_PLAN.md) for milestones and the demo, and D19 in [ARCHITECTURE.md](ARCHITECTURE.md) for the decision. Ownership boundaries from Phase 1 still apply: Dev 1 owns `app/` and `components/`, Dev 2 owns schema and room state, Dev 3 owns `convex/agents/`, Dev 4 owns `convex/research/`.
+
+| ID | Task | Owner | Milestone | Depends on | Done when |
+| --- | --- | --- | --- | --- | --- |
+| MAP-001 | Lobby in front of the present: create, join, live roster, invite link and QR, organizer start | Ally | M1 | — | Two browsers join from the lobby |
+| MAP-002 | One stage clock for lobby → map, with the zoom-out and an instant swap for reduced motion | Ally + Dev 1 | M1 | MAP-001 | Start lands every member on the map |
+| MAP-003 | Ring layout on live data: published clues outside, box at the center, computed positions | Dev 1 | M2 | MAP-002 | Real rooms render without overlap at 12 clues |
+| MAP-004 | Click empty sky to add: message, idea, photo, paste a conversation | Dev 1 | M2 | MAP-003 | Messages and ideas publish after confirm; paste and photo use private review |
+| MAP-005 | Private items on the map with an “only you” marker | Dev 1 + Dev 2 | M2 | MAP-004 | A second browser never receives them |
+| MAP-006 | Node actions that bloom under the selected node; no drawers | Dev 1 | M2 | MAP-003 | Every action in the old drawers is reachable from a node or the box |
+| MAP-007 | Map projection: clues, themes, listings with theme links, signals, selection, cursors in one query | Dev 2 | M2 | — | Membership-scoped; no caps or private imports |
+| MAP-008 | Suggested themes from published clues (3–5, each with clue IDs) | Dev 3 | M3 | MAP-007 | Zod-validated; dismiss never deletes clues; stale themes rejected after edits |
+| MAP-009 | Theme rename, merge, dismiss | Dev 2 + Dev 1 | M3 | MAP-008 | Attributed; any member can undo their own change |
+| MAP-010 | “Find gifts” on a theme or the map, using the existing research pipeline; council progress on the theme node | Dev 3 + Dev 4 | M3 | MAP-008 | Research job states show on the node, including failure |
+| MAP-011 | Listings cite themes through their recommendation clues so the client can place them | Dev 4 | M3 | MAP-008 | Each listing lists theme IDs; two-theme listings sit closer to the box |
+| MAP-012 | Drag toward or away from the box: `castVote` for listings, direction signals for clues and themes | Dev 1 + Dev 2 | M4 | MAP-007 | Both screens reorder; signals are one per member per target |
+| MAP-013 | Vote pulse visible to everyone with the voter’s name | Dev 1 | M4 | MAP-012 | Shows within a second on the other browser |
+| MAP-014 | Sharpen round: fade unpulled items, at most one question, up to three refined directions | Dev 3 | M4 | MAP-010 | Uses open-question slots; refined directions need research before they become listings |
+| MAP-015 | The box: select by drag (organizer), caps, shares, approvals, revision reset in place | Dev 1 + Dev 2 | M5 | MAP-012 | Acceptance checks 7 and 8 pass on the map |
+| MAP-016 | “Why this?” path from the gift to its themes and clues | Dev 1 + Dev 4 | M5 | MAP-011 | Only published clue IDs and observed listing facts appear |
+| MAP-017 | Phone controller as a list of the same rings, with add, pull, pass, and box buttons | Dev 1 | M6 | MAP-015 | Phone and laptop in one room stay in sync |
+| MAP-018 | Retire the tower, Backstage drawer, Gifts drawer, `/map` page, and arrange view from navigation; delete after two clean demo runs | Dev 1 | M6 | MAP-015 | No link reaches them; tests updated |
+| MAP-019 | Privacy retest on the map: private items, caps, themes, signals | Dev 2 | M6 | MAP-015 | [DEV2_PRIVACY_RETEST.md](DEV2_PRIVACY_RETEST.md) rerun and updated |
+| MAP-020 | Demo rehearsal twice from a cold start; backup recording | Everyone | M6 | MAP-018 | Script in [EXECUTION_PLAN.md](EXECUTION_PLAN.md) runs twice without a rebuild |
+
+Open decisions that block specific tasks are listed in [EXECUTION_PLAN.md](EXECUTION_PLAN.md#open-decisions): shared photos (MAP-004), theme confirmation (MAP-008), council characters on the map (MAP-010), chat (MAP-006), and deployments (MAP-020).
+
+---
+
+The rest of this document is the **Phase 1 reference**: original workstream definitions, task IDs, and timelines. Task IDs below remain valid for code comments and history. Where the Phase 1 timeline, demo ownership, or “map or list” guidance disagrees with Phase 2, Phase 2 wins.
+
 ## Workload balance
 
 [PLAN.md](../PLAN.md) gave Person 3 both clues and product research, and Person 4 all of payments. That overloads two people and makes Stripe a single point of failure.

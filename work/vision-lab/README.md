@@ -1,5 +1,11 @@
 # Unwrap vision lab
 
+## Phase 2 direction: the gift rings
+
+The team picked the ring layout for the real room (D19 in [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)): what friends share on the outer ring, themes in the middle, gifts between the themes they fit, the box at the center. Dragging toward the box supports and dragging away passes, which replaces the left/right toss in this prototype. The animated Gift Rings walkthrough shows the full sequence. The room plan is in [docs/EXECUTION_PLAN.md](../../docs/EXECUTION_PLAN.md).
+
+What carries over from this prototype: click-anywhere add, visual nodes (bubbles, polaroids, idea sparks, gift pictures), actions that bloom under a node, named cursors, and vote pulses. What does not: free island placement, the side panel, and the corner dock.
+
 ## Current revision: shared gestures and group direction
 
 The guided prototype now has real **same-browser, same-origin tab collaboration** through `BroadcastChannel`, with localStorage snapshots and per-field logical clocks. It is not a hosted multiplayer service: another device, browser profile, or origin cannot join this transport. Demo identities are selectable names, not authenticated participants.

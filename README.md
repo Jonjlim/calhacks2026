@@ -14,7 +14,7 @@ Generic AI gift apps skip the evidence. Shared spreadsheets skip the feeling. Ne
 
 ## What Unwrap does
 
-Friends open a gift room. They talk naturally, paste a few selected messages, and confirm the clues that actually matter. Unwrap researches live product listings, shows why each recommendation fits, and lets the group shortlist, compare, and lock one gift.
+Friends gather in a lobby in front of a storybook present. When everyone is in, the camera pulls back and the gift map opens around it. On the map, friends drop memories, photos, and ideas; the AI council groups them into themes; real product listings grow between the themes they fit; and the group pulls the best ideas toward the box at the center until one gift is left.
 
 Everyone sets a private contribution limit. Unwrap allocates shares deterministically. If the gift, total, or someone’s share changes, the old proposal dies and the group approves a new one.
 
@@ -22,12 +22,12 @@ A single buyer can use the same studio alone. Solo and group planning share one 
 
 ## Main features
 
-- **Gift rooms** you create and join, including a QR / link join path
-- **Realtime chat** with an AI facilitator that listens more than it talks
-- **Evidence-backed clues** extracted from contributor-selected messages, then reviewed before they go public in the room
+- **A lobby at the present** where friends create and join a room, including a QR / link join path
+- **One shared gift map** in rings: what friends share outside, themes in the middle, gifts inside, the box at the center
+- **Click anywhere to add** a memory, message, photo, or idea, with named cursors for everyone in the room
+- **Evidence-backed clues** extracted from contributor-selected messages and photos, reviewed privately before they go public on the map
 - **Real product candidates** with source links, observed prices, and retrieval timestamps
-- **A shortlist and lightweight gift map** that answers “why this?”
-- **Shared selection** with comparison or voting
+- **Steering by dragging**: toward the box supports, away passes, and “why this?” lights the path back to the memories
 - **Private contribution limits** and deterministic allocation
 - **Versioned proposals** that invalidate when the deal changes
 
@@ -53,7 +53,7 @@ Unwrap is different when all of this is visible in the demo:
 | Authoritative state | Convex queries, mutations, and actions |
 | AI | One tool-capable LLM, structured outputs, Zod validation |
 | Products | One verified shopping source; Apify is the first candidate |
-| Map / motion | React Flow if it stays lightweight; Motion or CSS for state-honest animation |
+| Map / motion | React Three Fiber island scene with a ring-layout gift map; Motion for state-honest animation |
 | Payments (P1) | Stripe test mode, provider-hosted collection, no raw cards in our code |
 | Hosting | Vercel + Convex |
 
@@ -61,7 +61,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design and rejec
 
 ## Architecture at a glance
 
-The browser talks only to Convex. Convex holds membership, chat, clues, selections, proposals, and job status. External calls — LLM, product search, later Stripe — run in Convex actions, then write validated results back. Application state and provider state are never treated as the same thing.
+The browser talks only to Convex. Convex holds membership, clues, themes, signals, selections, proposals, and job status. The map's layout is computed in the browser from that state. External calls — LLM, product search, later Stripe — run in Convex actions, then write validated results back. Application state and provider state are never treated as the same thing.
 
 Solo mode is a one-participant room, not a second product.
 
@@ -78,12 +78,16 @@ Solo mode is a one-participant room, not a second product.
 | [docs/DATA_AND_PRIVACY.md](docs/DATA_AND_PRIVACY.md) | Consent, classification, and access control |
 | [docs/COMMERCE_AND_PAYMENTS.md](docs/COMMERCE_AND_PAYMENTS.md) | Listings, allocation, proposals, sandbox payments |
 | [docs/CONTRACTS.md](docs/CONTRACTS.md) | Shared TypeScript-shaped interfaces |
-| [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md) | Hackathon phases, demo, risk register |
-| [docs/TEAM_TASKS.md](docs/TEAM_TASKS.md) | Four-person workstreams and task IDs |
+| [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md) | Phase 2 plan: map-first room, milestones, demo, open decisions |
+| [docs/TEAM_TASKS.md](docs/TEAM_TASKS.md) | Phase 2 task table (MAP-xxx), then Phase 1 workstreams |
 
 ## Current status
 
-Backend P0 and Dev 4 research integration are implemented: anonymous-auth configuration, room membership, private evidence/clues, proposals/approvals, and scheduled Apify research with normalized listings and reactive ranking. The product source passed two standalone live searches; the integrated Convex workflow is covered with mocked provider tests and still needs a live test on the team deployment. The frontend is wired to Convex: anonymous sign-in, create/join, invite links, live chat, private evidence and clue review, research, voting, gift selection, private limits, and approvals. Without `NEXT_PUBLIC_CONVEX_URL` the room falls back to read-only fixtures. Agent workflows are implemented with mocked-model tests; live model calls (LLM env vars), live product search (`APIFY_TOKEN`), and payments remain outstanding. This is not yet a working end-to-end app.
+**Phase 1 is complete in code.** Rooms, anonymous sign-in, invites, private evidence and photo clue review, research with normalized listings, the agent backbone, the Fetch.ai council, votes, private limits, allocation, and revision-aware approvals are implemented. On `main` / `refactor` the suite passes 597 tests (3 live-provider tests skipped). Without `NEXT_PUBLIC_CONVEX_URL` the room falls back to read-only fixtures.
+
+Still unverified end to end on one shared deployment: live product search (`APIFY_TOKEN`), the council service (`FETCH_AGENT_URL` and its secrets), and a two-browser run of the whole path. Payments remain pledges.
+
+**Phase 2 is starting: the map-first room.** The app will open in a lobby in front of the present, then zoom out to one gift map where all sharing, themes, research, votes, the box, and approvals happen. The tower, Backstage drawer, and separate map page are leaving the main path. See [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md) and the prototype in [work/vision-lab/](work/vision-lab/README.md).
 
 ## Development
 

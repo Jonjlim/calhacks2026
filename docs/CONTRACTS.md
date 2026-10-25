@@ -8,7 +8,66 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ## Conventions
 
+### Map-first room (proposed, D19, 2026-10-24)
+
+**Status: proposed, not implemented.** Agree on these shapes at the next integration checkpoint before building MAP-007 onward ([TEAM_TASKS.md](TEAM_TASKS.md)).
+
+Owners: Dev 2 (tables, projection, signals), Dev 3 (theme suggestion, sharpen), Dev 4 (theme links on recommendations). Consumers: Dev 1 and Ally (map and lobby UI).
+
+```ts
+type MapThemeStatus = "suggested" | "accepted" | "dismissed";
+
+interface MapTheme {
+  id: string;
+  roomId: string;
+  label: string;                    // 1–60 chars
+  clueIds: string[];               // at least one; only active published clues
+  status: MapThemeStatus;
+  source: "agent" | "member";
+  createdBy?: string;        // set when a member renamed, merged, or created it
+  knowledgeRevision: number;        // room knowledge revision the theme was built from
+  updatedAt: number;
+}
+
+type DirectionTarget =
+  | { kind: "clue"; clueId: string }
+  | { kind: "theme"; themeId: string };
+
+interface DirectionSignal {          // one row per member per target
+  roomId: string;
+  participantId: string;
+  target: DirectionTarget;
+  value: 1 | -1;                    // 1 = pulled toward the box, -1 = pushed away
+  updatedAt: number;
+}
+
+interface SharpenResult {
+  questionSlot?: string;   // at most one question, through the existing AskedSlot flow
+  directions: { label: string; themeIds: string[]; rationale: string }[];  // at most 3; ideas, not listings
+}
+```
+
+| Operation | Kind | Owner | Input | Output | Access |
+| --- | --- | --- | --- | --- | --- |
+| `map.getMapState` (extended) | query | Dev 2 | `{ roomId }` | Adds `themes`, aggregated `signals` plus the caller’s own, `themeIds` per recommendation, and the caller’s own private items | Member; never caps, others’ imports, or recipient records |
+| `map.suggestThemes` | action | Dev 3 | `{ roomId }` | `Result<{ themes: MapTheme[] }>` | Member; `stale_job` if knowledge changed during the call |
+| `map.updateTheme` | mutation | Dev 2 | `{ themeId, label?, status?, mergeInto? }` | `Result<MapTheme>` | Member; attributed; dismiss never deletes clues |
+| `map.setDirection` | mutation | Dev 2 | `{ roomId, target, value: 1 \| -1 \| 0 }` | `Result<{ target, total }>` | Member; `0` clears the caller’s signal |
+| `map.sharpen` | action | Dev 3 | `{ roomId }` | `Result<SharpenResult>` | Member; one round per knowledge revision |
+
+Rules:
+
+- Listings keep using `castVote`: dragging toward the box is `"up"`, away is `"down"`. No second vote store for listings.
+- Ring positions are computed on the client. No signal or theme changes caps, the budget, the selection, or confirmed knowledge.
+- A theme is an interpretation, not room knowledge. Recommendations may cite theme IDs only through the clue IDs they already cite: `themeIds` is derived server-side from cited clue IDs and theme `clueIds` (Dev 4).
+- Sharpen directions behave like sprouts: labelled agent ideas until research returns sourced listings for them.
+- Errors: `unauthorized`, `not_found`, `validation_failed`, `stale_job`, `refused`.
+
+Migration: additive tables for themes and signals. Existing `map.*`, `castVote`, `setFeedback`, cursor, and proposal functions keep their endpoints. `moveNode` and the arrange view leave the main path and can be removed after MAP-018.
+
 ### Shared memory tree integration (Dev 3 / Dev 1, October 24)
+
+Superseded on the main path by the map-first room above. The endpoints described here stay in use; the sky-tree and arrangement views are being replaced by the ring map.
 
 The room map offers a sky-tree exploration view and an arrangement view over the same published clues, suggestions, listings, selection and approvals. Scene positions and vibe attraction are presentation only; changing a vibe never publishes a preference. A separate human confirmation is required to publish it.
 

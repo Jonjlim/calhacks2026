@@ -1,5 +1,7 @@
 # Dev 3 demo beats
 
+> **Phase 1 demo.** These beats use the tower, the Backstage drawer, and chat. The Phase 2 demo, on the map, is in [EXECUTION_PLAN.md](EXECUTION_PLAN.md#three-minute-demo).
+
 What to show for the agent work, in order. Each beat names the real behavior behind it and what to say if something is slow. Dev deployment: `compassionate-alpaca-531`. No beat depends on a paid product search: use the fixture pool (`DEMO_SEED_ENABLED=true`) when Apify is unavailable, and say so.
 
 1. **Private to public.** In "Paste messages", paste two lines about the recipient. Unwrap proposes clues only you can see. Publish two. *Point out:* nothing reached the room until the tap.

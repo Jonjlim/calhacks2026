@@ -49,7 +49,11 @@ convex/
   payments/               # Dev 2 state machine + Dev 4 Stripe adapter
 ```
 
-Stay inside the TypeScript ecosystem. A Python service is rejected unless a real multi-item optimizer appears — and that is out of P0/P1 scope.
+Stay inside the TypeScript ecosystem. The one exception is the Fetch.ai council coordinator in `fetch-agent/` (Python, recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)); Convex stays authoritative for everything it touches. Any other Python service is rejected unless a real multi-item optimizer appears, which is out of P0/P1 scope.
+
+## Room flow (Phase 2)
+
+The room is map-first (D19 in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)): lobby in front of the present → zoom out → the gift map, where all sharing, themes, research, votes, the box, and approvals happen. Do not add new features to the tower, the Backstage drawer, or the separate `/map` page; they are leaving the main path. Plan and milestones: [docs/EXECUTION_PLAN.md](docs/EXECUTION_PLAN.md).
 
 ## TypeScript conventions
 

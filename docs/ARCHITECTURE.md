@@ -1,10 +1,23 @@
 # Architecture
 
-Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): a Next.js client and a Convex backend. External providers are called from Convex actions. There is no second database, no dedicated queue service, and no Python worker in the planned architecture.
+Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): a Next.js client and a Convex backend. External providers are called from Convex actions. There is no second database and no dedicated queue service. The one Python process is the Fetch.ai council coordinator in `fetch-agent/`, recorded in “Decision: Fetch.ai AI Council coordinator” below; Convex stays authoritative for everything it touches.
 
-[PLAN.md](../PLAN.md) suggested an optional Node worker and a possible Python optimizer. Both are rejected for this weekend unless a spike proves Convex actions cannot call the chosen provider.
+[PLAN.md](../PLAN.md) suggested an optional Node worker and a possible Python optimizer. Both remain rejected unless a spike proves Convex actions cannot call the chosen provider.
 
 ## Decisions
+
+### D19 — Map-first room (2026-10-24)
+
+The gift map becomes the room. The app opens in a lobby in front of the present (the garden view); when the organizer starts the room, the camera zooms out and the map opens around the present, which becomes the box at its center. The tower step, the Backstage drawer, the Gifts drawer, the separate `/room/[id]/map` page, and the React Flow arrange view leave the main path. Imports, photos, research, votes, selection, and approvals all happen on the map.
+
+- **Layout.** Rings: published clues outside, suggested themes in the middle, listings inside (placed between the themes their recommendation cites), the box at the center. Ring positions are computed on the client from room data and are presentation only. `moveNode` is no longer needed on the main path.
+- **Authority unchanged.** Convex owns clues, themes, signals, listings, selection, caps, and revisions. Pulls are advisory. Only the organizer selects; only people approve.
+- **Reuse.** Listing pulls map to the existing `castVote` up/down. “She has it” and “too pricey” map to `setFeedback`. Cursors reuse `moveCursor` and `listCursors`. The box uses the existing proposal, cap, and approval functions.
+- **New, proposed.** Suggested themes and direction signals on clues and themes. See “Map-first room (proposed)” in [CONTRACTS.md](CONTRACTS.md). Nothing is built yet.
+- **Privacy unchanged.** Imported text and photos stay owner-only. The map shows a contributor their own private items with an “only you” marker and shows everyone else only published clues. Sharing a photo image itself would be a new consent step and is an open decision in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+- **Promotion.** This promotes the map from P2 to P0 (AGENTS.md requires recording it). The fallback is listings on the inner ring by score, without themes.
+
+Owners: Ally (lobby), Dev 1 (map UI), Dev 2 (projection and signals), Dev 3 (themes, sharpen, council wiring), Dev 4 (listings by theme). Plan and milestones: [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
 
 ### D14 — Reviewed catalog evidence for missing hobby terms (2026-10-24)
 
