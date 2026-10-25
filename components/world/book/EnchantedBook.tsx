@@ -76,7 +76,7 @@ export function EnchantedBook({ animate }: { animate: boolean }) {
   });
 
   return (
-    <group ref={root} position={[AT.x, y, AT.z]} scale={1.7}>
+    <group ref={root} position={[AT.x, y, AT.z]} scale={1.15}>
       {/* The lectern. */}
       <mesh position={[0, 0.3, 0]} material={mats.wood} castShadow>
         <cylinderGeometry args={[0.07, 0.11, 0.62, 8]} />

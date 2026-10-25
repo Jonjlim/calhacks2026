@@ -103,7 +103,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
 
       <FloatingIsland />
       {/* The landing page shows only players who have really joined (unwrap/LobbySpirits). */}
-      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} />
+      <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} calm={!!council && stage.shown === "map"} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
       {council && stage.shown === "map" && <MapSurround animate={animate} />}
