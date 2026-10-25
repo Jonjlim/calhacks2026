@@ -23,6 +23,7 @@ import { playChoose, playCouncilTick } from "@/components/world/sfx";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
 import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
+import { playSfx } from "@/components/world/sounds";
 
 /** One colour per storybook friend, shared by cursors, pledge arcs, vote chips and faces. */
 export const AVATAR_COLOR: Record<AvatarId, string> = { explorer: "#d0675a", kind: "#d98fb8", curious: "#e2ad6b", calm: "#79b391", dreamer: "#8d86d0" };
@@ -570,13 +571,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       return;
     }
     void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
+    if (composer.kind === "explicit_wish") playSfx("wish");
   };
   const composerNode = composer && actions && (
     <div className={s.write} data-map-token>
       {composer.zone === "memory" && (
         <div className={s.kinds} role="radiogroup" aria-label="What is it?">
           {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
+            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind })}><MapIcon name={icon} size={14} />{label}</button>
           ))}
           <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos"><MapIcon name="camera" size={14} />Photo</button>
         </div>
@@ -660,7 +662,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     <div className={s.write} data-map-token>
       <div className={s.kinds} role="radiogroup" aria-label="What is it?">
         {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
-          <button key={kind} type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
+          <button key={kind} type="button" role="radio" aria-checked={false} data-sfx={kind === "explicit_wish" ? "wish" : undefined} onClick={() => setComposer({ ...composer, kind, photo: false })}><MapIcon name={icon} size={14} />{label}</button>
         ))}
         <button type="button" role="radio" aria-checked><MapIcon name="camera" size={14} />Photo</button>
       </div>

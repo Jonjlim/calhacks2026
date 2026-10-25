@@ -219,7 +219,7 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
                 </a>
               ) : <p className="text-[12.5px] text-dusk/55">No source link was saved for this listing.</p>}
               <div className="flex gap-2">
-                {isOrganizer && <button type="button" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={onReplay}>Replay reveal</button>}
+                {isOrganizer && <button type="button" data-sfx="reveal" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={onReplay}>Replay reveal</button>}
                 <button type="button" className="btn-secondary h-10 flex-1 px-3 text-[13.5px]" onClick={() => convergence.close()}>Back to the map</button>
               </div>
             </div>

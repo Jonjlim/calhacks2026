@@ -138,7 +138,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
             <button type="button" className={s.boxGhost} disabled={withdraw.pending} onClick={() => withdraw.run(revision.id)}>Take back my yes</button>
           </div>
         ) : (
-          <button type="button" className={s.boxApprove} disabled={approve.pending || !myShare} onClick={() => approve.run(revision.id)}>
+          <button type="button" data-sfx="coin" className={s.boxApprove} disabled={approve.pending || !myShare} onClick={() => approve.run(revision.id)}>
             {approve.pending ? "Saving…" : myShare ? `Approve my ${formatMinor(myShare.amountMinor)} share` : "You have no share in this version"}
           </button>
         )
@@ -158,7 +158,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
         <p className={s.boxWarn} role="alert">{(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error ?? remove.error)!.message}</p>
       )}
 
-      {selection && onReveal && <button type="button" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
+      {selection && onReveal && <button type="button" data-sfx="reveal" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
 
       <footer>
         {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "Why this gift?"}</button>}

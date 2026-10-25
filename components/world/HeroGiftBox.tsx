@@ -6,7 +6,7 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { SparkleBurst, type SparkleHandle } from "./AmbientEffects";
-import { playChime } from "./chime";
+import { playSfx } from "./sounds";
 import { wobble } from "./geometry";
 import { paint } from "./painterly/materials";
 import { giftPaperTexture, ribbonTexture } from "./painterly/textures";
@@ -315,7 +315,6 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     if (tug.sparkle && tagTug.current !== giftTag.tugCount) {
       tagTug.current = giftTag.tugCount;
       if (animate) sparkles.current?.burst(new THREE.Vector3(GIFT_SPOT.x, baseY + (H + 0.3) * GIFT_SCALE, GIFT_SPOT.z), giftTag.tugCount);
-      if (soundEnabled) playChime(giftTag.tugCount);
       emitGiftPop();
     }
     ribbonMat.emissiveIntensity = tug.glow * 0.2;
@@ -494,7 +493,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     s.popCount++;
     s.spin = s.popCount % 2 ? 1 : -1;
     s.sparkled = false;
-    if (soundEnabled) playChime(s.popCount);
+    if (soundEnabled) playSfx("wish");
     emitGiftPop();
     if (!animate) {
       // Render-on-demand mode: keep frames coming just long enough for the pop.

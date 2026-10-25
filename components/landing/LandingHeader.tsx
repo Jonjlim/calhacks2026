@@ -18,6 +18,7 @@ export function LandingHeader({ soundEnabled, onToggleSound, onJoin }: { soundEn
         </button>
         <motion.button
           type="button"
+          data-sfx="silent"
           onClick={onToggleSound}
           aria-pressed={soundEnabled}
           aria-label={soundEnabled ? "Sound on" : "Sound off"}

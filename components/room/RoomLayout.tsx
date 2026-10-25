@@ -332,7 +332,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       {/* Invite + small toggles */}
       <div className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
-          <button className={iconChip} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
+          <button className={iconChip} data-sfx="silent" onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
           <button className={iconChip} onClick={() => setTimeOfDay(SKIES[(SKIES.findIndex((k) => k.id === time) + 1) % SKIES.length]!.id)} aria-label={`Change the sky. Now: ${SKIES.find((k) => k.id === time)?.label}`} title={`Sky: ${SKIES.find((k) => k.id === time)?.label}. Click for the next.`}><DayIcon day={!isDarkSky(time)} /></button>
           {stage === "map" && (
             <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, 1 / 2 / 3 high, three-quarter and low views, + / - zoom, 0 returns.">
@@ -374,7 +374,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <div className="ml-2 flex items-center gap-2">
           {stage === "map" && selection && isOrganizer && !preview && !seen && (
-            <button className="btn-primary h-11 px-5" onClick={() => startReveal(false)}>Reveal our gift</button>
+            <button className="btn-primary h-11 px-5" data-sfx="reveal" onClick={() => startReveal(false)}>Reveal our gift</button>
           )}
           {stage === "map" && actions && !preview && (
             <div className="flex items-center gap-1.5" role="group" aria-label="Add to the map">
@@ -401,7 +401,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
             <button className={`${iconChip} !h-11 !w-11`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" title="More" onClick={() => setMenuOpen((o) => !o)}><MoreIcon /></button>
             {menuOpen && (
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
-                {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} onClick={() => startReveal(false)}>Replay reveal</button>}
+                {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} data-sfx="reveal" onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
                 {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => map.openBox()}>Review shares</button>}
