@@ -31,9 +31,9 @@ const toListing = ({ _id, _creationTime: _, ...fields }: Doc<"productListings">)
  * Ranks one search's listings and says what happened to them: how many it
  * found, how many the room's clues removed, how many were repeats of one product.
  */
-function rankPool(pool: ProductListing[], clues: PublishedClue[], budgetMinor: number | undefined, limit: number, steering: RoomSteering, directionId?: string) {
+function rankPool(pool: ProductListing[], clues: PublishedClue[], budgetMinor: number | undefined, limit: number, steering: RoomSteering, directionId?: string, budgetGuidance?: Doc<"rooms">["budgetGuidance"]) {
   const { kept, excluded } = filterListings({ listings: pool, clues });
-  const distinct = steerRanked(rankListings({ listings: pool, clues, budgetMinor, limit: kept.length }), pool, steering, directionId);
+  const distinct = steerRanked(rankListings({ listings: pool, clues, budgetMinor, budgetGuidance, limit: kept.length }), pool, steering, directionId);
   return {
     ranked: distinct.slice(0, limit),
     excluded,
@@ -105,7 +105,7 @@ export async function readCatalog(
     const pool = (await ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", job._id)).collect())
       .filter(l => l.roomId === room._id).map(toListing);
     // A direction the room pulled in earns one more gift on the map.
-    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION + (pulled ? 1 : 0), steering, direction._id);
+    const { ranked, counts } = rankPool(pool, clues, room.budgetMinor, GIFTS_PER_DIRECTION + (pulled ? 1 : 0), steering, direction._id, room.budgetGuidance);
     const foundBy: SearchOrigin = { query: direction.query, source: "direction", directionId: direction._id, ...(direction.clueIds[0] ? { publishedClueId: direction.clueIds[0] } : {}) };
     add(job, pool, ranked, foundBy, row => row.publishedClueIds.length
       ? row.explanation
@@ -123,7 +123,7 @@ export async function readCatalog(
       .filter((listing) => listing.roomId === room._id && (!council || (council.deliveredAt && approved.has(listing._id))))
       .map(toListing);
     const limit = lanes.length ? GIFTS_PER_DIRECTION : candidatePool.brief?.listingLimit ?? 12;
-    const result = rankPool(pool, clues, room.budgetMinor, limit, steering);
+    const result = rankPool(pool, clues, room.budgetMinor, limit, steering, undefined, room.budgetGuidance);
     excluded = result.excluded;
     const trendId = trendJobIdInFingerprint(candidatePool.inputHash);
     const trendJobId = trendId ? ctx.db.normalizeId("trendJobs", trendId) : null;
@@ -147,7 +147,7 @@ export async function readCatalog(
       const doc = await ctx.db.get(id);
       if (!doc || doc.roomId !== room._id) continue;
       const listing = toListing(doc);
-      const rows = rankListings({ listings: [listing], clues, budgetMinor: room.budgetMinor, limit: 1 });
+      const rows = rankListings({ listings: [listing], clues, budgetMinor: room.budgetMinor, budgetGuidance: room.budgetGuidance, limit: 1 });
       if (rows[0]) {
         recommendations.push({ ...rows[0], id: `box:${id}`, roomId: room._id, createdAt: selection.selectedAt });
         shownIds.add(id);

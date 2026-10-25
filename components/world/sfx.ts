@@ -87,6 +87,12 @@ export function playPencil(seconds: number) {
   g.gain.linearRampToValueAtTime(0.0001, t + seconds);
   n.connect(f).connect(g).connect(c.destination);
   n.start(t);
+  return () => {
+    n.stop();
+    n.disconnect();
+    f.disconnect();
+    g.disconnect();
+  };
 }
 
 /** A soft shimmering wash: pigment spreading into the page. */

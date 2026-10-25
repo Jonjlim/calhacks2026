@@ -225,6 +225,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["evidenceSources", evidenceSources],
   ["mediaUploadGrants", mediaUploadGrants],
   ["proposedClues", proposedClues],
+  ["budgetRanges", async (ctx, roomId, limit) => deleteAll(ctx, await ctx.db.query("budgetRanges").withIndex("by_room", q => q.eq("roomId", roomId)).take(limit))],
   ["contributionLimits", contributionLimits],
   ["recipientProfiles", recipientProfiles],
   ["chatMessages", chatMessages],

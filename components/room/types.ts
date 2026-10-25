@@ -53,6 +53,7 @@ export interface RoomData {
   /** Screened AI notes and evaluations, kept separate from participant votes. */
   agentCollaborators?: AgentCollaboratorFeed;
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
+  mapUnavailable?: string[];
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
   questionPoll?: QuestionPollView | null;

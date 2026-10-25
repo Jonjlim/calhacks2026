@@ -268,18 +268,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const members = useMemo(() => reduceCouncil(data.council?.events ?? []), [data.council?.events]);
   const working = COUNCIL_ACTORS.filter((a) => members[a].status === "started" && a !== "courier");
   const activeClues = data.publishedClues.filter((c) => c.status === "active");
-  const ask = useResultAction(actions?.startResearch);
   const resume = useResultAction(actions?.resumeCouncil);
   const run = data.council?.run;
 
   // One contextual primary action, matching the real phase.
   let primary: ReactNode = null;
-  if (phase === "collect") {
-    primary = isOrganizer ? (
-      <button className="btn-primary h-11 px-5" disabled={data.councilUnavailable || !activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
-        {activeClues.length ? "Wake the council" : "Waiting for memories…"}
-      </button>
-    ) : (
+  if (phase === "collect" && !isOrganizer) {
+    primary = (
       <span className="text-[13.5px] text-dusk/65">Add memories from your phone</span>
     );
   } else if (phase === "researching") {
@@ -380,6 +375,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
+          {stage === "map" && !!data.mapUnavailable?.length && <p role="alert" className="max-w-[440px] text-[12.5px] text-dusk/80">{data.mapUnavailable.join(", ")} temporarily unavailable. Your other map items are still here.</p>}
           <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Add a memory or gift idea · use the photo icon to share pictures · drag to look around" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
@@ -421,7 +417,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           </div>
         </div>
       </div>
-      {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
+      {resume.error && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{resume.error.message}</p>}
 
       {stage === "map" && !preview && !engaged && <BookOfPossibilities data={data} actions={actions} isOrganizer={isOrganizer} onChoose={chooseFromBook} />}
 
