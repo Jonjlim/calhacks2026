@@ -1236,16 +1236,25 @@ LLM-initiated payment operations are forbidden.
 
 Owner: Dev 1 (council UI) with Dev 3 (agents). Consumers: the `fetch-agent/` coordinator, `/council` page. Additive tables; no existing table changes. Code: `lib/council/contracts.ts`, `lib/council/library.json`, `convex/council.ts`.
 
-One registered Fetch.ai agent (Chat Protocol, ASI:One) runs five specialist roles as real functions and emits an event at each execution boundary:
-
+Five registered Fetch.ai uAgents run in one process (a uAgents Bureau). The **Courier** is the public agent (Chat Protocol for ASI:One, plus the website's REST `POST /council/run` and `GET /health`; the `POST /council/run` acceptance additively returns optional `agentAddress` (the Courier's `agent1…` address), which Convex stores as optional `councilRuns.agentAddress` and exposes on the room's council `run`; the request additively accepts optional `callbackSite` — the calling deployment's `https://<name>.convex.site` URL, sent only when the caller's `CONVEX_SITE_URL` has that shape — which must exactly match (after trailing-`/` trim) an entry of the agent's `COUNCIL_ALLOWED_SITES` (comma-separated, default `CONVEX_SITE_URL`) or the run is refused with `{ ok: false, error: "callback not allowed" }`; every events/results/research callback for that run then goes to that site, so one agent serves several deployments sharing `COUNCIL_INGEST_SECRET`. Without it, and for ASI:One chats, the agent's `CONVEX_SITE_URL` is used). It asks four specialist agents with typed uAgents messages and `ctx.send_and_receive`; each specialist emits its own events for its actor at its real execution boundaries:
 | Actor | Task | Does |
 | --- | --- | --- |
 | `archivist` | `analyze_memories` | Extracts clues (interests, wishes, owned items, dislikes, budget) from the request/memories |
 | `muse` | `design_decoration` | Maps clues to a `DecorationSpec` from the approved library only |
 | `scout` | `research_gifts` | Real product research via the existing Apify pipeline (`/council/research`), cached |
 | `keeper` | `check_constraints` | Budget, ownership and dislike rules; hard exclusions vs. soft notes |
-| `courier` | `deliver_recommendations` | Coordinates and prepares the final answer |
+| `courier` | `deliver_recommendations` | Coordinates the specialists and prepares the final answer |
 
+Specialist messages (`fetch-agent/council/messages.py`, uAgents `Model`s). Every request carries `{ run_id, source: "asi1"|"web", demo_key?, room_run }`; every result carries `{ run_id, ok, error? }`. Nested payloads are the JSON form of the Python contracts in `fetch-agent/council/contracts.py` and are re-validated by the receiver:
+
+| Role | Request | Result |
+| --- | --- | --- |
+| Archivist | `ArchivistRequest { memories: [{memory_id, text}], budget_minor? }` | `ArchivistResult { analysis? }` |
+| Muse | `MuseRequest { analysis, memory_ids }` | `MuseResult { decorations: DecorationSpec[] }` |
+| Scout | `ScoutRequest { analysis }` | `ScoutResult { report: ScoutReport }` |
+| Keeper | `KeeperRequest { analysis, listings: Listing[] }` | `KeeperResult { report: KeeperReport }` |
+
+Timeouts and fallback: if a specialist does not answer within its timeout (`COUNCIL_<ROLE>_TIMEOUT_S`) or replies with something that fails validation, the Courier emits that actor's `failed` event (the `error` says the local fallback was used) and runs the same role function in-process without further events for that actor. Late events from the abandoned specialist are dropped. The Scout is the exception: its fallback runs no second search and reports that no listings were verified. ASI:One (`asi1`) may assist the Archivist (extra clues found in the text), the Muse (an approved asset instead of the generic charm) and the Keeper (one "Fit: …" note per kept listing, no digits or currency); deterministic rules decide everything else and every model output is validated. No event or callback shape changed: event `result` keys stay `{ summary?, count?, decorations?, cached?, error? }`.
 `CouncilEvent` — `{ eventId, runId, actor, task, status: started|completed|failed, sequence, timestamp, result? }`. `result` is display-only and small: `{ summary?, count?, decorations?, cached?, error? }`. Products, URLs and raw memories never travel in events. `roomId` is never invented: ASI:One runs have none; web demo runs carry a browser `demoKey`.
 
 `DecorationSpec` — `{ memoryId, jar: wish|interest|moment, assetId, color, placement, label }`, every enum from `lib/council/library.json`.
@@ -1266,6 +1275,8 @@ Live display projection: `RoomData.researchJobs?` carries the existing authorize
 
 
 The authenticated room uses `councilRoom.start({roomId, publishedClueIds, idempotencyKey})`, returning `Result<{runId, jobId}>`. Membership, active room clues, room knowledge revision and the stated room budget are checked in Convex. The coordinator receives only published clues and public room context. No private imports, unpublished extractions or contribution limits cross this boundary.
+
+Open council requests deduplicate only within the current room knowledge revision. A new explicit request after memories change closes older open council runs as failed and their unfinished research jobs as stale, then creates work for the current clues. Same-key retries retain their original identity, and current-revision uncertainty still resumes the existing job without another paid start. The council watchdog also closes superseded work rather than labeling it resumable.
 
 Additive optional `councilRuns` fields: `roomId`, `researchJobId`, `knowledgeRevision`, `idempotencyKey`, `approved` (listing ID + Keeper notes), `excluded` (title + reason), `cached`, `deliveredAt`, `error`. Status additionally supports `partial` and `uncertain`. Indexes: room/start time, research job, room/request key. Existing demo/ASI records remain valid and never acquire room access. `giftDecorations.demoKey` becomes optional; room decorations use `roomId` and an indexed room/memory pair. Only current active published-clue IDs may produce room charms.
 
@@ -2063,6 +2074,112 @@ The map draws every gift the catalog returns, apart from ones the room let go. O
 - `research.tiktokLooks.list({ roomId })` → `Result<{ id, query, status, posts: { url, videoId }[], retrievedAt?, lastError? }[]>`. Posts are public TikTok links (private accounts and ads dropped), at most 6.
 - New `tiktokLooks` table (room-scoped, purged with the room). A successful search logs one "looked at N public TikToks" line in the decision log.
 
+
+### Room guidance (Dev 1 presentation contract)
+
+The room guide observes existing `PublishedClue`, council themes, map signals and
+listing votes. Its first contribution uses `RoomActions.addManualClue` or the
+existing photo/import review flow; there is no tutorial room, tutorial memory,
+or checklist after it. After the first memory is confirmed the guide steps
+aside (`live`) and pauses the room once (`connect`) when another member's
+published memory first lands, explaining how connected memories form themes
+that lead to more gifts. The pause holds for a fixed time or until dismissed,
+auto-publication or reset. Local completion is scoped to room + participant.
+Skipping/replaying guidance never changes memories, votes, selection or approvals.
+Only a council theme containing both published clues may be described as a
+connection. The connection pause waits behind an active composer, drawer or
+reveal; it never takes over someone's draft.
+
+The client emits `unwrap:room-guide` as a `CustomEvent` for the optional Moss
+narrator. Detail is `{ roomId, step, peerId, title, text, active, typing }`; `step` is
+`arrival | welcome | help | compose | saved | live | connect | null`.
+`peerId` is a published clue ID or null. `typing: true` marks feedback that changes while someone writes; narrators skip it. `active: false` cancels narration when
+the guide is hidden, paused or unmounted. This event is presentation only and
+never authorizes a room action or external data access. Narrator consumers must
+not publish, vote, select gifts or approve shares in response. Existing Convex
+contracts and the private import consent flow remain authoritative.
+
+The cinematic presentation adds a local `RingGuideScene` (Moss position, pose,
+seed-island visibility and viewer avatar) to `RingsWorld`. This is never stored
+as a clue. The guide may move the existing composer into its side panel, but
+only one editor is mounted. Help questions and topic choices are local prompts,
+not inferred recipient preferences: no suggested answer is automatically saved.
+Draft-length feedback stays local and raw drafts are never included in narrator
+events. Authored camera framing yields to user gestures and reveal ownership.
+
+### Moss room recall (Dev 3, MAP-024; plan in MOSS_AGENT_PLAN.md)
+
+`moss.recall.nudge({ roomId, questionIndex })` is a public Node action behind the
+guide's *I don't know* step. `questionIndex` selects one of `MOSS_QUESTIONS`
+(`lib/room/guide.ts`); free text is not accepted. The server checks membership,
+then searches only the room's active published memories (gift ideas excluded,
+at most 256, newest first) and returns one memory shared by **another** member:
+
+```ts
+type MossNudgeView = {
+  clueId: Id<"publishedClues">;
+  text: string;            // the published memory, already room-visible
+  author: string;          // its publisher's display name
+  match: "moss" | "keyword" | "recent";
+  ms: number;              // server time for the search, rounded
+} | null;                  // null when no other member has shared a memory
+```
+
+`match` is `moss` when the Moss SDK ranked it (`MOSS_ROOM_ENABLED=true` plus
+`MOSS_PROJECT_ID`/`MOSS_PROJECT_KEY`), `keyword` when word overlap did (SDK off or
+failing), and `recent` when nothing overlapped and the newest friend's memory is
+offered instead. Errors: `unauthorized`, `not_found`, `validation_failed`.
+
+`moss.recall.warm({ roomId })` loads the embedding model with synthetic text so
+the first nudge doesn't pay the cold setup; it returns `{ warmed: boolean }` and
+never touches room text. Members only.
+
+Rules: the Moss session is rebuilt per call from Convex rows and always closed;
+no `pushIndex`, `loadIndex`, cloud index or disk save. Session names and document
+IDs are random and local; no room ID, user ID or text is put in them. The room
+index never contains private imports, proposed clues, contribution limits,
+Gift Twin vault text or another room's data, and stays separate from Gift Twin's
+own sessions (D26). A nudge is a suggestion shown to the person who asked; it is
+never saved, published or attributed to them, and the guide never fills the
+draft with it.
+
+### Moss voice (Dev 3, MAP-026 / MAP-027; D29)
+
+`GET /api/moss-voice` → `{ available: boolean }`: true only when the Next.js
+server has `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` and `MOSS_VOICE_AGENT_ID`. The
+"Talk to Moss" choices are hidden otherwise.
+
+`POST /api/moss-voice` with body `{ roomId }` and `Authorization: Bearer <the
+caller's Convex auth token>` → `{ ok: true, value: { serverUrl, roomName,
+participantToken } }` or `{ ok: false, error }` with `unauthorized` (401/403),
+`validation_failed` (400), `unavailable` (503) or `provider_timeout` (502).
+Membership is checked by `moss.voice.canCall({ roomId })` with the caller's own
+token. Room and participant names in the call are random (`unwrap-voice-<uuid>`,
+`friend-<uuid>`); no room ID, user ID or name is sent to Moss. The pass lasts 15
+minutes.
+
+In a call, the browser sends one text message on topic `lk.chat` first: the
+room context from `callContextText` (recipient name, the caller's display name,
+up to 30 active published memories with authors, one line each, quoted, as
+data). Nothing else from Convex is sent. Live captions arrive on
+`lk.transcription` and stay in the browser. "Use what I said" copies the
+caller's own latest words into the memory draft (`fillDraft`); the person still
+presses share. The call never publishes, votes, selects gifts or approves shares,
+and ends when the guide hides, a drawer or reveal opens, or the person hangs up.
+
+The agent's prompt and greeting live in `scripts/moss-voice/agent.json` and are
+deployed with `scripts/moss-voice/deploy.py`. Its voice is chosen on the Moss
+Platform (a young female voice). Browser-voice fallback: with room sound on and
+no live call, `useMossNarrator` speaks the guide's own `unwrap:room-guide` text
+with `speechSynthesis`, preferring a female English system voice.
+
+Natural narration (D30): `GET /api/moss-voice/speak` → `{ available }` (true when
+`ELEVENLABS_API_KEY` is set). `POST /api/moss-voice/speak` with `{ roomId, text }`
+(text ≤ 400 characters, one guide line) and the caller's Convex token returns
+`audio/mpeg` in Moss's ElevenLabs voice, or `{ ok: false, error }` with
+`unauthorized`, `validation_failed`, `unavailable` or `provider_timeout`. Members
+only. The narrator uses it when available and falls back to `speechSynthesis` per
+line on any failure. Lines marked `typing: true` are never spoken.
 Map subscriptions fail independently: an unavailable optional endpoint (for example TikTok inspiration) must not remove saved photos, directions, or other successfully loaded map data. The room names the unavailable feature instead of treating it as an empty successful result. Combine reports when no new direction was saved.
 
 ### Gift story and gift tag (D26, Dev 4)

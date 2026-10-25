@@ -74,6 +74,8 @@ export const councilRunSchema = z.strictObject({
   source: z.enum(["web", "asi1"]),
   /** Browser-session key for web demo runs that have no Unwrap room. */
   demoKey: slug.optional(),
+  /** The coordinator's Agentverse address, when it reports one. Display only. */
+  agentAddress: z.string().regex(/^agent1[0-9a-z]{20,90}$/).optional(),
 });
 
 /** The derived, renderable state of one council member. */

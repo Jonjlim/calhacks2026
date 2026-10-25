@@ -60,6 +60,18 @@ describe("map camera state", () => {
     expect(first).toBeLessThan(1);
     expect(mapView.step(0.016, true).yaw).toBe(1);
   });
+
+  it("lets authored guidance set the angle, and counts gestures so it can yield", () => {
+    const before = mapView.interaction;
+    mapView.focus(12, 11, 0.3, { yaw: -0.55, pitch: -9 });
+    expect(mapView.target).toMatchObject({ x: 12, z: 11, yaw: -0.55, pitch: PITCH_MIN });
+    mapView.orbit(0.1, 0);
+    expect(mapView.interaction).toBeGreaterThan(before);
+    mapView.dragging = true;
+    mapView.focus(0, 0);
+    expect(mapView.target.x).toBe(12);
+    mapView.dragging = false;
+  });
   it("flies toward the actual gift continuously and arrives after the authored duration", () => {
     mapView.focusGift(10, 7);
     expect(mapView.current.zoom).toBe(1); // setting the target never cuts the camera

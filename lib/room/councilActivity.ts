@@ -7,10 +7,12 @@ import { roomResearchJobs } from "./researchActivity";
 export function roomCouncilMembers(data: Pick<RoomData, "council" | "activity" | "researchJobs" | "latestResearch" | "trends">) {
   const events = data.council?.events ?? [];
   const members = reduceCouncil(events);
-  const jobs: { actor: CouncilActor; status: JobStatus; createdAt: number; working: string; done: string }[] = [];
-  for (const job of roomResearchJobs(data)) jobs.push({ ...job, actor: "scout", working: "Scouting…", done: "Gift search finished" });
+  const jobs: { actor: CouncilActor; status: JobStatus; createdAt: number; working: string; done: string; failed?: string }[] = [];
+  for (const job of roomResearchJobs(data)) jobs.push({ ...job, actor: "scout", working: "Scouting…", done: "Gift search finished", failed: searchFailure(job.lastError) });
+  // Trend lookups run on their own in the background. Their outcome shows on the trend ideas themselves;
+  // a lookup that finds nothing or fails must not paint Scout as broken when its real work is fine.
   const trend = data.trends?.latestJob;
-  if (trend) jobs.push({ ...trend, actor: "scout", working: "Exploring trends…", done: "Trend lookup finished" });
+  if (trend && (trend.status === "pending" || trend.status === "running" || trend.status === "succeeded")) jobs.push({ ...trend, actor: "scout", working: "Exploring trends…", done: "Trend lookup finished" });
   for (const job of data.activity?.jobs ?? []) {
     const role = job.kind === "extract"
       ? { actor: "archivist" as const, working: "Reading memories…", done: "Memory reading finished" }
@@ -33,8 +35,18 @@ export function roomCouncilMembers(data: Pick<RoomData, "council" | "activity" |
       : job.status === "succeeded" ? job.done
       : job.status === "uncertain" ? "Waiting for confirmation…"
       : job.status === "stale" ? "Memories changed — try again"
-      : job.status === "canceled" ? "Task canceled" : "Task failed — try again";
+      : job.status === "canceled" ? "Task canceled" : job.failed ?? "Task failed — try again";
     members[actor] = { actor, status, summary, sequence: job.createdAt * 8 + statuses.indexOf(job.status) };
   }
   return members;
+}
+
+/** What a failed gift search actually ran into, in plain words, instead of a bare "try again". */
+export function searchFailure(lastError?: string): string {
+  if (!lastError) return "Gift search failed — try again";
+  if (/no usable product listings|no listings|no results/i.test(lastError)) return "No gifts matched that search — try another direction";
+  if (/council service is not configured|FETCH_AGENT_URL/i.test(lastError)) return "The council isn’t connected on this server";
+  if (/credentials|token|unauthori[sz]ed|401|403/i.test(lastError)) return "The gift source isn’t set up on this server";
+  if (/timed? ?out|timeout/i.test(lastError)) return "The gift search took too long — try again";
+  return "Gift search failed — try again";
 }

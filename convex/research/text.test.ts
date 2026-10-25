@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cluePhrase, productCategory, shoppingPhrase, shoppingPhrases } from "./text";
+import { cluePhrase, isBudgetOrOccasionOnly, productCategory, shoppingPhrase, shoppingPhrases } from "./text";
 import { trendSeed } from "./trendPolicy";
 
 const seed = (text: string) => trendSeed({ kind: "interest", text, status: "active" }, ["Maya"]);
@@ -23,6 +23,19 @@ describe("shopping phrases from everyday memories", () => {
     ["Goes bowling every Friday night", "bowling"],
   ])("%s -> %s", (text, phrase) => {
     expect(shoppingPhrase(text)).toBe(phrase);
+  });
+
+  it.each([
+    ["budget is around $80 for her birthday gift", true],
+    ["$50", true],
+    ["under 100 dollars", true],
+    ["christmas present", true],
+    ["mother's day gift", true],
+    ["birthday candles", false],
+    ["pottery", false],
+    ["80s vinyl", false],
+  ])("budget or occasion only: %s -> %s", (phrase, expected) => {
+    expect(isBudgetOrOccasionOnly(phrase)).toBe(expected);
   });
 
   it("splits a memory that names several interests, but not fixed phrases", () => {

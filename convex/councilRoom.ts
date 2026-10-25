@@ -43,7 +43,16 @@ export const start = mutation({
     const previous = await ctx.db.query("councilRuns").withIndex("by_room_request", q => q.eq("roomId", room._id).eq("idempotencyKey", args.idempotencyKey)).unique();
     if (previous?.researchJobId) return ok({ runId: previous.runId, jobId: previous.researchJobId });
     const recent = await ctx.db.query("councilRuns").withIndex("by_room", q => q.eq("roomId", room._id)).order("desc").take(20);
-    const active = recent.find(r => ["running", "uncertain"].includes(r.status));
+    const open = recent.filter(r => ["running", "uncertain"].includes(r.status));
+    for (const old of open.filter(r => r.knowledgeRevision !== room.knowledgeRevision)) {
+      const message = "Memories changed. Start a new council request with the current clues.";
+      await ctx.db.patch(old._id, { status: "failed", error: message, updatedAt: Date.now() });
+      const job = old.researchJobId ? await ctx.db.get(old.researchJobId) : null;
+      if (job && ["pending", "running", "uncertain"].includes(job.status)) {
+        await ctx.db.patch(job._id, { status: "stale", lastError: message });
+      }
+    }
+    const active = open.find(r => r.knowledgeRevision === room.knowledgeRevision);
     if (active?.researchJobId) return ok({ runId: active.runId, jobId: active.researchJobId });
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, ids, room.budgetMinor ?? null]);
     const { roomId: _, ...storedBrief } = brief;
@@ -69,7 +78,7 @@ export const state = query({
     const active = new Set(clues.filter(c => c.status === "active").map(c => `mem_${c._id}`));
     const decorations = await ctx.db.query("giftDecorations").withIndex("by_room_memory", q => q.eq("roomId", roomId)).collect();
     return ok({
-      run: run ? { runId: run.runId, status: run.status, updatedAt: run.updatedAt, startedAt: run.startedAt, error: run.error, cached: run.cached, excluded: run.excluded ?? [], stale: run.knowledgeRevision !== member.room.knowledgeRevision } : null,
+      run: run ? { runId: run.runId, status: run.status, updatedAt: run.updatedAt, startedAt: run.startedAt, error: run.error, cached: run.cached, excluded: run.excluded ?? [], agentAddress: run.agentAddress, stale: run.knowledgeRevision !== member.room.knowledgeRevision } : null,
       events: events.flatMap(({ _id, _creationTime, receivedAt, ...e }) => { const parsed = councilEventSchema.safeParse(e); return parsed.success ? [parsed.data] : []; }),
       decorations: decorations.filter(d => active.has(d.memoryId)).flatMap(({ memoryId, jar, assetId, color, placement, label }) => { const parsed = decorationSpecSchema.safeParse({ memoryId, jar, assetId, color, placement, label }); return parsed.success ? [parsed.data] : []; }),
     });
@@ -91,6 +100,15 @@ export const context = internalQuery({
   },
 });
 
+export const recordAgent = internalMutation({
+  args: { ...runArgs, agentAddress: v.string() },
+  handler: async (ctx, { runId, agentAddress }) => {
+    if (!/^agent1[0-9a-z]{20,90}$/.test(agentAddress)) return;
+    const run = await ctx.db.query("councilRuns").withIndex("by_run", q => q.eq("runId", runId)).unique();
+    if (run && run.agentAddress !== agentAddress) await ctx.db.patch(run._id, { agentAddress });
+  },
+});
+
 export const mark = internalMutation({
   args: { ...runArgs, status: v.union(v.literal("failed"), v.literal("uncertain")), error: v.string() },
   handler: async (ctx, args) => {
@@ -109,6 +127,18 @@ export const expire = internalMutation({
   args: runArgs,
   handler: async (ctx, args) => {
     const run = await ctx.db.query("councilRuns").withIndex("by_run", q => q.eq("runId", args.runId)).unique();
+    if (run?.status === "running" && run.roomId) {
+      const room = await ctx.db.get(run.roomId);
+      if (!room || room.knowledgeRevision !== run.knowledgeRevision) {
+        const message = "Memories changed. Start a new council request with the current clues.";
+        await ctx.db.patch(run._id, { status: "failed", error: message, updatedAt: Date.now() });
+        const job = run.researchJobId ? await ctx.db.get(run.researchJobId) : null;
+        if (job && ["pending", "running", "uncertain"].includes(job.status)) {
+          await ctx.db.patch(job._id, { status: "stale", lastError: message });
+        }
+        return;
+      }
+    }
     if (run?.status === "running") await ctx.db.patch(run._id, { status: "uncertain", error: "The council was interrupted. Resume this request to check its existing research.", updatedAt: Date.now() });
   },
 });
@@ -132,6 +162,12 @@ export const resume = mutation({
   },
 });
 
+// Tells a shared agent which deployment to call back. A local backend's http:// site is never sent: the agent only accepts allowlisted https *.convex.site URLs and uses its default otherwise.
+function cloudSite(): { callbackSite?: string } {
+  const site = process.env.CONVEX_SITE_URL;
+  return site && /^https:\/\/[a-z0-9-]+\.convex\.site\/?$/.test(site) ? { callbackSite: site } : {};
+}
+
 export const dispatch = internalAction({
   args: runArgs,
   handler: async (ctx, { runId }): Promise<null> => {
@@ -146,9 +182,10 @@ export const dispatch = internalAction({
     try {
       const response = await fetch(`${url.replace(/\/$/, "")}/council/run`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(8000),
-        body: JSON.stringify({ secret, runId, roomRun: true, demoKey: "", budgetMinor: data.room.budgetMinor ?? null, memories: data.clues.map(c => ({ memoryId: `mem_${c._id}`, text: `${c.kind}: ${c.text}` })) }),
+        body: JSON.stringify({ secret, runId, roomRun: true, demoKey: "", budgetMinor: data.room.budgetMinor ?? null, ...cloudSite(), memories: data.clues.map(c => ({ memoryId: `mem_${c._id}`, text: `${c.kind}: ${c.text}` })) }),
       });
-      const body = await response.json() as { ok?: boolean };
+      const body = await response.json() as { ok?: boolean; agentAddress?: string | null };
+      if (response.ok && body.ok && typeof body.agentAddress === "string") await ctx.runMutation(internal.councilRoom.recordAgent, { runId, agentAddress: body.agentAddress });
       if (!response.ok || !body.ok) await ctx.runMutation(internal.councilRoom.mark, { runId, status: "failed", error: "The council service rejected this request. Check service credentials and health." });
     } catch {
       await ctx.runMutation(internal.councilRoom.mark, { runId, status: "uncertain", error: "The council did not acknowledge in time. Resume this request; it may already be working." });

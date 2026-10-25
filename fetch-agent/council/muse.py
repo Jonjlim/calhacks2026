@@ -11,8 +11,10 @@ asks for the same slot (Convex resolves any collision when it persists).
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
+from . import llm
 from .contracts import LIBRARY, PLACEMENTS, Analysis, Clue, DecorationSpec
 
 _ASSETS = LIBRARY["assets"]
@@ -70,3 +72,41 @@ def design(analysis: Analysis, memory_ids: list[str]) -> list[DecorationSpec]:
             )
         )
     return specs
+
+
+def _asset(asset_id: str) -> dict | None:
+    return next((a for a in _ASSETS if a["id"] == asset_id), None)
+
+
+async def design_with_model(analysis: Analysis, memory_ids: list[str]) -> list[DecorationSpec]:
+    """Keyword matches stay deterministic; ASI:One may only replace a fallback charm with another approved asset."""
+    specs = design(analysis, memory_ids)
+    pending = [s for s in specs if s.assetId == _FALLBACK["id"]]
+    if not pending or not llm.enabled():
+        return specs
+    menu = [{"id": a["id"], "label": a["label"], "keywords": a["keywords"][:6]} for a in _ASSETS if a["id"] != _FALLBACK["id"]]
+    asks = []
+    for s in pending:
+        phrases = [c.phrase for c in analysis.clues if c.memory_id == s.memoryId and c.kind in ("wish", "interest", "preference")]
+        asks.append({"memoryId": s.memoryId, "clues": phrases[:6]})
+    prompt = (
+        "You design a small symbolic charm for each gift memory. Choose exactly one asset id per memory from this approved list, "
+        "or \"none\" if nothing fits. Reply as JSON {\"choices\":[{\"memoryId\":\"...\",\"assetId\":\"...\"}]}.\n"
+        f"Assets: {json.dumps(menu)}\nMemories: {json.dumps(asks)}"
+    )
+    raw = await llm.ask_json(prompt, max_tokens=300)
+    choices = raw.get("choices") if raw else None
+    if not isinstance(choices, list):
+        return specs
+    picked: dict[str, dict] = {}
+    for c in choices:
+        if isinstance(c, dict) and isinstance(c.get("memoryId"), str) and isinstance(c.get("assetId"), str):
+            asset = _asset(c["assetId"])
+            if asset and asset["id"] != _FALLBACK["id"]:
+                picked[c["memoryId"]] = asset
+    out = []
+    for s in specs:
+        asset = picked.get(s.memoryId) if s.assetId == _FALLBACK["id"] else None
+        out.append(s.model_copy(update={"assetId": asset["id"], "color": asset["color"], "label": asset["label"]}) if asset else s)
+    # Re-validate against the library (model_copy skips validators).
+    return [DecorationSpec.model_validate(s.model_dump()) for s in out]

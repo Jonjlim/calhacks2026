@@ -1,5 +1,15 @@
 # Unwrap vision lab
 
+## Current review: Moss tutorial film
+
+The default preview stages a 54-second integrated tutorial with changing camera angles, a Moss stand-in, memory contributions, gift exploration, evidence paths and split approvals. The final deliverable is `video/unwrap-moss-tutorial.mp4`. This is a standalone video/prototype; the live app is unchanged. See [TUTORIAL_STUDY.md](./TUTORIAL_STUDY.md). Prior quiet-map study: [quiet.html](./quiet.html).
+
+## Current review: quiet map example
+
+The default preview opens the **quiet map example**, with short resting tags, one focused island, a 24-island density switch, and the preserved split approval ending. The previous version remains at [film.html](./film.html). Both include a 38-second walkthrough: hover previews, attached action clusters, distinct support/pass/ownership, evidence trails, research on its theme, and shares unfolding from the present. Play, pause, scrub or select a chapter; clicking a node makes the study interactive. Sample state only; the live application is unchanged.
+
+See [MOTION_STUDY.md](./MOTION_STUDY.md) for animation research, placement rules and the build command. The previous rings prototype remains at [rings.html](./rings.html).
+
 ## Current revision: the rings view
 
 The guided prototype now uses the ring layout from the Phase 2 plan ([docs/EXECUTION_PLAN.md](../../docs/EXECUTION_PLAN.md)). Islands sit on flat rings around the present instead of floating freely:

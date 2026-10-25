@@ -1,0 +1,3 @@
+# Moss's deploy client (MossVoiceClient) ships in 1.0.0b3; later betas are the in-call runtime instead.
+moss-voice-agent-manager==1.0.0b3
+python-dotenv==1.2.1

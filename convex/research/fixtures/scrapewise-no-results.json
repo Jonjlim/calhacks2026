@@ -1,0 +1,14 @@
+[
+  {
+    "title": null,
+    "gtin": null,
+    "searchQuery": "she throws pots at the community studio every sunday",
+    "country": "us",
+    "language": "en",
+    "searchUrl": "https://www.google.com/search?q=she+throws+pots+at+the+community+studio+every+sunday&udm=28&hl=en&gl=us",
+    "productUrl": null,
+    "scrapedAt": "2026-10-25T11:11:00.009422+00:00",
+    "errorCode": "NO_RESULTS",
+    "error": "Google Shopping has no products for this search in this country (not charged)"
+  }
+]

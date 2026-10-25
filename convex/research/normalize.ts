@@ -139,6 +139,14 @@ export function normalizeScrapewiseRow(raw: unknown, retrievedAt: number): Norma
  */
 export function providerNotice(raw: unknown): string | null {
   if (!Array.isArray(raw)) return null;
+  // Scrapewise reports an empty search as one row with errorCode NO_RESULTS.
+  const empty = raw.find((item): item is Record<string, unknown> =>
+    !!item && typeof item === "object" && (item as Record<string, unknown>).errorCode === "NO_RESULTS");
+  if (empty && raw.length === 1) {
+    return typeof empty.error === "string" && empty.error.trim()
+      ? empty.error.replace(/\s+/g, " ").trim().slice(0, 160)
+      : "Google Shopping has no products for this search.";
+  }
   for (const item of raw.slice(0, 5)) {
     if (!item || typeof item !== "object") continue;
     for (const value of Object.values(item as Record<string, unknown>)) {

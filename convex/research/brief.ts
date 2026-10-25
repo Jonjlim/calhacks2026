@@ -5,7 +5,7 @@
  * become terms the search and ranking must avoid.
  */
 import type { PublishedClue, SearchBrief } from "../../lib/contracts";
-import { cluePhrase, isUnconfirmedObservation, shoppingPhrases } from "./text";
+import { cluePhrase, isBudgetOrOccasionOnly, isUnconfirmedObservation, shoppingPhrases } from "./text";
 
 export const DEFAULT_LISTING_LIMIT = 12;
 const MAX_LISTING_LIMIT = 12;
@@ -45,12 +45,19 @@ export function buildSearchBrief(input: BuildSearchBriefInput): SearchBrief {
     roomId: input.roomId,
     ...(input.budgetGuidance && { budgetGuidance: input.budgetGuidance }),
     knowledgeRevision: input.knowledgeRevision,
-    queryTerms: uniquePhrases(positive, true).slice(0, MAX_QUERY_TERMS),
+    queryTerms: searchTerms(positive).slice(0, MAX_QUERY_TERMS),
     mustExclude: uniquePhrases(negative),
     ...(input.budgetMinor !== undefined && { budgetMinor: input.budgetMinor }),
     ...(input.occasion !== undefined && { occasion: input.occasion }),
     listingLimit: limit,
   };
+}
+
+/** Budget and occasion wording never leads a product search; kept only when nothing else is searchable. */
+function searchTerms(clues: BriefClue[]): string[] {
+  const phrases = uniquePhrases(clues, true);
+  const interests = phrases.filter((phrase) => !isBudgetOrOccasionOnly(phrase));
+  return interests.length ? interests : phrases;
 }
 
 function uniquePhrases(clues: BriefClue[], positive = false): string[] {
