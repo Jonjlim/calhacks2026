@@ -397,6 +397,88 @@ interface AgentReply {
 
 Errors: `refused` for policy, `validation_failed` for bad bodies. Never throw raw preference text.
 
+### Agent collaborators and the Gift Twin (demo, D20, 2026-10-24)
+
+**Status: demo, behind `GIFT_TWIN_DEMO_ENABLED=true`.** Owner: Dev 3 (agents). Consumers: Dev 1 (room UI), Dev 2 (schema review, purge). Full design: [GIFT_TWIN.md](GIFT_TWIN.md).
+
+An **agent collaborator** is an AI agent that joins a room next to people and posts notes the way a friend would ("I learned that Maya has been playing tennis"). It is not a `Participant`: it has no share, cap, selection, or approval, and its up/down votes are advisory posts, separate from participant `votes`. The first kind is `gift_twin`: the recipient pairs their Mac, grants **one-time permission** to upload the messages they sent into a temporary server-only vault, and a cloud twin agent acting for the recipient posts insights and votes on the room's ideas (existing and new) until the vault expires. `trend_scout` is reserved for the planned trend agent and uses the same tables and feed.
+
+Shared types and Zod schemas live in `lib/agentCollaborators/contracts.ts` (used by Convex, the Mac companion, and the UI).
+
+```ts
+type AgentCollaboratorKind = "gift_twin" | "trend_scout";
+type AgentCollaboratorStatus = "pending_pairing" | "active" | "revoked";
+type TwinInsightCategory = "interest" | "wish" | "dislike" | "owns" | "style";
+type TwinVaultStatus = "uploading" | "processing" | "ready" | "expired";
+
+interface VaultMessage {           // one message the recipient sent; never other people's
+  text: string;                    // ≤2,000 chars
+  sentAt: number;
+}
+
+interface TwinInsight {            // a gift idea found in the messages; strict, screened
+  category: TwinInsightCategory;
+  text: string;                    // ≤160 chars, third person, no quotes/links/contact details/sensitive topics
+  confidence: "low" | "medium" | "high";  // low is dropped; one clear mention of a giftable thing is medium
+  evidenceCount: number;
+}
+
+interface TwinVoteCast {           // the twin's vote on one room idea
+  ideaRef: string;                 // server-issued ("clue:<id>", "idea:<id>", "listing:<id>")
+  vote: "up" | "down";
+  text: string;                    // same screening as insights
+  category?: TwinInsightCategory;  // downvotes: "dislike" | "owns"
+  confidence: "low" | "medium" | "high";
+  evidenceCount: number;
+}
+
+interface TwinVaultView { status: TwinVaultStatus; messageCount: number; expiresAt?: number }
+
+interface AgentCollaboratorView {
+  id: string; roomId: string; kind: AgentCollaboratorKind; displayName: string; status: AgentCollaboratorStatus;
+  deviceLabel?: string; pairingExpiresAt?: number;
+  consentedAt?: number; reportedAt?: number; vault?: TwinVaultView; createdAt: number;
+}
+
+interface AgentCollaboratorPostView {
+  id: string; collaboratorId: string;
+  kind: "insight" | "vote";
+  category?: TwinInsightCategory; text: string; confidence: "low" | "medium" | "high";
+  evidenceCount?: number;
+  ideaText?: string; vote?: "up" | "down";   // votes
+  status: "suggested" | "added" | "noted" | "dismissed";
+  publishedClueId?: string; createdAt: number;
+}
+```
+
+| Operation | Kind | Input | Output | Access |
+| --- | --- | --- | --- | --- |
+| `giftTwin/room.createPairing` | action | `{ roomId, recipientLabel? }` | `Result<{ collaboratorId, pairingCode, expiresAt }>` | Organizer; flag on; one connected twin per room; code single-use, 15 min, stored hashed |
+| `giftTwin/room.getFeed` | query | `{ roomId }` | `Result<{ collaborators, posts }>` | Member; never returns hashes, upload ids, or message text; dismissed posts hidden |
+| `giftTwin/room.revokeCollaborator` | mutation | `{ collaboratorId }` | `Result<null>` | Organizer; the token stops working and the vault is deleted |
+| `giftTwin/device.pair` | mutation | `{ pairingCode, deviceToken, deviceLabel? }` | `Result<DeviceSession>` | Anyone with a valid code; flag on |
+| `giftTwin/device.session` | query | `{ deviceToken }` | `Result<DeviceSession>` | Device; includes `vault` status, never message text |
+| `giftTwin/device.startUpload` | mutation | `{ deviceToken, consent: true }` | `Result<{ uploadId, expiresAt }>` | Device; flag on; `consent` must be true; deletes any earlier upload; schedules deletion at `expiresAt` (24 h) |
+| `giftTwin/device.uploadMessages` | mutation | `{ deviceToken, uploadId, messages: VaultMessage[] }` | `Result<{ messageCount }>` | Device; ≤1,000 messages and ≤250,000 chars per call; ≤3,500,000 chars and 40 batches per upload |
+| `giftTwin/device.finishUpload` | mutation | `{ deviceToken, uploadId }` | `Result<{ messageCount, expiresAt }>` | Device; schedules the twin agent |
+| `giftTwin/device.forget` | mutation | `{ deviceToken }` | `Result<null>` | Device; deletes the vault now; posts stay |
+| `giftTwin/device.disconnect` | mutation | `{ deviceToken }` | `Result<null>` | Device; same as revoke |
+| `internal.giftTwin.agent.processVault` | internal action | `{ collaboratorId, uploadId }` | — | First pass: insights + votes on current room ideas (model role `recipient`) |
+| `internal.giftTwin.agent.watchTick` | internal mutation | `{ collaboratorId, uploadId }` | — | Every 30 s while the vault is `ready`: claims new room ideas and schedules `voteOnNewIdeas` |
+| `internal.giftTwin.agent.expireVault` | internal mutation | `{ collaboratorId, uploadId }` | — | Deletes the vault at `expiresAt` |
+| `internal.giftTwin.review.reviewPosts` | internal action | `{ collaboratorId }` | — | Publishes insights (LLM may veto) and downvotes; notes upvotes; hides the rest |
+
+Rules:
+
+- Vaulted messages (`twinVaultChunks`) are server-only. No public or device query returns them; only `internal.giftTwin.agent.*` reads them. They are deleted at expiry, on `forget`, on disconnect/revoke, on a new upload, and on room purge.
+- Agent output is untrusted: `recordFindings` re-validates every insight and vote with the Zod schemas before insert. Vote refs must name a current room idea; the stored `ideaText` is the server's copy.
+- The gift agent, not a person, decides what becomes room knowledge. Insights and downvotes become `manual` `PublishedClue`s attributed to the member who invited the twin. Post `status`: `suggested` = awaiting review, `added` = published, `noted` = shown with no new clue (upvotes), `dismissed` = skipped and hidden.
+- Category to clue kind: interest/style → `interest`, wish → `explicit_wish`, dislike → `exclusion`, owns → `ownership`.
+- One vote per room idea per twin (`dedupeKey = vote:<ideaRef>`).
+- Errors: `unauthorized`, `not_found`, `validation_failed`, `refused`, `stale_job` (upload no longer open).
+
+Migration: additive tables `agentCollaborators`, `agentCollaboratorPosts`, and `twinVaultChunks` (`convex/giftTwin/schema.ts`), all included in room purge. Replaces the demo's earlier `device.roomContext` / `device.submitReport` (on-device extraction) and renames evaluation posts (`kind: "evaluation"`, `verdict`) to votes (`kind: "vote"`, `vote: "up" | "down"`). Existing demo rows in `agentCollaboratorPosts` must be cleared before pushing. No non-twin table, endpoint, or contract changes. Production promotion: see [GIFT_TWIN.md](GIFT_TWIN.md) § Production path.
+
 ### Product listing
 
 **Owner:** Dev 4. **Consumers:** Dev 1, Dev 2 (selection snapshot), Dev 3 (explain).

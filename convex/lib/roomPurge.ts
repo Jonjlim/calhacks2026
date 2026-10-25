@@ -13,6 +13,7 @@
  */
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { GIFT_TWIN_PURGE_PHASES } from "../giftTwin/purge";
 
 type Purger = (ctx: MutationCtx, roomId: Id<"rooms">, limit: number) => Promise<number>;
 
@@ -177,6 +178,7 @@ const participants: Purger = async (ctx, roomId, limit) =>
 
 /** Order matters: jobs first (see file comment), private data next, membership last. */
 export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
+  ...GIFT_TWIN_PURGE_PHASES,
   ["fashionJobs", fashionJobs],
   ["trendJobs", trendJobs],
   ["researchJobs", researchJobs],
