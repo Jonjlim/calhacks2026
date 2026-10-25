@@ -213,7 +213,7 @@ function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm
   );
 }
 
-function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; label: string; offset: [number, number, number]; dim: boolean }) {
+function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: string; rings: RingsWorld; from: [number, number]; drag: ReturnType<typeof useRingDrag>; face: ReactNode; label: string; offset: [number, number, number]; dim: boolean; /** Sits on top of its island and grows and shrinks with the zoom. */ onTop?: boolean }) {
   const selected = rings.selectedKey === k;
   const info = selected ? rings.actionsFor(k) : null;
   // Three layers of floating content (memories, themes, gifts): only one is emphasized at a time. In the overview it is the themes; in a branch
@@ -223,6 +223,54 @@ function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; 
   const recede = !rings.highlight && layer !== "box" && layer !== emphasized;
   const votes = rings.votes?.[k];
   const pulse = rings.pulses?.[k];
+  const cls = `${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`;
+  const enter = () => mapCursor.set("node");
+  const leave = () => mapCursor.set("memory");
+  if (onTop) {
+    // The icon rides on the island and scales with the camera (small when zoomed out, large up close); its menu stays one readable size.
+    return (
+      <>
+        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={44} zIndexRange={selected ? [60, 50] : [20, 0]}>
+          <div data-map-token className={cls} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
+          <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
+            onPointerDown={(e) => drag.begin(k, from, e)}
+            onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
+            {face}
+          </button>
+          {votes && (votes.up > 0 || votes.down > 0) && (
+            <span className={s.voteChips} aria-label={`${votes.up} feel it, ${votes.down} not really`}>
+              {votes.up > 0 && <i className={s.yes}>♥ {votes.up}</i>}
+              {votes.down > 0 && <i className={s.pass}>✕ {votes.down}</i>}
+            </span>
+          )}
+          {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
+          </div>
+        </Html>
+        {info && (
+          <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>
+            <div data-map-token className={cls} style={{ marginTop: 470 }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
+        {info && (
+          <div className={s.menu} role="dialog" aria-label={label}>
+            <button type="button" className={s.menuClose} onClick={() => rings.onSelect(null)} aria-label="Close">×</button>
+            <p className={s.caption}>{info.caption}</p>
+            {info.actions.length > 0 && (
+              <div className={s.actions}>
+                {info.actions.map((a, i) => (
+                  <button key={a.label} type="button" style={{ ["--i" as string]: i }} className={`${s.act} ${a.tone ? s[a.tone] : ""}`} aria-pressed={a.on} disabled={a.disabled} onClick={a.run}>
+                    <span aria-hidden className={s.actIcon}>{a.icon}</span>
+                    <small>{a.label}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+            </div>
+          </Html>
+        )}
+      </>
+    );
+  }
   return (
     <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
       <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""} ${!rings.highlight && !rings.selectedKey ? s.compact : ""} ${recede ? s.recede : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
@@ -552,7 +600,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             })}
             {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <MagicTrail start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, 2.2)} color="#ffd98a" strong />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
-              <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
+              <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} onTop offset={[0, -0.4, 2.2]} label={g.title}
                 face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={26} /></i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />
             </RingIsland>
           </group>
