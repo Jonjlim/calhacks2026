@@ -2011,3 +2011,15 @@ The map draws every gift the catalog returns, apart from ones the room let go. O
 - `research.tiktokLooks.list({ roomId })` → `Result<{ id, query, status, posts: { url, videoId }[], retrievedAt?, lastError? }[]>`. Posts are public TikTok links (private accounts and ads dropped), at most 6.
 - New `tiktokLooks` table (room-scoped, purged with the room). A successful search logs one "looked at N public TikToks" line in the decision log.
 
+### Gift story and gift tag (D26, Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 (reveal panel, `/gift/[token]`). Additive; no existing field changes.
+
+- `GiftStory = { recipientName, occasion, friends: string[], gifts: { title, imageUrl? }[], memories: string[], words: { word, count }[], themes: string[], directions: { label, why }[], photos: string[], stats: { memories, friends, photos, themes, directions, thrownOut, searches, products, votes } }`. First names only. `memories` are active published clues of kind `interest`/`explicit_wish`/`timing`, without authors or the `Gift idea: ` prefix. `thrownOut` = decision-log `rejected` lines + retired directions. `votes` = up/down votes + map signals.
+- `story.summary({ roomId })` → `Result<GiftStory>`, membership-checked, photos always included.
+- `story.tag({ roomId })` → `Result<{ token, includePhotos, createdAt } | null>`, membership-checked.
+- `story.createTag({ roomId, includePhotos })` → `Result<{ token, includePhotos, createdAt }>`. Organizer only (`unauthorized`); needs an active gift selection (`validation_failed`). Reuses the live tag so a printed QR keeps working; `includePhotos` updates in place.
+- `story.revokeTag({ roomId })` → `Result<{ revoked }>`. Organizer only.
+- `story.byToken({ token })` → `Result<GiftStory>`. **Public, no auth.** `not_found` for malformed, revoked, deleted-room or no-active-gift. `photos` is empty unless the tag includes them. No prices or source links.
+- New `giftStories` table `{ roomId, token, createdBy, includePhotos, createdAt, revokedAt? }`, indexed `by_token` and `by_room`, purged with the room.
+
