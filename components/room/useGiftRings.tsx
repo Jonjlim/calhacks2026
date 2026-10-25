@@ -235,16 +235,6 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     else if (mapView.target.giftFocus === 1) mapView.returnFromGift();
   }, [selectedKey, focusedGift?.x, focusedGift?.z]);
 
-  // The view glides to the write box; once it closes (shared or cancelled) the map settles back home.
-  const wasWriting = useRef(false);
-  useEffect(() => {
-    if (composer) wasWriting.current = true;
-    else if (wasWriting.current) {
-      wasWriting.current = false;
-      if (!selectedKey) mapView.reset();
-    }
-  }, [composer, selectedKey]);
-
   const openBox = () => { setGuideTheme(null); setSelectedKey("box"); };
   // The bar's add buttons: each opens the write box in its own part of the map, and what is written goes into that section.
   const startAdd = (what: "memory" | "wish" | "idea") => {
@@ -752,10 +742,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
-      <div className={s.writeActions}>
-        <button type="button" className={s.writeCancel} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
-        <button type="button" className={s.writeCancel} onClick={() => { setPhotoPick([]); setComposer(null); }}>Cancel</button>
-      </div>
+      <button type="button" className={s.backToWriting} onClick={() => setComposer({ ...composer, photo: false })}>← Back to writing</button>
       {photoPick.length === 0 ? (
         <label className={s.photoPick}>
           <MapIcon name="camera" size={22} />Choose up to 3 photos

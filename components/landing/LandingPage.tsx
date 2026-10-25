@@ -1,6 +1,5 @@
 "use client";
 
-import { RoomCodeEntry } from "./RoomCodeEntry";
 import { useConvex, useQuery } from "convex/react";
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -207,8 +206,6 @@ export function LandingPage() {
             </button>
           </div>
         )}
-
-        {mounted && !introActive && !unwrapActive && !lobbyId && <RoomCodeEntry />}
 
         {lobbyId && convex && !unwrapActive && <LobbyRestore roomId={lobbyId} staticPreview={staticPreview} onMissing={lobbyMissing} />}
         {unwrapActive && <InvitationTag soundEnabled={soundEnabled} onStartOver={startOver} inlineQr={webgl === false} />}

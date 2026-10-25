@@ -57,10 +57,7 @@
 .dot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 5px rgb(255 255 255 / .25), 0 0 18px #fff; }
 .write { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .write textarea { user-select: text; -webkit-user-select: text; width: 220px; min-height: 64px; resize: none; border: 2px solid var(--color-gold); border-radius: 16px 16px 16px 4px; background: var(--color-ivory); padding: 9px 11px; font: italic 500 15px/1.25 var(--font-display); color: var(--color-dusk); outline: none; box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); }
-.write p { margin: 0; max-width: 240px; padding: 3px 10px; border-radius: 10px; background: rgb(47 39 55 / .6); text-align: center; font-size: 11px; line-height: 1.3; color: #fff; }
-.writeActions { position: relative; z-index: 2; display: flex; gap: 6px; }
-.writeShare, .writeCancel { border: 1px solid rgb(65 52 76 / .2); border-radius: 16px; padding: 6px 14px; background: var(--color-ivory); color: var(--color-dusk); font: 600 12px var(--font-sans); cursor: pointer; }
-.writeShare { background: var(--color-dusk); border-color: var(--color-dusk); color: #fbf3e3; }
+.write p { margin: 0; font-size: 11px; color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / .7); }
 
 @keyframes bloom { from { opacity: 0; transform: translateY(-8px) scale(.6); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .act, .caption { animation: none; } .face { transition: none; } }
@@ -298,7 +295,7 @@
 .nextStep { display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 15px; font: 700 12.5px var(--font-sans); color: #3b2a16; white-space: nowrap; cursor: pointer; background: linear-gradient(100deg, #e9c46a 0%, #ffe3a0 40%, #e9c46a 60%, #f4d58f 100%); background-size: 220% 100%; animation: shimmer 4s linear infinite; box-shadow: 0 10px 24px -10px rgb(160 122 44 / .9), 0 0 0 3px rgb(251 247 240 / .35); transition: transform .15s; }
 .nextStep:hover { transform: translateY(-1px) scale(1.03); }
 .nextStep:disabled { opacity: .55; cursor: not-allowed; animation: none; }
-.nextHint { display: flex; align-items: center; gap: 6px; white-space: nowrap; padding: 6px 13px; border-radius: 999px; background: rgb(47 39 55 / .6); font: 600 12px var(--font-sans); color: #fff8eb; pointer-events: none; }
+.nextHint { display: flex; align-items: center; gap: 6px; white-space: nowrap; font: 600 12px var(--font-sans); color: rgb(255 248 235 / .85); text-shadow: 0 1px 4px rgb(0 0 0 / .5); pointer-events: none; }
 .boxOn { box-shadow: 0 0 0 3px rgb(251 247 240 / .9), 0 0 0 6px var(--color-gold), 0 10px 22px -8px rgb(40 24 44 / .55); }
 .box { position: relative; }
 @media (prefers-reduced-motion: reduce) { .nextStep { animation: none; } }
