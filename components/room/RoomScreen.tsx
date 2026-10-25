@@ -138,6 +138,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const answerSharpen = useMutation(api.agents.themes.answerSharpen);
   const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
   const proposeDirections = useAction(api.agents.directions.propose);
+  const lookTikTok = useMutation(api.research.tiktokLooks.look);
   const moveCursor = useMutation(api.map.moveCursor);
 
   const actions = useMemo<RoomActions>(
@@ -185,6 +186,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
       proposeDirections: () => proposeDirections({ roomId }),
+      lookTikTok: (trendJobId, query) => lookTikTok({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query }),
       researchDirection: (directionId, clueIds) => researchTrend({
         roomId, publishedClueIds: clueIds as Id<"publishedClues">[], directionId: directionId as Id<"mapDirections">, idempotencyKey: newRequestKey(),
       }),
@@ -227,7 +229,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
       selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
-      proposeDirections,
+      proposeDirections, lookTikTok,
     ],
   );
 
@@ -284,10 +286,12 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
   const photos = useQuery(api.photos.listRoomPhotos, args);
   const collaborators = useQuery(api.giftTwin.room.getFeed, args);
   const directions = useQuery(api.agents.directions.list, args);
+  const tiktokLooks = useQuery(api.research.tiktokLooks.list, args);
   const trail = useQuery(api.trail.list, args);
   const extras: RoomData = {
     ...data,
     directions: directions?.ok ? directions.value : undefined,
+    tiktokLooks: tiktokLooks?.ok ? tiktokLooks.value : undefined,
     trail: trail?.ok ? trail.value : undefined,
     mapSignals: signals?.ok ? signals.value : undefined,
     mapThemes: themes?.ok ? themes.value : undefined,

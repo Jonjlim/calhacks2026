@@ -480,6 +480,20 @@ export default defineSchema({
     clueIds: v.optional(v.array(v.id("publishedClues"))),
   }).index("by_room", ["roomId", "at"]),
 
+  /** TikTok inspiration for a trend cloud (D23 trial): public post links only, one search per room and query per day. */
+  tiktokLooks: defineTable({
+    roomId: v.id("rooms"),
+    query: v.string(),
+    trendJobId: v.id("trendJobs"),
+    requestedBy: v.id("participants"),
+    status: v.union(v.literal("pending"), v.literal("running"), v.literal("succeeded"), v.literal("failed"), v.literal("uncertain")),
+    providerRunId: v.optional(v.string()),
+    postUrls: v.array(v.string()),
+    retrievedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_room_query", ["roomId", "query"]),
+
   /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
   mapDirections: defineTable({
     roomId: v.id("rooms"),

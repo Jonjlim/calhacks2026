@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D25 — TikTok inspiration on trend clouds (trial, 2026-10-25)
+
+The existing public TikTok search actor (`xmolodtsov/tiktok-search-scraper`, same Apify account, $0.50 cap) was only reachable for reviewed fashion terms and had no UI. A trend cloud's "See TikToks" now runs one search for that cloud's own query, which is already a sourced, screened Google Trends suggestion, so no memory, name or free text becomes a TikTok search. One search per room and query per day, only on an explicit tap; 12 posts fetched, up to 6 public, non-advertising posts kept as links only (no captions, profiles or media). The board plays them with TikTok's own embedded player. Labelled as inspiration, never facts about the recipient or checked products. Same provider and service boundary as D13/D17.
+
 ### D25 — Scrapewise replacement shopping actor (conditional go, 2026-10-25)
 
 Dev 4 is replacing the missing-link automation-lab source with `scrapewise/google-shopping`, pinned build `0.1.46`. Same Apify service and token; no extra service or database. Request one US/English query, at most 20 items from one page, budget filter, and a $0.40 run charge cap. Offers, direct-store resolution, details and price history are disabled. A listing links to the observed Google product page; this is not a verified retailer checkout URL. Normalize explicit USD, numeric `price` reconciled against `priceText`, `store`, `imageUrl`, and the public `productUrl`. Missing source links still drop rows; unknown prices remain unknown. Legacy parsers stay for recorded observations. One synthetic `hiking backpack` live check succeeded: run `fLbkGQez9dtwdzEUJ`, dataset `C7spheQO46lAxF1NY`, 20 normalized listings with observed prices and images, about 14 seconds end to end. The reduced recorded response is `convex/research/fixtures/scrapewise-shopping.json`. This verifies that query and the production provider/parser path, not arbitrary searches or browser checkout.

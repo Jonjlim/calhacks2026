@@ -22,6 +22,7 @@ import { mapView } from "@/components/world/room/mapView";
 import { playChoose, playCouncilTick } from "@/components/world/sfx";
 import { BoxPanel } from "./BoxPanel";
 import { HowWeGotHere } from "./HowWeGotHere";
+import { TikTokBoard } from "./TikTokBoard";
 import { PASS_REASONS, type PassReason, type RoomActions, type RoomData } from "./types";
 import { playSfx } from "@/components/world/sounds";
 
@@ -87,6 +88,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [passing, setPassing] = useState<string | null>(null);
   /** "How we got here": the whole room's story, or one gift's (its listing id). */
   const [story, setStory] = useState<{ listingId?: string } | null>(null);
+  /** The trend cloud whose TikTok inspiration board is open (D23 trial). */
+  const [tiktok, setTiktok] = useState<{ trendJobId: string; query: string } | null>(null);
+  const closeTiktok = useCallback(() => setTiktok(null), []);
   const closeStory = useCallback(() => setStory(null), []);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -466,6 +470,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
             run: () => void run(() => actions.setDirection("trend", target, mineCaught ? 0 : 1), mineCaught ? "Let go. It drifts back into the sky." : "Caught. Ask the council for directions to weave it in.") },
           { icon: "drift" as const, label: "Let it drift", tone: "pass" as const, disabled: !!pending,
             run: () => void run(() => actions.setDirection("trend", target, -1), "It drifted away for the room. Her memories didn’t change.").then((ok) => ok && setSelectedKey(null)) },
+          // Public TikToks for this idea, as inspiration: one capped search, shared with the room for a day.
+          ...(actions?.lookTikTok ? [{ icon: "spark" as const, label: "See TikToks", disabled: !!pending,
+            run: () => { setTiktok({ trendJobId: node.trendJobId, query: node.query }); void run(() => actions.lookTikTok!(node.trendJobId, node.query), `Looking for public TikToks for “${node.query}”.`); } }] : []),
           { icon: "open" as const, label: "See the source", more: true, run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
         ] : [],
       };
@@ -952,5 +959,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The council's reaction to the room's passes reaches everyone's status line as it happens.
   const reaction = (data.trail ?? []).findLast((e) => e.actor === "council" && now - e.at < REACTION_MS
     && (e.text.startsWith("Retired") || e.text.startsWith("Suggested") || e.text.startsWith("Couldn’t find")));
+  if (!storyNode && tiktok) {
+    // The newest search for this idea wins over an older failed one.
+    const look = (data.tiktokLooks ?? []).findLast((l) => l.query === tiktok.query);
+    storyNode = <TikTokBoard query={tiktok.query} look={look} onClose={closeTiktok} />;
+  }
   return { rings, notice: reaction ? `The council: ${reaction.text}` : notice, error: error ?? trendFailed, openBox, startAdd, tools, story: storyNode };
 }

@@ -96,6 +96,7 @@ import type * as research_research from "../research/research.js";
 import type * as research_score from "../research/score.js";
 import type * as research_text from "../research/text.js";
 import type * as research_themeLinks from "../research/themeLinks.js";
+import type * as research_tiktokLooks from "../research/tiktokLooks.js";
 import type * as research_trendJobs from "../research/trendJobs.js";
 import type * as research_trendPolicy from "../research/trendPolicy.js";
 import type * as research_trendProvider from "../research/trendProvider.js";
@@ -202,6 +203,7 @@ declare const fullApi: ApiFromModules<{
   "research/score": typeof research_score;
   "research/text": typeof research_text;
   "research/themeLinks": typeof research_themeLinks;
+  "research/tiktokLooks": typeof research_tiktokLooks;
   "research/trendJobs": typeof research_trendJobs;
   "research/trendPolicy": typeof research_trendPolicy;
   "research/trendProvider": typeof research_trendProvider;

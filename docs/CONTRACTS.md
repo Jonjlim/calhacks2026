@@ -2003,3 +2003,9 @@ the combined proposal estimate. Votes never select gifts or approve a proposal.
 
 The map draws every gift the catalog returns, apart from ones the room let go. Only past `CROWDED_AT` (16) gifts does `lib/map/giftBundles` fold each theme's extras (beyond its best `SHOWN_PER_GROUP` = 3) into a "+N" bundle placed where they would sit; tapping a bundle fans it out on that screen. The chosen gift and gifts on the branch in focus are always drawn. The Book of Possibilities still lists everything. Replaces the earlier top-3 and top-6 caps.
 
+#### TikTok inspiration (D25 trial)
+
+- `research.tiktokLooks.look({ roomId, trendJobId, query })` → `Result<{ lookId }>`, membership-checked; `query` must be a suggestion of a usable trend sample in the room. Reuses a pending/running search or one that succeeded in the last 24 h for the same room and query.
+- `research.tiktokLooks.list({ roomId })` → `Result<{ id, query, status, posts: { url, videoId }[], retrievedAt?, lastError? }[]>`. Posts are public TikTok links (private accounts and ads dropped), at most 6.
+- New `tiktokLooks` table (room-scoped, purged with the room). A successful search logs one "looked at N public TikToks" line in the decision log.
+
