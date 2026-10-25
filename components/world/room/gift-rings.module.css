@@ -1,5 +1,5 @@
 /* Labels for the gift map. They float over the 3D rings, so they stay small and read as the content itself. */
-.token { position: relative; display: flex; flex-direction: column; align-items: center; font-family: var(--font-sans); color: var(--color-dusk); transition: opacity .35s, filter .35s; }
+.token { user-select: none; -webkit-user-select: none; position: relative; display: flex; flex-direction: column; align-items: center; font-family: var(--font-sans); color: var(--color-dusk); transition: opacity .35s, filter .35s; }
 .dim { opacity: .2; filter: grayscale(.6); }
 .face { border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; cursor: grab; touch-action: none; user-select: none; transition: transform .18s; }
 .face:hover { transform: translateY(-2px) scale(1.03); }
@@ -44,7 +44,7 @@
 .act.pass[aria-pressed="true"] { background: #e08f8a; color: #fff; }
 .act.gold[aria-pressed="true"] { background: var(--color-gold); }
 
-.ringLabel { font: 18px var(--font-hand); color: rgb(255 248 235 / .75); white-space: nowrap; pointer-events: none; text-shadow: 0 1px 4px rgb(0 0 0 / .35); }
+.ringLabel { user-select: none; -webkit-user-select: none; font: 18px var(--font-hand); color: rgb(255 248 235 / .75); white-space: nowrap; pointer-events: none; text-shadow: 0 1px 4px rgb(0 0 0 / .35); }
 .hint { pointer-events: none; white-space: nowrap; background: rgb(47 39 55 / .85); color: #fff; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 14px; }
 
 /* Click-anywhere composer */
@@ -56,7 +56,7 @@
 .compose .act:nth-of-type(3) { translate: 54px -22px; }
 .dot { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 5px rgb(255 255 255 / .25), 0 0 18px #fff; }
 .write { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.write textarea { width: 220px; min-height: 64px; resize: none; border: 2px solid var(--color-gold); border-radius: 16px 16px 16px 4px; background: var(--color-ivory); padding: 9px 11px; font: italic 500 15px/1.25 var(--font-display); color: var(--color-dusk); outline: none; box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); }
+.write textarea { user-select: text; -webkit-user-select: text; width: 220px; min-height: 64px; resize: none; border: 2px solid var(--color-gold); border-radius: 16px 16px 16px 4px; background: var(--color-ivory); padding: 9px 11px; font: italic 500 15px/1.25 var(--font-display); color: var(--color-dusk); outline: none; box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); }
 .write p { margin: 0; font-size: 11px; color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / .7); }
 
 @keyframes bloom { from { opacity: 0; transform: translateY(-8px) scale(.6); } to { opacity: 1; transform: none; } }

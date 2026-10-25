@@ -80,7 +80,7 @@ export function mapPose(width: number, height: number): CameraPose {
   const center = new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z);
   // Narrower screens step back further so the outer ring still fits side to side.
   const pull = aspect < 0.8 ? 1.9 : aspect < 1.4 ? 1.3 : 1;
-  const pos = center.clone().add(new THREE.Vector3(0, 40 * pull, 29 * pull));
-  const target = center.clone().add(new THREE.Vector3(0, -2, 3.5));
+  const pos = center.clone().add(new THREE.Vector3(0, 33 * pull, 25 * pull));
+  const target = center.clone().add(new THREE.Vector3(0, -2, 1));
   return { position: v(pos), target: v(target), fov: aspect < 0.8 ? 52 : 42, shiftX: 0, shiftY: 0 };
 }

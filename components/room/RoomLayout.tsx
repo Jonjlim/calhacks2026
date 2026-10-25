@@ -10,6 +10,7 @@ import { ProposalPanel } from "@/components/proposal/ProposalPanel";
 import { QrModulesSvg } from "@/components/unwrap/UnwrapInvitation";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { mapView } from "@/components/world/room/mapView";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, reduceCouncil } from "@/lib/council/contracts";
@@ -51,26 +52,28 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const reducedMotion = useReducedMotion() ?? false;
   const [drawer, setDrawer] = useState<Drawer>(null);
 
-  // --- Stage: tower (memories + council) or garden (the present). Kept in the URL for refresh / deep links.
-  const [stage, setStageState] = useState<Stage>("tower");
+  // --- Stage: the gift map first (D19); tower and garden stay reachable. Kept in the URL for refresh / deep links.
+  // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
+  const [resolvedStage, setStageState] = useState<Stage | null>(null);
+  const stage: Stage = resolvedStage ?? "map";
   const firstStage = useRef(true);
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view");
-    if (view === "garden" || view === "gifts" || view === "proposal") setStageState("garden");
-    if (view === "map") setStageState("map");
+    setStageState(view === "tower" ? "tower" : view === "garden" || view === "gifts" || view === "proposal" ? "garden" : "map");
   }, []);
   const setStage = (next: Stage) => {
     setStageState(next);
     const url = new URL(window.location.href);
-    if (next === "tower") url.searchParams.delete("view");
+    if (next === "map") url.searchParams.delete("view");
     else url.searchParams.set("view", next);
     window.history.replaceState(null, "", url);
   };
   useEffect(() => {
-    // Arriving from the island glides into the tower; a deep link straight to the garden doesn't replay a walk-in.
-    roomStage.go(stage, reducedMotion || (firstStage.current && stage !== "tower"));
+    if (!resolvedStage) return;
+    // Arriving pans out from the island to the map (or walks into the tower); a deep link to the garden doesn't replay it.
+    roomStage.go(resolvedStage, reducedMotion || (firstStage.current && resolvedStage === "garden"));
     firstStage.current = false;
-  }, [stage, reducedMotion]);
+  }, [resolvedStage, reducedMotion]);
 
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }) });
@@ -171,6 +174,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <div className="flex gap-2">
           <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
           <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
+          {stage === "map" && <button className={chip} onClick={() => mapView.reset()} title="Drag the sky to move · scroll to zoom · 0 recenters">Recenter</button>}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
@@ -189,7 +193,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click empty sky to add a memory · drag gifts toward the present" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click the sky to add a memory · drag the sky to move · scroll to zoom" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}

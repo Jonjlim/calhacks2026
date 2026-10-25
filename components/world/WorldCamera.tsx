@@ -10,6 +10,7 @@ import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./s
 import { type InvitationFrame, invitationFrame } from "./unwrap/invitationLayout";
 import { roomStage } from "@/components/room/roomStage";
 import { doorPose, gardenPose, mapPose, towerPose } from "./room/stageLayout";
+import { mapView } from "./room/mapView";
 
 /** The same view, pulled back along its line of sight. */
 function pullBack(pose: CameraPose, k: number): CameraPose {
@@ -122,7 +123,15 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       smoothed.current.x = smoothed.current.y = 0;
       const w = size.width;
       const shown = roomStage.shown;
-      const poseOf = (stage: typeof shown) => stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : stage === "map" ? mapPose(w, size.height) : p.landing;
+      const view = mapView.step(dt, reducedMotion);
+      const poseOf = (stage: typeof shown): CameraPose => {
+        if (stage !== "map") return stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : p.landing;
+        // The map can be dragged and zoomed: slide both ends of the view, and pull the camera along its line of sight.
+        const base = pullBack(mapPose(w, size.height), view.zoom);
+        const [px, py, pz] = base.position;
+        const [tx, ty, tz] = base.target;
+        return { ...base, position: [px + view.x, py, pz + view.z], target: [tx + view.x, ty, tz + view.z] };
+      };
       const scenePose = poseOf(shown);
       if (roomStage.glide && !reducedMotion) {
         // Garden ↔ map: one continuous pull-back (or push-in) in the same sky.

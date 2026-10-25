@@ -68,7 +68,8 @@ class RoomStageClock {
       this.t = -1;
       this.glide = false;
       this.arrival++;
-    } else if (isOutside(this.shown) && isOutside(stage)) {
+    } else if ((isOutside(this.shown) || this.shown === null) && isOutside(stage)) {
+      // From the island outside (or the garden) to the map, or back: one glide, no fade.
       // Same sky, same island: swap now and let the camera glide between the two framings.
       this.shown = stage;
       this.glide = true;

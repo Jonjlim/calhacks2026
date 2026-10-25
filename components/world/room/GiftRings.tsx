@@ -12,6 +12,7 @@ import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
 import { GIFT_SPOT } from "../sceneConfig";
 import type { IslandShape } from "../terrain";
 import { Jar } from "./TowerInterior";
+import { mapView } from "./mapView";
 import { ringBase } from "./stageLayout";
 import s from "./gift-rings.module.css";
 
@@ -192,9 +193,83 @@ function Ring({ center, radius, label, glow }: { center: THREE.Vector3; radius: 
   );
 }
 
+/**
+ * Moving around the map: drag empty sky to pan, scroll to zoom, arrow keys
+ * and +/− from the keyboard, 0 to recenter. A short click still reaches the
+ * backdrop's click handler (it ignores anything that moved).
+ */
+function useMapNavigation(center: THREE.Vector3) {
+  const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
+  const gl = useThree((st) => st.gl);
+  const size = useThree((st) => st.size);
+  const pan = useRef<{ id: number; x: number; y: number } | null>(null);
+  useEffect(() => {
+    mapView.reset(true);
+    const worldPerPixel = () => (2 * camera.position.distanceTo(center) * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, size.height);
+    const move = (e: PointerEvent) => {
+      const p = pan.current;
+      if (!p || e.pointerId !== p.id) return;
+      const k = worldPerPixel();
+      // Screen-down is toward the viewer on the tilted map, which is foreshortened.
+      mapView.pan(-(e.clientX - p.x) * k, -(e.clientY - p.y) * k * 1.3);
+      p.x = e.clientX;
+      p.y = e.clientY;
+      document.body.style.cursor = "grabbing";
+    };
+    const up = (e: PointerEvent) => {
+      if (pan.current?.id !== e.pointerId) return;
+      pan.current = null;
+      document.body.style.cursor = "";
+    };
+    const wrapper = gl.domElement.parentElement ?? gl.domElement;
+    const wheel = (e: WheelEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("textarea")) return;
+      e.preventDefault();
+      mapView.zoomBy(Math.exp(e.deltaY * 0.0012));
+    };
+    const key = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      const step = 3;
+      if (e.key === "ArrowLeft") mapView.pan(-step, 0);
+      else if (e.key === "ArrowRight") mapView.pan(step, 0);
+      else if (e.key === "ArrowUp") mapView.pan(0, -step);
+      else if (e.key === "ArrowDown") mapView.pan(0, step);
+      else if (e.key === "+" || e.key === "=") mapView.zoomBy(0.85);
+      else if (e.key === "-" || e.key === "_") mapView.zoomBy(1 / 0.85);
+      else if (e.key === "0") mapView.reset();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    wrapper.addEventListener("wheel", wheel, { passive: false });
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      wrapper.removeEventListener("wheel", wheel);
+      window.removeEventListener("keydown", key);
+      document.body.style.cursor = "";
+      mapView.reset(true);
+    };
+  }, [camera, gl, size.height, center]);
+  return {
+    start(e: ThreeEvent<PointerEvent>) {
+      if (e.nativeEvent.button !== 0) return;
+      e.nativeEvent.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      pan.current = { id: e.nativeEvent.pointerId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+    },
+  };
+}
+
 export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const center = useMemo(() => new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z), []);
   const drag = useRingDrag(center, rings.onDrag);
+  const nav = useMapNavigation(center);
   const place = (key: string, x: number, z: number): [number, number] => (drag.preview?.key === key ? [drag.preview.x, drag.preview.z] : [x, z]);
   const world = (x: number, z: number, lift = 0) => new THREE.Vector3(center.x + x, center.y + lift, center.z + z);
   const dim = (key: string) => !!rings.highlight && !rings.highlight.has(key);
@@ -214,7 +289,8 @@ export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: bool
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center.x, center.y - 0.2, center.z]} onClick={onBackdrop}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center.x, center.y - 0.2, center.z]} onClick={onBackdrop} onPointerDown={nav.start}
+        onPointerOver={() => { if (!document.body.style.cursor) document.body.style.cursor = "grab"; }} onPointerOut={() => { if (document.body.style.cursor === "grab") document.body.style.cursor = ""; }}>
         <planeGeometry args={[220, 220]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
