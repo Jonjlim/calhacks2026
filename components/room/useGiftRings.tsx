@@ -392,15 +392,21 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
     const it = photoPick[index]!;
     const last = index + 1 >= photoPick.length;
     return (
-      <div className={s.markBackdrop} role="dialog" aria-modal="true" aria-label={`Photo ${index + 1} of ${photoPick.length}`} data-map-token
+      <div className={s.markBackdrop} role="dialog" aria-modal="true" aria-label={`Photo ${index + 1} of ${photoPick.length}`}
         onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Escape") setMarking(null); }}>
         <div className={s.markCard}>
-          <b>{photoPick.length > 1 ? `Photo ${index + 1} of ${photoPick.length} · ` : ""}Tap the person this gift is for</b>
-          <button type="button" className={s.markFrame} onClick={(e) => markPhoto(index, e)} aria-label="Tap the person this gift is for">
-            <img src={it.preview} alt="" />
-            {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
-          </button>
-          <span>Your mark only tells Unwrap who to look at. It isn’t face recognition, and only you see it.</span>
+          <header>
+            {photoPick.length > 1 && <small>Photo {index + 1} of {photoPick.length}</small>}
+            <h2>Tap the person this gift is for</h2>
+          </header>
+          <div className={s.markPolaroid}>
+            <button type="button" className={s.markFrame} onClick={(e) => markPhoto(index, e)} aria-label="Tap the person this gift is for">
+              <img src={it.preview} alt="" />
+              {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+            </button>
+            <span>{it.marker ? "marked ✓" : "tap the person"}</span>
+          </div>
+          <p>Your mark only tells Unwrap who to look at. It isn’t face recognition, and only you see it.</p>
           <div className={s.markBtns}>
             {it.marker && <button type="button" onClick={() => setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p)))}>Clear mark</button>}
             <button type="button" onClick={() => { setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p))); nextPhoto(index); }}>Skip · scene only</button>
