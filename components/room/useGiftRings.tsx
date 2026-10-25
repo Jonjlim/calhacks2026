@@ -40,8 +40,6 @@ const looksPasted = (text: string) => text.length > PASTE_CHARS || text.split(/\
 /** How long another member's vote keeps its bubble, and how long a still cursor stays on the map. */
 const PULSE_MS = 3200;
 const CURSOR_MS = 8000;
-/** Gifts shown on the map before the rest fold behind “+N more”. */
-const TOP_GIFTS = 6;
 /** How long woven threads stay before they settle, and the longest the council may reach before giving up. */
 const WEAVE_MS = 5200;
 const REACH_MAX_MS = 30_000;
@@ -77,7 +75,6 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [whyListing, setWhyListing] = useState<string | null>(null);
   // The theme whose memories are fanned out to read; the rest rest as face dots.
   const [openTheme, setOpenTheme] = useState<string | null>(null);
-  const [allGifts, setAllGifts] = useState(false);
   // Where this viewer started a search, so its progress shows on that theme.
   const [researchFrom, setResearchFrom] = useState<string | null>(null);
   const [hiddenPoll, setHiddenPoll] = useState<string | null>(null);
@@ -484,7 +481,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
           {d.stale && <small>Memories changed since. Ask the council again to refresh it.</small>}</>,
         actions: [
           ...(isOrganizer && actions?.researchDirection ? [{ icon: "sprout" as const, label: searching ? "Searching…" : found ? "Search again" : "Find gifts for this", tone: "gold" as const, disabled: !!pending || searching,
-            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. Two gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
+            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. A few gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
           ...voteActs("direction", d.id),
         ],
       };
@@ -871,10 +868,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         up, down, fixture: l.source === "manual_fixture",
         finalist: finalists.has(g.listingId), faded: (finalists.size > 0 && !finalists.has(g.listingId)) || fade === "faded",
         // Only the leading few show; the chosen gift, finalists and anything open or explained stay visible.
-        hidden: (fade === "gone" && !kept) || (!allGifts && i >= TOP_GIFTS && !kept && !finalists.has(g.listingId)),
+        // Every gift is on the map unless the room let it go; a crowded map bundles extras (GiftRings).
+        hidden: fade === "gone" && !kept,
       };
     }),
-    moreGifts: layout.gifts.length > TOP_GIFTS ? { count: layout.gifts.length - TOP_GIFTS, open: allGifts, toggle: () => setAllGifts((v) => !v) } : null,
     boxResearch: research && !researchTheme ? research : null,
     votes: signals.tally,
     evaluations: twin.evaluations,

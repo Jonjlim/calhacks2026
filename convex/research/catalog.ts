@@ -22,8 +22,8 @@ export interface CatalogState extends RecommendationsView {
   excluded: ExcludedListing[];
 }
 
-/** Gifts shown per direction, and from the general search once directions exist (D23 trial). */
-export const GIFTS_PER_DIRECTION = 2;
+/** Gifts shown per direction, and from the general search once directions exist (D23 trial). The map bundles extras when crowded. */
+export const GIFTS_PER_DIRECTION = 4;
 
 const toListing = ({ _id, _creationTime: _, ...fields }: Doc<"productListings">): ProductListing => ({ ...fields, id: _id });
 
