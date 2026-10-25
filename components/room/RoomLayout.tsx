@@ -10,6 +10,8 @@ import { ProposalPanel } from "@/components/proposal/ProposalPanel";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { mapView } from "@/components/world/room/mapView";
+import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, reduceCouncil } from "@/lib/council/contracts";
@@ -21,6 +23,8 @@ import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
 import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
+import { useGiftRings } from "./useGiftRings";
+import { MapCursor } from "./MapCursor";
 import type { RoomActions, RoomData } from "./types";
 
 /**
@@ -31,7 +35,7 @@ import type { RoomActions, RoomData } from "./types";
  * their phones (/room/:id/phone).
  */
 
-type Stage = "tower" | "garden";
+type Stage = "tower" | "garden" | "map";
 type Drawer = { kind: "gifts" } | { kind: "shares" } | { kind: "notes" } | { kind: "jar"; jar: "wish" | "interest" | "moment" } | { kind: "agent"; actor: (typeof COUNCIL_ACTORS)[number] } | null;
 
 const JAR_KINDS: Record<"wish" | "interest" | "moment", { title: string; kinds: string[] }> = {
@@ -50,25 +54,31 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const reducedMotion = useReducedMotion() ?? false;
   const [drawer, setDrawer] = useState<Drawer>(null);
 
-  // --- Stage: tower (memories + council) or garden (the present). Kept in the URL for refresh / deep links.
-  const [stage, setStageState] = useState<Stage>("tower");
+  // --- Stage: the gift map first (D19); tower and garden stay reachable. Kept in the URL for refresh / deep links.
+  // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
+  const [resolvedStage, setStageState] = useState<Stage | null>(null);
+  const stage: Stage = resolvedStage ?? "map";
   const firstStage = useRef(true);
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view");
-    if (view === "garden" || view === "gifts" || view === "proposal") setStageState("garden");
+    setStageState(view === "tower" ? "tower" : view === "garden" || view === "gifts" || view === "proposal" ? "garden" : "map");
   }, []);
   const setStage = (next: Stage) => {
     setStageState(next);
     const url = new URL(window.location.href);
-    if (next === "tower") url.searchParams.delete("view");
-    else url.searchParams.set("view", "garden");
+    if (next === "map") url.searchParams.delete("view");
+    else url.searchParams.set("view", next);
     window.history.replaceState(null, "", url);
   };
   useEffect(() => {
-    // Arriving from the island glides into the tower; a deep link straight to the garden doesn't replay a walk-in.
-    roomStage.go(stage, reducedMotion || (firstStage.current && stage === "garden"));
+    if (!resolvedStage) return;
+    // Arriving pans out from the island to the map (or walks into the tower); a deep link to the garden doesn't replay it.
+    roomStage.go(resolvedStage, reducedMotion || (firstStage.current && resolvedStage === "garden"));
     firstStage.current = false;
-  }, [stage, reducedMotion]);
+  }, [resolvedStage, reducedMotion]);
+
+  // --- The gift map (D19): rings of memories, themes and gifts around the present.
+  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }) });
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {
@@ -88,6 +98,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       onPick,
     });
   }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  // The map's data goes straight to the rings, so updates don't re-render the rest of the world.
+  useEffect(() => ringsStore.set(map.rings), [map.rings]);
+  useEffect(() => () => ringsStore.set(null), []);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {
@@ -140,6 +153,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
+      {stage === "map" && !preview && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
       {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
@@ -165,6 +179,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <div className="flex gap-2">
           <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
           <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
+          {stage === "map" && <button className={chip} onClick={() => mapView.reset()} title="Drag the sky to move · scroll to zoom · 0 recenters">Recenter</button>}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
@@ -183,14 +198,20 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{status ?? `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click outside to add a memory · click near the present for a gift idea · drag to move" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}
-          {!preview && <a className="btn-secondary h-11 px-4 text-[14px]" href={`/room/${room.id}/map`}>Gift map</a>}
-          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
-            {stage === "tower" ? "Garden" : "Tower"}
-          </button>
+          {stage === "map" ? (
+            <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("garden")}>Back to the present</button>
+          ) : (
+            <>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map <span aria-hidden>↗</span></button>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
+                {stage === "tower" ? "Garden" : "Tower"}
+              </button>
+            </>
+          )}
           {(phase === "review" || phase === "approve" || phase === "done") && stage === "tower" && (
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}

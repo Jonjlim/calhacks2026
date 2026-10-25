@@ -13,6 +13,25 @@ This document is the access-control spec. Contracts are in [CONTRACTS.md](CONTRA
 5. MVP demo data is synthetic or explicitly selected by the person who pastes it.
 6. Convex queries and mutations enforce every boundary below. The LLM is treated as an untrusted processor of the snapshot we chose to give it.
 
+## The gift map (Phase 2, D19)
+
+The map is a shared view, so every node on it must pass the same checks as the data behind it.
+
+| On the map | Who sees it |
+| --- | --- |
+| Published clues (memories, messages, ideas the contributor confirmed) | Room members |
+| Pasted conversations, imported exports, photos, screenshots, and their proposed clues | Only the contributor, marked “only you,” until they publish a clue. The raw item never reaches other members. |
+| Suggested themes and their clue lists | Room members. A theme only lists published clue IDs. |
+| Direction signals and listing votes | Room members, attributed |
+| Listings and recommendation explanations | Room members |
+| The box: selected gift, revision, approval state, the caller’s own share | Room members. Other members’ caps stay private; others see feasibility and their own share. |
+| Cursors | Room members, expiring after a few seconds |
+
+- The map projection (`getMapState`) is membership-scoped and returns private items only to their owner. A client never filters out another member’s private data; the server never sends it.
+- Click-to-add messages and ideas are published clues and need an explicit confirm, as they do today.
+- A dropped photo keeps the P0 rule: owner-only, location data stripped, deleted after reading. Showing the photo itself to the room would be a new consent step. That is an open decision in [EXECUTION_PLAN.md](EXECUTION_PLAN.md) and needs a change to this document before any code shares an image.
+- Themes and sharpen directions come from the model. They are suggestions, are validated before insert, and never become confirmed knowledge without a person acting on them.
+
 ## Data classification
 
 | Class | Examples | Default visibility |

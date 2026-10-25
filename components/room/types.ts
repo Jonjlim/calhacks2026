@@ -63,6 +63,8 @@ export interface RoomActions {
   startResearch: Run<[publishedClueIds: string[]]>;
   resumeCouncil: Run<[runId: string]>;
   castVote: Run<[listingId: string, value: VoteValue]>;
+  /** “She has it” (shared, publishes an ownership clue) or “too pricey for me” (personal). */
+  reactToGift: Run<[listingId: string, kind: "owned" | "price"]>;
   clearVote: Run<[listingId: string]>;
   selectGift: Run<[listingId: string]>;
   clearSelection: Run;

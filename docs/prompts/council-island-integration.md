@@ -1,5 +1,7 @@
 # Unwrap: integrate the live AI Council into the homepage island
 
+> **Note (D19, map-first room).** The room flow has changed since this prompt: the app opens in a lobby in front of the present, then zooms out to one gift map where the research and the council's work appear. Where this prompt describes a tower or a separate council stage, follow [../EXECUTION_PLAN.md](../EXECUTION_PLAN.md) instead.
+
 Implement the gift-research experience inside Unwrap's existing homepage world. A visitor should create or join a gift room, share memories, watch the five clockwork agents work on the same island, and inspect the actual products they recommend. Keep the homepage's current UI and animation direction throughout.
 
 ## Workspace and current state

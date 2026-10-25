@@ -1,5 +1,7 @@
 # Shared memory tree
 
+> **Superseded on the main path (D19, map-first room).** This describes the `/room/[id]/map` sky tree and React Flow arrange view as built in Phase 1. In Phase 2 the map becomes the room itself, laid out in rings. The backend functions below stay in use. See [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
 The room’s `/map` route combines the sky-island prototype with the live application. `GiftCanvas` owns the room subscriptions and commands; `MemoryTreeScene` renders existing storybook avatars, branching islands, and the gift box. `GiftDiagram` retains the React Flow arrangement view, sharing the same clues, sprouts, listings, selection, and reactions.
 
 ## Connected behavior

@@ -230,7 +230,7 @@ function HazeVeils() {
   );
 }
 
-export function DistantScenery({ animate }: { animate: boolean }) {
+export function DistantScenery({ animate, islets = true }: { animate: boolean; islets?: boolean }) {
   const end = useMemo(() => bridgeEnd(), []);
   return (
     <group>
@@ -241,7 +241,7 @@ export function DistantScenery({ animate }: { animate: boolean }) {
       <WindmillVillage animate={animate} />
       <HangingGardens animate={animate} />
       <WatchtowerOutpost animate={animate} />
-      <Islets animate={animate} />
+      {islets && <Islets animate={animate} />}
 
       {/* The islet the plank bridge reaches. */}
       <group position={[end.x + 0.9, end.y - 0.15, end.z + 0.3]} userData={{ sketch: 8 }}>
