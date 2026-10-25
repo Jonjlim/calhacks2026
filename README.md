@@ -1,353 +1,369 @@
 # Unwrap 🎁
 
-**Thoughtful gifts, together.** An interactive storybook world where friends turn shared memories into evidence-backed gift recommendations, agree on a present, and complete a clearly labeled demo gift-wrapping experience.
+### Everyone knows a different side of someone. Together, you know what makes them special.
 
-**Cal Hacks 13.0 · October 2026** · [![Devpost](https://img.shields.io/badge/Devpost-View%20Submission-003E54?logo=devpost&logoColor=white)](https://devpost.com/software/unwrap-y7w16s?ref_content=my-projects-tab&ref_feature=my_projects)
+**Unwrap is a multiplayer, AI-powered gift-discovery experience that brings everyone's memories together to find a more personal gift.**
 
-## ✨ Explore Unwrap
+One friend remembers the hobby they picked up last month. Another knows what they already own. Someone else remembers an offhand wish they mentioned once. Individually, these fragments are easy to overlook; together, they reveal what would make a gift meaningful.
 
-![Unwrap 3D World](public/screenshots/gift-world.png)
+Unwrap brings those perspectives into a shared, hand-painted 3D storybook world. Friends add memories and ideas, specialized AI agents interpret the clues and research sourced products, and the group explores, compares, and chooses together. With the recipient's explicit permission, an optional **Gift Twin** can surface preferences from messages they sent themselves—without exposing their private conversations to the group.
 
-### From Sketch to Storybook
-![Sketch Animation](public/screenshots/sketch-animation.png)
+**Cal Hacks 13.0 · October 2026** · [Devpost submission](https://devpost.com/software/unwrap-y7w16s) · [Fetch.ai Council on ASI:One](https://asi1.ai/ai/agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg)
 
-### Meet the AI Council
-![AI Council](public/screenshots/ai-council-map.png)
+![Unwrap's storybook gift introduction](public/screenshots/gift-intro.png)
 
-### Discover the Perfect Gift
-![Gift Reveal](public/screenshots/gift-reveal.png)
+## How it works
 
-## What is Unwrap?
+1. **Bring everyone together.** Create a gift room and invite friends from their phones using a link or QR code.
+2. **Share different sides of the recipient.** Add memories, wishes, photos, and ideas; review any AI-suggested clues before publishing.
+3. **Connect the clues.** The AI Council interprets shared knowledge and researches sourced gift options. The optional consent-based Gift Twin can add another perspective from the recipient's own sent messages.
+4. **Explore and compare.** Discover relationships in the floating-island map, then open the Book of Possibilities to browse products in one place.
+5. **Decide together.** Select a gift, set private contribution limits, approve the proposal, and celebrate the group decision through an animated finale.
 
-Gift ideas often live across group chats, old conversations, half-remembered interests, and one friend's mental list. Unwrap gives those clues a shared place to grow. Friends contribute memories and wishes; an AI Council organizes the clues and researches possible gifts; the group explores the connections in a whimsical floating-island world; and a storybook catalogue makes it easy to compare the real products and choose together.
-
-The product has **two complementary interfaces**: a rich **desktop 3D world** where the group sees their memories and ideas come alive, and a lightweight **phone controller** where individuals join, contribute, and make their own decisions.
+---
 
 ## Key features
 
-| Feature | What it does | Main code |
-| --- | --- | --- |
-| **Living storybook world** | Painterly floating islands, a central floral gift, shifting sky palettes, avatars, camera movement, and cinematic gift transitions. | `components/world/`, `components/intro/`, `components/convergence/` |
-| **Real-time collaborative rooms** | Create a room, invite friends with a link or QR code, and synchronize confirmed contributions and decisions through Convex. | `convex/rooms.ts`, `components/room/`, `app/join/` |
-| **Memories and clue review** | Contribute memories, messages, ideas, and optional selected media; AI-extracted clues stay private until the contributor reviews and publishes them. | `convex/clues.ts`, `convex/media.ts`, `components/clues/` |
-| **Gift Twin: opt-in iMessage insight agent** | With the recipient's explicit permission, a local Mac companion reads a bounded sample of **messages that recipient sent**, extracts gift-relevant interests/wishes/ownership/dislikes, and submits screened insights and advisory votes to the shared gifting process. Not unrestricted scraping. | `gift-twin/`, `convex/giftTwin/` |
-| **Five-agent AI Gift Council** | Courier coordinates Archivist, Muse, Scout, and Keeper for clue interpretation, symbolic memory charms, real product research, and budget/constraint checks. Progress events support animated robot statuses. | `fetch-agent/`, `convex/council.ts`, `components/council/` |
-| **Evidence-backed gift research** | Associates recommendations with published memories and sourced product listings, including observed prices and product URLs; unknown data stays unknown. | `convex/research/`, `convex/agents/`, `lib/map/` |
-| **Interactive gift map** | Visualizes themes, memory connections, gift directions, and selected product candidates in a shared world. | `components/map/`, `components/world/room/GiftRings.tsx` |
-| **Book of Possibilities** | Consolidates researched gifts into a readable catalogue with photos, filters, saved/passed decisions, source links, and pencil-to-watercolor opening effects. | `components/book/` |
-| **Group gift decisions** | Choose items, vote, set private contribution limits, calculate deterministic shares, and approve a specific proposal revision. | `convex/proposals.ts`, `convex/allocations.ts`, `convex/votes.ts` |
-| **Simulated contributions and finale** | Each owing participant simulates their exact share; after all simulations are complete the organizer can wrap the demo gift. | `convex/payments/simulation.ts`, `components/payments/`, `components/finale/` |
-| **Optional Moss guide and voice** | Contextual prompts, room-visible recall, and optional narration/voice experiences when configured. | `components/room/useRoomGuide.tsx`, `convex/moss/`, `app/api/moss-voice/` |
-| **Shareable gift story** | Renders a gift-story page via a public share token. | `app/gift/[token]/`, `components/story/` |
+### 🪞 Gift Twin — the recipient’s perspective, with permission
 
-### The core journey
+The recipient pairs their Mac with a gift room and gives **one-time consent**. A companion reads their local iMessage database, uploads **only the messages they sent** (never anyone else's) to a private vault that self-destructs in 24 hours, and a cloud agent acting on their behalf:
+
+- **Posts gift insights** it finds in their texts. "I've been playing tennis a lot" or "I've been wanting an Arc'teryx jacket" becomes a clue on the map. Non-giftable stuff ("I love dinner", "I just got home") is filtered out.
+- **Votes up or down on the friends' ideas**, including ones added after the upload. If friends add "Maya loves backpacking" but she texted "I hate backpacking, never again", the twin downvotes it, and that downvote becomes an *exclusion* clue so the shopping agents steer away.
+- **Catches things they already own**, turning those into *ownership* clues so nobody buys a duplicate.
+
+The recipient never sees the room's ideas (voting happens in the cloud), so the surprise survives. Full technical breakdown in [How the Gift Twin works](#how-the-gift-twin-works) below.
+
+### 🗺️ A living storybook world and shared gift map
+
+![Floating-island world](public/screenshots/gift-world.png)
+
+Friends gather in a lobby in front of a 3D storybook present. When the organizer starts the room, the camera pulls back and a ring-shaped map opens around it: **memories on the outside, themes in the middle, real gifts inside, the box at the center.** Click anywhere to add a memory, message, or photo. Everyone sees each other's named cursors live.
+
+### 🔍 Evidence-backed clues
+
+![Sharing memories in Unwrap](public/screenshots/memory-onboarding.png)
+
+Contributors can import messages and photos. An AI extractor proposes clues from them, and the contributor **privately reviews** each one before it goes public. Every recommendation can answer "why this?" by lighting the path back to the memories it came from.
+
+### 🛍️ Real products, not hallucinated ones
+Product research runs through Apify's Google Shopping scraper. Listings carry a source link, an observed price (or an honest "price not observed"), and a retrieval timestamp. The language model **never invents products, links, or prices**. Google Trends and public TikTok search add optional inspiration clouds, clearly labelled as inspiration rather than facts.
+
+### 🤖 The Fetch.ai Gift Council
+
+![The five AI Council characters](public/screenshots/ai-council-map.png)
+
+Five Fetch.ai uAgents (Courier, Archivist, Muse, Scout, Keeper) coordinate over typed messages to research gifts, enforce budgets, and drop anything the person owns or dislikes. The council is also reachable directly in [ASI:One](https://asi1.ai/ai/agent1q2vtalfkht476sacz6v3aslhas7pflw73m9lcpf64cth8vza3j52xtnq5mg). Their progress animates 3D council characters on the map.
+
+### 🗳️ Steering, budgets, and proposals
+
+![Group contribution planning](public/screenshots/budget-onboarding.png)
+
+Drag ideas toward the box to support them, away to pass. Everyone sets a **private contribution limit**, and Unwrap allocates shares deterministically. If the gift, total, or anyone's share changes, the old proposal is invalidated and the group approves a fresh one. An AI can suggest, but **only people select and approve**, and no agent ever touches money.
+
+### 🌿 Moss, the room guide
+A narrator character that nudges the group when they're stuck ("does anyone know what she's been into lately?"). It uses Moss semantic retrieval to pick the most relevant prompt, an optional live voice call via the Moss voice platform, and ElevenLabs for narration (falling back to the browser's voice).
+
+### 📖 The Book of Possibilities
+
+A sketch-to-watercolor storybook catalogue gathers researched listings in one place. Friends can inspect actual product links and observed prices, save or pass on options, and follow the supporting memories behind a recommendation. The organizer can then select the gift without navigating every island individually.
+
+### 🎁 The reveal and the gift tag
+
+![Unwrap gift reveal](public/screenshots/gift-reveal.png)
+
+At the end, a short storybook replays what the room did: memories shared, words that came up most, the council's searches, the votes, then the gift. The organizer can opt into a **gift tag**: a QR code and link the recipient opens without signing in, showing a curated, private-detail-free version of the story.
+
+---
+
+## How we used the technology
+
+Our integrations serve distinct parts of the same collaborative process rather than existing as disconnected API demos:
+
+| Technology | Role in Unwrap | Technical implementation |
+| --- | --- | --- |
+| **Fetch.ai / Agentverse / ASI:One** | Coordinate specialized agents working on different parts of a gift recommendation | Five Python uAgents exchange typed requests; Courier dispatches Archivist, Muse, Scout and Keeper, while task events feed the live Council characters. The public Courier is accessible through ASI:One. |
+| **Convex** | Keep everyone in the same room and enforce decisions safely | Reactive queries, authorized mutations/actions, background scheduling, and stored room state connect phones, desktop, research, votes, private caps, and revision-specific approvals. |
+| **Apify** | Ground recommendations in actual product research | The Scout/research pipeline retrieves shopping results; normalization preserves source URLs, observed or unknown prices, and retrieval timestamps. Trends and TikTok can provide separately labeled inspiration. |
+| **Moss** | Recall relevant preferences beyond literal keyword matches | Optional isolated semantic retrieval helps Gift Twin compare messages with ideas such as “wheel throwing” versus “ceramics workshop”; Moss also supports optional room guidance/voice workflows. |
+| **React Three Fiber / Three.js** | Make memory relationships explorable | A painterly interactive world represents shared themes, evidence paths, Council activity, and the gift-convergence sequence rather than a flat list of suggestions. |
+| **Zod / deterministic Convex logic** | Maintain trust at system boundaries | AI suggestions are schema-validated, privacy rules are enforced server-side, and financial shares/approval revision checks are computed without LLM authority. |
+
+## Architecture
 
 ```mermaid
-flowchart TD
-    A[Open the storybook world] --> B[Create a room and invite friends]
-    B --> C[Share memories, photos, wishes and ideas]
-    C --> D[Review and publish clues]
-    D --> E[AI Council discovers gift directions and products]
-    E --> F[Explore connected floating islands]
-    F --> G[Compare listings in the Book of Possibilities]
-    G --> H[Choose the gift and plan contributions]
-    H --> I[Approve a versioned proposal]
-    I --> J[Simulate each contribution: no charge]
-    J --> K[Wrap the demo gift and see the finale]
-    G --> L[Open the real product listing separately]
+flowchart LR
+  subgraph Browser["Next.js app (React, R3F)"]
+    UI[Lobby · Gift map · Reveal]
+    TwinPage["/twin recipient page<br/>(sql.js reads chat.db)"]
+  end
+
+  subgraph Mac["Recipient's Mac"]
+    CLI["gift-twin CLI<br/>(node:sqlite)"]
+    DB[(iMessage chat.db)]
+    DB --> CLI
+  end
+
+  subgraph Convex["Convex (authoritative state)"]
+    Rooms[Rooms · clues · votes<br/>proposals · allocations]
+    Vault[(twinVaultChunks<br/>24h TTL)]
+    TwinAgent[Gift Twin agent]
+    Research[Research jobs]
+    Agents[Buyer / extractor agents]
+  end
+
+  subgraph External["Providers"]
+    LLM[LLM via OpenAI-compatible API]
+    Apify[Apify: Shopping · Trends · TikTok]
+    Moss[Moss retrieval + voice]
+    Fetch["Fetch.ai council<br/>(Python uAgents on Render)"]
+  end
+
+  UI <--> Rooms
+  TwinPage --> Vault
+  CLI --> Vault
+  Vault --> TwinAgent
+  TwinAgent --> Rooms
+  TwinAgent --> LLM
+  TwinAgent --> Moss
+  Agents --> LLM
+  Research --> Apify
+  Rooms <--> Fetch
+  Fetch --> Research
 ```
+
+**For shared application state, the browser uses Convex.** Convex owns membership, clues, themes, listings, votes, caps, proposals, and job status. Model and product-research jobs run through server-side integrations; the separate Python Fetch.ai service exchanges authorized requests and events with the backend. Optional voice and Council-start endpoints also use Next.js server routes. The map's ring layout is computed in the browser from Convex state and is presentation only. Solo mode is just a one-person room.
+
+Every model output is re-validated with **Zod** before it touches the database. Prompts are never treated as the security control.
 
 ---
 
-## Spotlight: Gift Twin — personalized gift clues from text messages
+## How the Gift Twin works
 
-**Gift Twin** is the project's optional recipient-side AI collaborator. It is designed to surface the sorts of offhand preferences people mention in everyday conversations—*“I've been playing tennis lately,” “I want to try a pottery class,” “I already own that kit”*—that their friends may have forgotten.
+```mermaid
+sequenceDiagram
+  participant F as Friends (room)
+  participant C as Convex
+  participant M as Recipient's Mac
+  participant T as Twin agent (cloud)
+  participant G as Gift agent (review)
 
-**Technically, this is a local, permission-based iMessage import and AI interpretation pipeline, not a service that silently scrapes anyone's messages.** The current implementation is a **demo**, gated by `GIFT_TWIN_DEMO_ENABLED=true`.
-
-1. **Pair:** The organizer creates a short-lived pairing code for the recipient's Mac. The recipient runs the local `gift-twin` companion and explicitly pairs it to the room.
-2. **Read locally:** The companion opens `~/Library/Messages/chat.db` **read-only**, using Node's `node:sqlite`. macOS may require Full Disk Access for the terminal. It reads a bounded recent sample (default **1 MB** of message content).
-3. **Minimize before upload:** `gift-twin/src/upload.ts` keeps **only messages sent by the recipient** (`fromMe`), with text and timestamp. It does **not** upload other people's messages, phone numbers, email addresses, chat identifiers, or attachments.
-4. **Explicit consent:** After a one-time permission step, selected text is uploaded to an access-restricted Convex vault with a maximum **24-hour lifetime**, or deleted earlier with the forget/disconnect action.
-5. **Extract and reason:** Internal Twin actions analyze the permitted text for gift-relevant interests, wishes, dislikes, ownership, and constraints. Optional Moss-based semantic recall can aid finding evidence; model outputs are validated and screened before sharing.
-6. **Advise the room:** The Twin posts filtered insights and advisory up/down votes on relevant existing or newly added ideas. The room gift agent reviews proposed insight posts before publishing eligible clues. Confirmed clues and exclusions can influence normal research and ranking.
-7. **Protect decisions:** The Twin **cannot** spend money, set contribution limits, approve proposals, choose a gift as a paying member, or access other participants' private payment information. Its votes are advisory, not human votes.
-
-**Gift Twin data path:**
-
-```text
-Recipient's Mac (iMessage database, read-only)
-   → Local filter: sent-by-me text + timestamp only
-   → Explicit consent & one-time pairing
-   → Private, expiring Convex message vault
-   → Internal AI extraction + evidence review
-   → Screened gift insights and advisory votes
-   → Published room clues / gift-direction evidence
-   → Normal Council research & recommendations
+  F->>C: Organizer creates pairing → 8-char code / invite link
+  M->>C: pair(code, locally generated device token)
+  M->>M: Read newest 1 MB of chat.db, keep only sent messages
+  M->>M: Show consent summary, recipient agrees once
+  M->>C: startUpload(consent: true) → uploadMessages × n → finishUpload
+  C->>T: processVault (fast pattern pass, no model wait)
+  T->>C: Insights + votes posted
+  C->>G: reviewPosts
+  G->>C: Insights → clues · downvotes → exclusion/ownership clues
+  C-->>T: enrichVault (LLM + Moss pass in background)
+  loop Room changes (200 ms wakeup) + 30 s recovery watch
+    C->>T: checkIdeas → voteOnNewIdeas
+  end
+  C->>C: expireVault at 24 h / forget / disconnect deletes everything
 ```
 
-The Twin can also evaluate new room ideas while its permitted vault remains active. The vault is intentionally temporary; disabling or revoking the connection stops subsequent use and triggers deletion safeguards. The Twin is **not** general unrestricted access to a person's complete texting history.
+### 1. Reading the messages (on the recipient's machine)
 
-**Local companion setup** (recipient's Mac, **Node 23.6+** according to its own README):
+There are two ways in, and both share the same upload pipeline:
 
-```bash
-npm run twin -- doctor
-npm run twin -- pair <PAIRING_CODE>
-npm run twin -- share --fixture    # synthetic test messages
-npm run twin -- share              # real permitted messages after consent
-npm run twin -- forget             # delete uploaded vault / revoke sharing
-npm run test:twin
-```
+- **CLI** (`gift-twin/`): a dependency-free Node 23.6+ script. `src/imessage.ts` opens `~/Library/Messages/chat.db` read-only with built-in `node:sqlite`, streams rows newest-first by `ROWID`, and stops at a **1 MB content budget**. Reactions and tapbacks are skipped (`associated_message_type = 0`). When the plain `text` column is empty, it decodes Apple's `attributedBody` typedstream blob. Each message is capped at 2,000 characters.
+- **Browser** (`/twin`): for recipients who don't want a terminal. They pick their `chat.db` in a file picker and a locally bundled **SQLite WASM (`sql.js`)** reader runs the same scan in browser memory. The raw database never reaches Next.js or Convex.
 
-See [`gift-twin/README.md`](gift-twin/README.md) and [`docs/GIFT_TWIN.md`](docs/GIFT_TWIN.md) for privacy boundaries, deployment flags, and the exact workflow.
+`src/upload.ts` then drops every message where `is_from_me` is false. **Other people's messages, phone numbers, emails, chat names, and attachments are never uploaded.** What's left (text and send time) is batched so each Convex document stays under the 1 MiB limit.
+
+### 2. Consent and the vault
+
+`share` prints exactly what will be uploaded, for how long, and who can read it, then asks once. `device.startUpload` refuses outright without `consent: true`. Messages land in `twinVaultChunks`, which **no public or device query can read back**, not even the recipient's own device. Only `internal.giftTwin.agent.*` functions read it. The device authenticates with a bearer token it generates locally; Convex stores only its SHA-256 hash.
+
+The vault is deleted at 24 hours, on `npm run twin -- forget`, when either side disconnects, when a new upload replaces it, and when the room is deleted.
+
+### 3. Finding gift insights (`convex/giftTwin/extract.ts`)
+
+A **deterministic pass runs first** so results show up in well under a second. Regex patterns catch "I want / I've been wanting / I love / I've been playing / my favorite X is…" style statements. Then filters clean the object ("an Arc'teryx jacket lol" → "Arc'teryx jacket") and reject non-gifts: people, meals, chores, weather, school, and so on. Curated hobby, product, and brand lists decide what counts as giftable. One clear mention is enough, and repeat mentions raise confidence.
+
+If an LLM is configured, `enrichVault` then sends batched messages (up to 4 batches of ~24k chars) to the model acting in the `recipient` role for higher-quality extraction. Its output is Zod-validated and screened like everything else.
+
+### 4. Voting on the room's ideas (`convex/giftTwin/vote.ts`)
+
+For each clue, theme, and listing in the room, the twin searches the vault for evidence. Keyword matching with stemming finds candidate messages, then **sentiment patterns** decide the vote: phrases like *hate, can't stand, never again, gave up, allergic* contradict an idea, while *love, obsessed, been playing, can't wait* support it. Negated ideas are handled too ("doesn't like candles" + "I hate candles" is agreement, not a conflict). **No clear evidence means no vote.**
+
+**Moss semantic memory** (`memoryRecall.ts`, `memorySelection.ts`) covers what keywords miss. "Ceramics workshop" can match "I'd love to learn wheel throwing" with zero word overlap. Each evaluation builds an isolated in-memory Moss index over at most 256 messages (prioritizing gift-relevant ones), queries it, and closes it. Nothing is pushed to a cloud index or saved to disk. Keyword hits are kept alongside so ownership and contradiction evidence isn't lost.
+
+The twin stays live while the vault is open. New memories, themes, or listings wake it after **200 ms**, and a 30-second watch loop on the Convex scheduler catches anything missed.
+
+### 5. The gift agent decides what becomes room knowledge (`convex/giftTwin/review.ts`)
+
+- **Insights** with medium or high confidence are published as clues on the map.
+- **Downvotes** become `exclusion` clues ("she dislikes it") or `ownership` clues ("she already has it"). The friend's original clue is left untouched.
+- **Upvotes** show up as green "Supports" badges on the idea.
+- The gift agent's model can only **veto**, never add. Clues are attributed to the friend who invited the twin, and they can withdraw them.
+
+### 6. Privacy guardrails
+
+| Data | Lives in | Who can see it |
+| --- | --- | --- |
+| Full iMessage history | Recipient's Mac only | The local companion process |
+| Others' messages, contacts, attachments | Never uploaded | Nobody |
+| Recipient's sent messages | Convex vault, ≤ 24 h | Only the twin agent's internal functions (and the model provider during its calls) |
+| Insights and votes | `agentCollaboratorPosts` | Room members, as screened sentences |
+
+`screenSharedText` rejects quotes, links, contact details, and sensitive topics (health, religion, sexuality, politics, finances, legal, credentials) before anything reaches the room. The twin is a **collaborator, not a participant**: it has no contribution share, can't select or approve, and its votes never count toward participant totals.
 
 ---
 
-## Technology stack
+## The Fetch.ai Gift Council
 
-| Layer | Stack |
+| Agent | Job |
 | --- | --- |
-| Frontend | Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4 |
-| Animation and 3D | Motion, Three.js, React Three Fiber, Drei, custom world geometry/materials, bundled GLBs |
-| Alternative graph view | React Flow (`@xyflow/react`) |
-| Application backend | Convex real-time queries, mutations, actions, scheduling, file storage, auth |
-| AI | Typed/validated model workflows with Zod; Python Fetch.ai `uagents` Council |
-| Product research | Normalized sourced research providers (Apify configured for live search) |
-| Optional services | Moss, ElevenLabs, LiveKit; Gift Twin Mac companion |
-| Payments | Explicit Convex demo simulation; incomplete, dormant Stripe sandbox integration |
-| Tests | Vitest, `convex-test`, Node tests, `pytest`, scenario scripts |
+| **Courier** | Public coordinator. Receives the chat, dispatches specialists, writes the answer. |
+| **Archivist** | Extracts clues: interests, wishes, owned items, dislikes, budget, occasion. |
+| **Muse** | Turns a memory into a symbolic charm for the gift box (pottery → terracotta charm). |
+| **Scout** | Runs live shopping search through the Unwrap backend. Keeps only listings with an https link. |
+| **Keeper** | Enforces budget, removes owned/disliked items, explains why each pick fits. |
 
-Consult [`package.json`](package.json) and [`fetch-agent/requirements.txt`](fetch-agent/requirements.txt) for pinned versions.
+Muse and Scout run in parallel. If a specialist times out, Courier does that step itself, **except research, which it never fakes**. All five run in one uAgents Bureau deployed on Render (`render.yaml`, `fetch-agent/Dockerfile`). Addresses and run instructions are in [fetch-agent/README.md](fetch-agent/README.md).
 
-## Local development
+Try it in ASI:One:
+> "Find a birthday gift for Maya. She loves pottery and handmade crafts, already owns a beginner pottery kit, dislikes scented candles, and our budget is $80."
 
-### 1. Clone the right branch
+---
 
-```bash
-git clone https://github.com/Jonjlim/calhacks2026.git
-cd calhacks2026
-git switch refactor
-npm ci
-cp .env.example .env.local
-```
+## Tech stack
 
-Use a Node version supported by this project's Next.js release. The separate Gift Twin CLI specifies **Node 23.6+**.
-
-### 2. Start Convex
-
-```bash
-npx convex dev
-```
-
-Follow the sign-in/linking prompts. The setup normally writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` to `.env.local`.
-
-Anonymous auth requires deployment initialization:
-
-```bash
-npm run convex:auth:setup
-```
-
-Keep the Convex watcher running. In a second terminal:
-
-```bash
-npm run dev
-```
-
-Open **http://localhost:3000**.
-
-**Without `NEXT_PUBLIC_CONVEX_URL`**, the app can show read-only preview fixtures. A fixture is not live multiplayer; rooms, invitations, updates, and proposals require Convex.
-
-### 3. Test joining from a phone
-
-Create a real room, then open the generated link/QR from a second device. `localhost` points to each device itself: use a hosted HTTPS URL, accessible tunnel, or reachable local network origin when phones need to join. The phone experience lives at `/room/[roomId]/phone` and deliberately doesn't load the desktop 3D world.
-
-### 4. Optional agent and provider configuration
-
-External AI and shopping are not automatically usable just because the UI renders. Consult [`.env.example`](.env.example), [`docs/FETCH_AI_COUNCIL.md`](docs/FETCH_AI_COUNCIL.md), and [`fetch-agent/.env.example`](fetch-agent/.env.example).
-
-Typical secret/environment names include:
-
-- `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` — configured model provider in **Convex**.
-- `APIFY_TOKEN` — live sourced product research; configured in **Convex**.
-- `FETCH_AGENT_URL`, `COUNCIL_AGENT_SECRET`, `COUNCIL_INGEST_SECRET`, `CONVEX_SITE_URL` — Council integration; environment placement differs across Next.js, Convex, and the Python service.
-- `AGENT_SEED`, `ASI1_API_KEY` — Fetch.ai agent service. Keep agent seeds stable to preserve published addresses.
-- `GIFT_TWIN_DEMO_ENABLED=true` — optional Convex Gift Twin demo functionality.
-- `MOSS_*`, `ELEVENLABS_*` — optional memory/voice/narration integrations.
-
-**Never prefix server secrets with `NEXT_PUBLIC_` or commit them.** Make sure the live Convex site URL, deployed Council endpoint, callback allowlist, and shared secrets point to the **same environment**. A hosted Convex action cannot call an agent running only at your laptop's `127.0.0.1`.
-
-### 5. Optional Fetch.ai Council service
-
-```bash
-cd fetch-agent
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Fill private seed(s), URLs and other required credentials.
-python print_addresses.py
-python agent.py
-```
-
-Run tests with `python -m pytest -q`. Agentverse registration and ASI:One setup are documented at [`docs/FETCH_AI_COUNCIL.md`](docs/FETCH_AI_COUNCIL.md). The repository also includes a Render blueprint for the Council service (`render.yaml`).
-
-## Development commands
-
-| Command | Purpose |
+| Layer | Choice |
 | --- | --- |
-| `npm run dev` | Start Next.js development server |
-| `npm run dev:convex` | Start Convex development watcher |
-| `npm run build` | Production Next.js build |
-| `npm run start` | Start built application |
-| `npm run typecheck` | Type-check app, Convex, Gift Twin |
-| `npm test` | Run Vitest tests |
-| `npm run test:twin` | Run Gift Twin Node tests |
-| `npm run twin -- doctor` | Diagnose Mac companion setup |
-| `npm run agents:smoke` | Opt-in **live** agent smoke test requiring configured services |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4 |
+| 3D / motion | React Three Fiber, drei, three.js, Motion |
+| Backend & realtime | Convex (queries, mutations, actions, scheduler, file storage), Convex Auth (anonymous) |
+| AI | Any OpenAI-compatible Chat Completions model (`LLM_*`), Zod-validated structured outputs |
+| Agents | Fetch.ai uAgents (Python), Agentverse, ASI:One |
+| Memory & voice | Moss (semantic retrieval + voice agent), LiveKit, ElevenLabs |
+| Research | Apify: Google Shopping, Google Trends, TikTok search |
+| Message reading | `node:sqlite` (CLI), `sql.js` WASM (browser) |
+| Contributions | Convex approval and simulation endpoints; separate Stripe test-mode primitives are not a live checkout |
+| Hosting | Vercel (web), Convex Cloud, Render (council) |
 
-Other diagnostic/e2e scripts live in `scripts/`. Inspect their requirements before running; some make real provider calls.
-
-## Main routes
-
-| Route | Responsibility |
-| --- | --- |
-| `/` | Storybook landing and room entry |
-| `/join/[token]` | Invitation link / QR join |
-| `/room/[roomId]` | Desktop shared stage, with device-aware routing |
-| `/room/[roomId]/phone` | Personal mobile controller |
-| `/room/[roomId]/map` | Dedicated/legacy gift map route; main room is map-first |
-| `/room/[roomId]/twin` | Optional Gift Twin pairing/studio |
-| `/council` | Standalone Council experience |
-| `/gift/[token]` | Shared/public gift-story view |
-| `/worlds` | World gallery |
-| `/demo/group-flow` | Offline shared-decision fixture |
-| `/demo/contributions` | Labeled contribution simulation preview |
-| `/twin` | Gift Twin entry |
-
-## Architecture overview
-
-```text
-Browser (desktop world / phone controller)
-   │  Convex auth, subscriptions, calls
-   ▼
-Convex — authoritative rooms, evidence, clues, products, votes,
-         proposals, approvals, and simulated contributions
-   ├── agent and extraction workflows → configured model
-   ├── researched listings and ranking → configured sources
-   ├── Council events ↔ Fetch.ai uAgents service
-   └── Optional Gift Twin vault/internal recipient collaborator
-                       ▲
-                       │ explicit consent, device pairing
-                Recipient's Mac CLI
-```
-
-**Key boundaries:** Convex enforces membership and privacy; the AI doesn't approve money, invent listings, or publish private evidence without required review. Product records retain actual source URLs and observation times. Financial amounts use integer USD cents and deterministic allocation, not model estimates.
-
-### Major subsystems
-
-- **Rooms and auth:** `convex/rooms.ts`, `convex/auth.ts`, `components/providers/`, `components/room/RoomScreen.tsx`.
-- **Desktop and mobile presentation:** `components/room/RoomLayout.tsx`, `components/participant/MobileParticipantExperience.tsx`, `lib/room/surface.ts`.
-- **World and camera:** `components/world/`, including `WorldCamera.tsx`, `AtmosphericSky.tsx`, `IslandEnvironment.tsx`, painterly materials, island props, gift interactions, and animated agents.
-- **Clues, photos, messages:** `convex/clues.ts`, `convex/media.ts`, `convex/messages.ts`, `components/clues/`.
-- **Gift research:** `convex/agents/`, `convex/research/`, `convex/map.ts`, `lib/map/`.
-- **Council:** `fetch-agent/council/`, `convex/council.ts`, `convex/councilRoom.ts`, `components/council/`.
-- **Book of Possibilities:** `components/book/BookOfPossibilities.tsx`, `BookCorner.tsx`, `bookStore.ts`, `book.module.css`.
-- **Decisions:** `convex/proposals.ts`, `convex/allocations.ts`, `convex/votes.ts`, `components/proposal/`.
-- **Convergence/finale:** `components/convergence/`, `components/world/convergence/`, `components/finale/`, `components/story/`.
-- **Simulation:** `convex/payments/simulation.ts`, `components/payments/ConnectedContributionSimulation.tsx`.
-- **Gift Twin:** `gift-twin/src/imessage.ts`, `gift-twin/src/upload.ts`, `convex/giftTwin/agent.ts`, `convex/giftTwin/device.ts`, `convex/giftTwin/review.ts`.
-- **Optional Moss:** `convex/moss/`, `components/room/useRoomGuide.tsx`, `app/api/moss-voice/`.
+---
 
 ## Repository layout
 
-```text
-app/                 Next.js routes and API endpoints
-components/
-  book/              Interactive catalogue and book animation
-  council/           AI Council scene, avatars and event UI
-  convergence/       Memory/gift convergence timing and effects
-  finale/            Simulated contributions and final wrapping
-  giftTwin/          Recipient companion UI
-  intro/             Illustrated opening
-  map/               Map, product and memory visualization
-  participant/       Mobile controller
-  payments/          Simulation frontend
-  room/              Stage, guidance, contribution UI
-  story/             Public gift story
-  world/             Three.js environment, gift, agents, shaders, islands
-convex/
-  agents/            Interpretation and agent workflows
-  giftTwin/          Recipient-authorized vault and agent processing
-  moss/              Optional room memory/retrieval
-  payments/          Demo simulation and sandbox building blocks
-  research/          Provider integrations and scored listings
-fetch-agent/         Python uAgents coordinator and specialists
-gift-twin/           Recipient Mac companion CLI
-lib/                 Shared contracts, policies and utilities
-public/              GLB assets, portraits, sounds
-scripts/             E2E, tests, experiments, rehearsal
-work/                Visual prototypes, reviews, recorded evidence
-docs/                Specifications and subsystem handoffs
 ```
-
-`work/` includes experimental studies and past screenshots. Their presence doesn't prove a component is mounted in the primary application; follow imports from `app/` when determining what is live.
-
-## Contributions, approvals and payment transparency
-
-For the actual gift box, contributions use **private limits** and a deterministic allocation algorithm. Members approve their current shares and the exact gift/estimated total. Any change to the proposal revision invalidates previous approval where applicable.
-
-The **demo** uses `convex/payments/simulation.ts` to record each owing participant's simulated completion. Only after all required simulations finish may the organizer trigger wrapping. These actions **do not call Stripe**.
-
-The repository also has test-mode Stripe transport, reconciliation, payment-state code, and webhook helpers in `convex/payments/`. Per [`convex/payments/README.md`](convex/payments/README.md), this is **not a fully integrated, enabled real checkout**. Do not describe it as available payment processing. Unknown shipping and tax remain explicitly unknown; the real listing must be opened separately if the group wants to buy the item.
-
-## Privacy and security
-
-- Private conversation imports and proposed clues remain contributor-only until approved for publication.
-- Recipient Gift Twin uploads happen only with explicit permission and are limited to **the recipient's own sent text**; other participants do not receive raw imported messages.
-- The Twin vault expires after at most 24 hours and can be deleted earlier.
-- AI-generated insights are screened and revalidated; a model isn't an access-control layer.
-- Other people's private contribution limits aren't exposed as shared room data.
-- AI cannot approve proposals, charge money, or make merchant purchases.
-- Product links, prices and retrieval timestamps are derived from records, not invented by the model.
-- Server secrets belong in protected environments, never frontend bundles.
-
-See [`docs/DATA_AND_PRIVACY.md`](docs/DATA_AND_PRIVACY.md), [`docs/CONTRACTS.md`](docs/CONTRACTS.md), and [`AGENTS.md`](AGENTS.md).
-
-## Current implementation and known limitations
-
-This README is grounded in the **code visible on `refactor`**, not a fresh production smoke test. It confirms that the modules exist and describes their code paths; it does **not** claim that live AI, product search, all animation transitions, mobile QR invitations, and a complete multiplayer demo have all been validated on the same deployment.
-
-The checked-in [`October 25 branch review`](work/branch-review-2026-10-25/REVIEW.md) specifically reports a configuration mismatch/missing live research and Council environment variables on one inspected Convex deployment. Revalidate against the deployment currently used for demos; that observation might have been resolved elsewhere.
-
-Recommended end-to-end checklist:
-
-1. Run `npm run typecheck`, `npm test`, and `npm run build`.
-2. Start a Convex-connected room; join from a second browser/phone.
-3. Publish a real memory and verify a room-visible update.
-4. Run a Council request and inspect the recorded task events.
-5. Check that researched listings contain working source links and observed/unknown prices.
-6. Inspect all recommendations in the Book of Possibilities; shortlist/pass/select.
-7. Enter distinct private caps, calculate shares and collect fresh approvals.
-8. Simulate each payer's contribution, wrap, and open the final story.
-9. Verify that **no actual payment or merchant order** occurs.
-10. Separately test opt-in Gift Twin with fixture messages before using real personal data.
-
-## Further documentation
-
-- [`AGENTS.md`](AGENTS.md) — contributor and agent working rules
-- [`docs/PRODUCT.md`](docs/PRODUCT.md) — product vision
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — architecture and decisions
-- [`docs/CONTRACTS.md`](docs/CONTRACTS.md) — shared types and data contracts
-- [`docs/DATA_AND_PRIVACY.md`](docs/DATA_AND_PRIVACY.md) — consent and authorization
-- [`docs/AI_AGENTS.md`](docs/AI_AGENTS.md) — AI agent workflows
-- [`docs/FETCH_AI_COUNCIL.md`](docs/FETCH_AI_COUNCIL.md) — Fetch.ai setup and Agentverse integration
-- [`fetch-agent/README.md`](fetch-agent/README.md) — specialist agents and local run instructions
-- [`docs/GIFT_TWIN.md`](docs/GIFT_TWIN.md) — message-import agent and privacy model
-- [`gift-twin/README.md`](gift-twin/README.md) — Mac companion commands
-- [`docs/COMMERCE_AND_PAYMENTS.md`](docs/COMMERCE_AND_PAYMENTS.md) — gift proposals and payment boundaries
-- [`convex/payments/README.md`](convex/payments/README.md) — simulation vs. unfinished Stripe integration
-- [`work/branch-review-2026-10-25/REVIEW.md`](work/branch-review-2026-10-25/REVIEW.md) — historical deployment review
+app/                  Next.js routes
+  room/[roomId]/      The gift room, plus /phone, /twin, /map views
+  twin/               Recipient's Gift Twin page (consent + chat.db picker)
+  join/[token]/       Invite links / QR join
+  gift/[token]/       Public gift tag the recipient opens
+  council/            Standalone AI Council view
+  api/                Council runner, Moss voice, twin SQLite asset
+components/           UI: world/ (3D island), room/, map/, giftTwin/, council/, finale/ …
+convex/               Backend
+  schema.ts           All tables
+  giftTwin/           Twin pairing, vault, extraction, voting, review, purge
+  agents/             Buyer agent, extractor, themes, directions, photo reading
+  research/           Shopping, trends, TikTok, normalization, ranking
+  payments/           Stripe sandbox state machine and simulation
+  moss/               Room guide recall and voice
+gift-twin/            Mac companion CLI (pair · share · forget · doctor)
+fetch-agent/          Python Fetch.ai council (Courier + 4 specialists)
+lib/                  Shared contracts, validation, map/room logic
+docs/                 Architecture, privacy, agent, and contract docs
+scripts/              Live smoke tests and provider spikes
+```
 
 ---
 
-*The best gift is the one that says: I remembered.*
+## Visual language
+
+The experience begins with a **pencil-drawn scene that fills with watercolor**, then becomes an interactive 3D floating-island world. The same visual treatment returns when opening the gift catalogue.
+
+![Pencil-to-watercolor storybook sequence](public/screenshots/sketch-animation.png)
+
+## Getting started
+
+### Web app
+
+```bash
+npm install
+npx convex dev          # first run: log in, link the project, writes .env.local
+npx @convex-dev/auth    # once per deployment: anonymous-auth keys
+npm run dev             # second terminal → http://localhost:3000
+```
+
+Without `NEXT_PUBLIC_CONVEX_URL`, the UI falls back to read-only fixtures, so frontend work doesn't need a deployment.
+
+Server secrets go on the Convex deployment (`npx convex env set …`), never in `NEXT_PUBLIC_` variables. See [.env.example](.env.example) for the full list. The main ones:
+
+| Variable | Enables |
+| --- | --- |
+| `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | Model-quality extraction, themes, and twin votes (patterns are used without them) |
+| `APIFY_TOKEN` | Live product, trend, and TikTok research |
+| `GIFT_TWIN_DEMO_ENABLED=true` | Gift Twin pairing |
+| `GIFT_TWIN_MOSS_ENABLED`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | Semantic memory for the twin |
+| `MOSS_VOICE_AGENT_ID`, `ELEVENLABS_API_KEY` | Moss's voice (Next.js server env) |
+| `FETCH_AGENT_URL`, `COUNCIL_AGENT_SECRET`, `COUNCIL_INGEST_SECRET` | Fetch.ai council |
+
+### Gift Twin demo
+
+```bash
+# On the Convex deployment
+npx convex env set GIFT_TWIN_DEMO_ENABLED true
+npx convex dev --once
+
+# In the app: open a room, add a few memories, go to /room/<roomId>/twin, invite the twin
+
+# On the recipient's Mac
+npm run twin -- pair ABCD2345     # code from the twin page
+npm run twin -- share --fixture   # sample messages; drop --fixture for real iMessage
+npm run twin -- forget            # delete the vault now
+npm run twin -- doctor            # check Full Disk Access
+```
+
+Real iMessage access needs Full Disk Access for your terminal (System Settings → Privacy & Security → Full Disk Access). Other flags: `--max-mb`, `--days N`, `--dry-run`. Or skip the CLI and send the recipient the `/twin` link from the room.
+
+### Fetch.ai council
+
+```bash
+cd fetch-agent
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env    # add seeds and credentials
+python agent.py
+```
+
+### Checks
+
+```bash
+npm run typecheck       # app, Convex, and gift-twin
+npm test                # Vitest suite
+npm run test:twin       # companion unit tests
+cd fetch-agent && python -m pytest -q
+```
+
+---
+
+## Implementation status
+
+The codebase contains the following capabilities and verification notes:
+
+- **Implemented and tested:** rooms, invites, private evidence and photo review, research normalization, the agent backbone, the council, votes, private limits, allocation, revision-aware approvals, and the Gift Twin pipeline (fixture and synthetic-database tests).
+- **Verified live on a dev deployment:** the twin's fast path (first finding ~0.5 s after upload, a vote on a new contradictory idea ~0.8 s), Moss retrieval in the Convex runtime, and one live shopping search with the Scrapewise actor.
+- **Not yet verified end to end:** reading real `chat.db` files across macOS versions (the `attributedBody` decoder covers the common layout only), real macOS file selection in the browser flow, the live Moss voice call, and a full two-browser run on one shared deployment.
+- **Contribution completion:** the current shared flow records explicit simulated contributions; it does not charge cards or purchase products. Stripe test-mode primitives exist separately but are not a connected real checkout.
+
+---
+
+## Documentation
+
+| Doc | Covers |
+| --- | --- |
+| [docs/GIFT_TWIN.md](docs/GIFT_TWIN.md) | Gift Twin design, privacy model, Moss memory, production path |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and every decision record (D9–D30) |
+| [docs/AI_AGENTS.md](docs/AI_AGENTS.md) | Buyer agent, recipient agent, extraction, ranking |
+| [docs/FETCH_AI_COUNCIL.md](docs/FETCH_AI_COUNCIL.md) | Running and registering the council |
+| [docs/DATA_AND_PRIVACY.md](docs/DATA_AND_PRIVACY.md) | Consent, classification, access control |
+| [docs/COMMERCE_AND_PAYMENTS.md](docs/COMMERCE_AND_PAYMENTS.md) | Listings, allocation, proposals, sandbox payments |
+| [docs/CONTRACTS.md](docs/CONTRACTS.md) | Shared TypeScript interfaces |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | Vision, journeys, scope |
+| [AGENTS.md](AGENTS.md) | Rules for humans and coding agents working in this repo |
