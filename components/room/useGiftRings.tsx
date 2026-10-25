@@ -5,6 +5,7 @@ import type { RingAction, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "@/components/world/room/gift-rings.module.css";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
+import { isTrendKey, layoutTrendIdeas, TREND_KEY_PREFIX } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import type { RoomActions, RoomData } from "./types";
@@ -35,6 +36,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Passing a trend only hides it for this viewer; shared passes wait for MAP-012 direction signals.
+  const [passedTrends, setPassedTrends] = useState<Set<string>>(() => new Set());
   const lock = useRef(false);
 
   const run = useCallback(async (call: () => Promise<Result<unknown>>, success: string) => {
@@ -72,6 +75,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     ),
     [clues, recs, data.votes],
   );
+  const trendSample = data.trends?.sample ?? null;
+  const trendSource = trendSample ? clues.find((c) => c.id === trendSample.publishedClueId) ?? null : null;
+  const trendIdeas = useMemo(() => {
+    if (!trendSample || !trendSource) return [];
+    const at = layout.clues.find((c) => c.id === trendSource.id) ?? null;
+    return layoutTrendIdeas(trendSample.suggestions, at, passedTrends);
+  }, [trendSample, trendSource, layout.clues, passedTrends]);
+  const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   if (!active) return { rings: null, notice, error };
 
@@ -93,7 +104,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   if (why && selection) {
     const rec = recs.find((r) => r.listingId === selection.listingId);
     const cited = (rec?.publishedClueIds ?? []).filter((id) => clues.some((c) => c.id === id));
-    highlight = new Set(["box", `gift:${selection.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeForKind(clues.find((c) => c.id === id)!.kind)}`)]);
+    const trend = trendByListing.get(selection.listingId);
+    highlight = new Set(["box", `gift:${selection.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeForKind(clues.find((c) => c.id === id)!.kind)}`), ...(trend ? [TREND_KEY_PREFIX + trend.query] : [])]);
   }
 
   const vote = (listingId: string, value: "up" | "down") => {
@@ -134,7 +146,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       if (!listing) return null;
       const mine = data.votes[listingId]?.myVote;
       return {
-        caption: <><b>{listing.title}</b> · {priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}<br />{rec?.explanation}</>,
+        caption: <><b>{listing.title}</b> · {priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}<br />{rec?.explanation}{trendByListing.has(listingId) && <><br />Found while researching “{trendByListing.get(listingId)!.query}”, a related Google Trends search. The product itself isn’t claimed to be trending.</>}</>,
         actions: actions ? [
           { icon: "♥", label: "Feels right", tone: "yes", on: mine === "up", disabled: pending, run: () => vote(listingId, "up") },
           { icon: "✕", label: "Pass for now", tone: "pass", on: mine === "down", disabled: pending, run: () => vote(listingId, "down") },
@@ -142,7 +154,21 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
           { icon: "🏠", label: "She has it", disabled: pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "💸", label: "Too pricey for me", disabled: pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
           { icon: "↗", label: "Open the listing", run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
+          ...(trendByListing.has(listingId) ? [{ icon: "📈", label: "See the trend", run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
+      };
+    }
+    if (isTrendKey(key)) {
+      const node = trendIdeas.find((t) => t.key === key);
+      if (!node || !trendSample || !trendSource) return null;
+      const jobId = trendSample.jobId;
+      return {
+        caption: <><b>{node.query}</b> · {node.signal}<br />A Google Trends search related to “{trendSource.text}”. An idea to explore, not a fact about her.</>,
+        actions: [
+          ...(actions?.researchTrend ? [{ icon: "🌱", label: "Research this direction", tone: "gold" as const, disabled: pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
+          { icon: "↗", label: "See the source", run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
+          { icon: "✕", label: "Doesn’t fit", tone: "pass" as const, run: () => { setPassedTrends((p) => new Set(p).add(node.query)); setSelectedKey(null); setNotice("Hidden for you. Her memories didn’t change."); } },
+        ],
       };
     }
     const idea = ideas.find((c) => `idea:${c.id}` === key);
@@ -162,6 +188,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       caption: <>{name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory · in {theme}</>,
       actions: [
         ...(findGifts ? [findGifts] : []),
+        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "📈", label: "Look for trends", disabled: pending, run: () => void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here.") }] : []),
         ...(actions && clue.publisherId === me.id ? [{ icon: "↩", label: "Take it back", disabled: pending, run: () => void run(() => actions.withdrawClue(clue.id), "Your memory was withdrawn from the room.").then((ok) => ok && setSelectedKey(null)) }] : []),
       ],
     };
@@ -219,7 +246,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
       return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarFor(participants, idea.publisherId), x, z };
-    }),
+    }).concat(trendSource ? trendIdeas.map((t) => ({ key: t.key, text: t.query, author: name(trendSource.publisherId), avatar: avatarFor(participants, trendSource.publisherId), x: t.x, z: t.z, tag: `trend · ${t.signal}` })) : []),
     themes: layout.themes.map((t) => ({ key: `theme:${t.id}`, theme: t.id, label: RING_THEMES[t.id].label, count: t.count, x: t.x, z: t.z })),
     gifts: layout.gifts.map((g, i) => {
       const l = listingById.get(g.listingId)!;

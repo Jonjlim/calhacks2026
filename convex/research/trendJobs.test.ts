@@ -48,6 +48,28 @@ describe("persisted live Google Trends discovery", () => {
     const different = value(await s.alex.mutation(api.research.research.startResearch, { ...args, idempotencyKey: "picked-fourth", discoveryQuery: "xiem pottery tools" }));
     expect(different.jobId).not.toBe(result.jobId);
   });
+  it("links listings back to the trend query that found them, and only those", async () => {
+    const s = await completed();
+    const research = (key: string, discoveryQuery?: string, trend = true) => s.alex.mutation(api.research.research.startResearch, {
+      roomId: s.roomId, publishedClueIds: [s.clue._id], idempotencyKey: key,
+      ...(trend ? { trendJobId: s.jobId } : {}), ...(discoveryQuery ? { discoveryQuery } : {}),
+    });
+    const picked = value(await research("picked", "mkm pottery tools"));
+    const plain = value(await research("plain", undefined, false));
+    const [found, gone, unrelated] = await s.t.run(async ctx => {
+      const listing = (jobId: typeof picked.jobId, status: "active" | "invalid") => ctx.db.insert("productListings", {
+        roomId: s.roomId, jobId, source: "manual_fixture", sourceUrl: "https://example.com/tools", title: "Tool kit",
+        currency: "USD", priceMinor: 2500, priceStatus: "observed", availability: "in_stock", shippingStatus: "unknown", retrievedAt: 0, status,
+      });
+      for (const id of [picked.jobId, plain.jobId]) await ctx.db.patch(id, { status: "succeeded" });
+      return [await listing(picked.jobId, "active"), await listing(picked.jobId, "invalid"), await listing(plain.jobId, "active")];
+    });
+    const view = value(await s.alex.query(f.getDiscovery, { roomId: s.roomId }));
+    const suggestion = view.sample!.suggestions.find(x => x.query === "mkm pottery tools")!;
+    expect(view.listingLinks).toEqual([{ listingId: found, query: "mkm pottery tools", sourceUrl: suggestion.sourceUrl }]);
+    expect(view.listingLinks!.map(l => l.listingId)).not.toContain(gone);
+    expect(view.listingLinks!.map(l => l.listingId)).not.toContain(unrelated);
+  });
   it("deduplicates the first suggestion whether omitted or selected explicitly", async () => {
     const s = await completed();
     const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, idempotencyKey: "default-suggestion" };

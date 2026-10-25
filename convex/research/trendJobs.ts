@@ -1,6 +1,6 @@
 /** Explicit, persisted Google Trends discovery for one published interest. Dev 4; no model, payment or UI writes. */
 import { v } from "convex/values";
-import type { Result, TrendDiscoveryView, TrendSignal, TrendSuggestion } from "../../lib/contracts";
+import type { Result, TrendDiscoveryView, TrendListingLink, TrendSignal, TrendSuggestion } from "../../lib/contracts";
 import { discoverShoppingQueries, normalizeTrendDataset } from "../../lib/research/trends";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
@@ -38,6 +38,35 @@ export async function usableTrendJob(ctx: QueryCtx, roomId: Id<"rooms">, id: Id<
   return job && job.roomId === roomId && job.status === "succeeded" && job.sample
     && isTrendSampleFresh(job.sample.context.retrievedAt, Date.now()) && await isTrendJobCurrent(ctx, job)
     ? job : null;
+}
+
+/** The trend job id a research fingerprint was bound to (see startResearch's inputHash), if any. */
+export function trendJobIdInFingerprint(inputHash: string): string | null {
+  try {
+    const parts: unknown = JSON.parse(inputHash);
+    if (!Array.isArray(parts)) return null;
+    const at = parts.indexOf("trend");
+    return at >= 0 && typeof parts[at + 1] === "string" ? parts[at + 1] as string : null;
+  } catch { return null; }
+}
+
+async function trendListingLinks(ctx: QueryCtx, roomId: Id<"rooms">, trendJobId: Id<"trendJobs">, suggestions: TrendSuggestion[]): Promise<TrendListingLink[]> {
+  const byQuery = new Map(suggestions.map(s => [s.query, s.sourceUrl]));
+  const jobs = await ctx.db.query("researchJobs").withIndex("by_room", q => q.eq("roomId", roomId)).order("desc").take(10);
+  const links: TrendListingLink[] = [];
+  const seen = new Set<string>();
+  for (const job of jobs) {
+    const query = job.brief?.queryTerms[0];
+    const sourceUrl = query === undefined ? undefined : byQuery.get(query);
+    if (job.status !== "succeeded" || !sourceUrl || trendJobIdInFingerprint(job.inputHash) !== trendJobId) continue;
+    const listings = await ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", job._id)).take(50);
+    for (const listing of listings) {
+      if (listing.status !== "active" || seen.has(listing._id)) continue;
+      seen.add(listing._id);
+      links.push({ listingId: listing._id, query: query!, sourceUrl });
+    }
+  }
+  return links;
 }
 
 export const startDiscovery = mutation({
@@ -83,7 +112,8 @@ export const getDiscovery = query({
       .filter(q => q.eq(q.field("status"), "succeeded")).first();
     const usable = candidate ? await usableTrendJob(ctx, roomId, candidate._id) : null;
     const latestCurrent = latest ? await isTrendJobCurrent(ctx, latest) : false;
-    return ok({ latestJob: latest ? { id: latest._id, status: latestCurrent ? latest.status : "stale", createdAt: latest.createdAt,
+    const listingLinks = usable?.sample ? await trendListingLinks(ctx, roomId, usable._id, usable.sample.suggestions) : [];
+    return ok({ listingLinks, latestJob: latest ? { id: latest._id, status: latestCurrent ? latest.status : "stale", createdAt: latest.createdAt,
       ...(latest.lastError ? { lastError: latest.lastError } : {}),
       canResume: latest.status === "uncertain" && !!latest.providerRunId && latestCurrent,
     } : null, sample: usable?.sample ? { ...usable.sample, jobId: usable._id } : null });

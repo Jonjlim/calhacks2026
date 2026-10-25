@@ -12,6 +12,7 @@ import type {
   Recommendation,
   Result,
   RoomView,
+  TrendDiscoveryView,
   VoteValue,
 } from "@/lib/contracts";
 
@@ -43,6 +44,8 @@ export interface RoomData {
   latestResearch?: ResearchJobRow | null;
   councilUnavailable?: boolean;
   council?: OkValue<FunctionReturnType<typeof api.councilRoom.state>>;
+  /** Latest sourced Google Trends suggestions for one memory, and listings found from them. */
+  trends?: TrendDiscoveryView;
 }
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
@@ -71,4 +74,8 @@ export interface RoomActions {
   setLimit: Run<[amountMinor: number]>;
   approve: Run<[revisionId: string]>;
   withdrawApproval: Run<[revisionId: string]>;
+  /** Look up related Google Trends searches for one published interest or wish. */
+  findTrends?: Run<[publishedClueId: string]>;
+  /** Research one sourced trend suggestion; the server refuses any query the trend job did not return. */
+  researchTrend?: Run<[trendJobId: string, query: string, publishedClueIds: string[]]>;
 }

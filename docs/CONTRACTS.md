@@ -1573,6 +1573,22 @@ an individual returned product is trending. Dismissing an idea on the map must
 use Dev 2's agreed theme/signal semantics; this endpoint does not persist passes.
 
 
+### Trend sprouts on the gift map (Dev 4, Phase 2)
+
+`research/trendJobs.getDiscovery` adds optional `listingLinks: TrendListingLink[]`
+(`{ listingId, query, sourceUrl }`): active listings from succeeded research jobs
+bound to the current usable trend sample (fingerprint) whose shopping query is one
+of its suggestions. Membership-checked, last 10 research jobs, no schema change.
+
+On the map (`lib/map/trendIdeas.ts`, `useGiftRings`): a memory's **Look for trends**
+calls `startDiscovery`; its suggestions sprout between the theme and gift rings at that
+memory's angle, labelled by observed signal ("breakout search", "searches +N%").
+**Research this direction** calls `startResearch` with `trendJobId` + `discoveryQuery`.
+**Doesn't fit** hides the suggestion for that viewer only (no persisted pass until
+MAP-012 signals). Gifts with a link say "found while researching [query]" and can open
+the Trends source; "Why this?" lights the sprout. Never a per-product trending claim.
+Optional `RoomData.trends` and `RoomActions.findTrends` / `researchTrend` keep preview mode unchanged.
+
 ### Shared contribution simulation (Dev 4, demo only)
 
 Alex selected a visibly labelled simulation instead of expanding live payment

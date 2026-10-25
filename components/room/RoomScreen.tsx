@@ -95,6 +95,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const inviteRes = useQuery(api.rooms.getInvite, args);
   const activityRes = useQuery(api.agents.buyer.listActivity, args);
   const jobsRes = useQuery(api.jobs.listRoomJobs, args);
+  const trendsRes = useQuery(api.research.trendJobs.getDiscovery, args);
 
   const sendMessage = useMutation(api.messages.sendMessage);
   const requestTurn = useMutation(api.agents.buyer.requestTurn);
@@ -118,6 +119,8 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const setLimit = useMutation(api.proposals.setContributionLimit);
   const approve = useMutation(api.proposals.approveRevision);
   const withdrawApproval = useMutation(api.proposals.withdrawApproval);
+  const findTrends = useMutation(api.research.trendJobs.startDiscovery);
+  const researchTrend = useMutation(api.research.research.startResearch);
 
   const actions = useMemo<RoomActions>(
     () => ({
@@ -148,11 +151,16 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       setLimit: (amountMinor) => setLimit({ roomId, amountMinor }),
       approve: (revisionId) => approve({ revisionId: revisionId as Id<"proposalRevisions"> }),
       withdrawApproval: (revisionId) => withdrawApproval({ revisionId: revisionId as Id<"proposalRevisions"> }),
+      findTrends: (clueId) => findTrends({ roomId, publishedClueId: clueId as Id<"publishedClues">, idempotencyKey: newRequestKey() }),
+      researchTrend: (trendJobId, query, clueIds) => researchTrend({
+        roomId, publishedClueIds: clueIds as Id<"publishedClues">[], trendJobId: trendJobId as Id<"trendJobs">,
+        discoveryQuery: query, idempotencyKey: newRequestKey(),
+      }),
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval,
+      selectGift, clearSelection, setLimit, approve, withdrawApproval, findTrends, researchTrend,
     ],
   );
 
@@ -177,6 +185,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
+    trends: trendsRes?.ok ? trendsRes.value : undefined,
   };
   const unavailable = <RoomSurfaceView surface={surface} data={{ ...data, councilUnavailable: true }} actions={actions} />;
   return (

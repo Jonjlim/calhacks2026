@@ -106,6 +106,14 @@ export interface TrendDiscoverySample {
 export interface TrendDiscoveryView {
   latestJob: FashionDiscoveryJobView | null;
   sample: (TrendDiscoverySample & { jobId: string }) | null;
+  /** Active listings found by research that shopped one of the current sample's suggestions. */
+  listingLinks?: TrendListingLink[];
+}
+/** Search context only: the listing was found while researching this trend query, not proven trending itself. */
+export interface TrendListingLink {
+  listingId: string;
+  query: string;
+  sourceUrl: string;
 }
 // ---------- Errors / results ----------
 
