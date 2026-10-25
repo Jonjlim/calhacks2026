@@ -164,7 +164,10 @@ export interface Room {
   occasion: string;
   deadlineAt?: number;
   currency: Currency;
+  /** The group's soft maximum for the gift (a ranking hint, not a limit). */
   budgetMinor?: number;
+  /** The group's soft minimum. */
+  budgetMinMinor?: number;
   knowledgeRevision: number;
   currentRevisionId?: string;
   currentSelectionId?: string;

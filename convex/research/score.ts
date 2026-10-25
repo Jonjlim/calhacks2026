@@ -66,6 +66,8 @@ export interface RankListingsInput {
   listings: ProductListing[];
   clues: PublishedClue[];
   budgetMinor?: number;
+  /** The group's soft minimum: gifts well under it rank a little lower, never out. */
+  budgetMinMinor?: number;
   limit?: number;
 }
 
@@ -136,7 +138,7 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     }
     const missProduct = [...matchedPreferences.values()].reduce((miss, strength) => miss * (1 - strength), 1);
     const personalRelevance = round(1 - missProduct);
-    const budget = budgetFitFor(listing, input.budgetMinor);
+    const budget = budgetFitFor(listing, input.budgetMinor, input.budgetMinMinor);
     const parts = { personalRelevance, budgetFit: budget.fit, trendSignal: 0 as const };
     return {
       listingId: listing.id,
@@ -238,6 +240,7 @@ function blocks(clueTokens: string[], titleTokens: Set<string>): boolean {
 function budgetFitFor(
   listing: ProductListing,
   budgetMinor: number | undefined,
+  budgetMinMinor?: number,
 ): { fit: number; note?: string } {
   if (listing.priceStatus !== "observed" || listing.priceMinor === undefined) {
     return { fit: UNKNOWN_PRICE_BUDGET_FIT, note: "price unknown" };
@@ -248,7 +251,11 @@ function budgetFitFor(
       ? listing.shippingMinor
       : 0;
   const total = listing.priceMinor + shipping;
-  if (total <= budgetMinor) return { fit: 1 };
+  if (total <= budgetMinor) {
+    // Well under the group's comfortable range: a small nudge down, softer the closer it is. Never below 0.8.
+    if (budgetMinMinor !== undefined && budgetMinMinor > 0 && total < budgetMinMinor) return { fit: round(Math.max(0.8, 1 - 0.2 * (1 - total / budgetMinMinor))), note: "below the group's usual range" };
+    return { fit: 1 };
+  }
   const over = total - budgetMinor;
   return {
     fit: round(Math.max(0, 1 - over / budgetMinor)),

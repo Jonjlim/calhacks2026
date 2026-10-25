@@ -223,7 +223,7 @@ export const researchHttp = httpAction(async (ctx, request) => {
     if (data.job.status === "succeeded") {
       const listings = data.listings.map(({ _id, _creationTime, ...l }) => ({ ...l, id: _id }));
       const clues = data.clues.map(({ _id, _creationTime, ...c }) => ({ ...c, id: _id }));
-      const ranked = rankListings({ listings, clues, budgetMinor: data.room.budgetMinor, limit: 12 });
+      const ranked = rankListings({ listings, clues, budgetMinor: data.room.budgetMinor, budgetMinMinor: data.room.budgetMinMinor, limit: 12 });
       return json(200, { ok: true, listings: ranked.flatMap(r => {
         const l = listings.find(l => l.id === r.listingId);
         if (!l) return [];

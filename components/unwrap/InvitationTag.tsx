@@ -178,7 +178,7 @@ function CopyLink({ url }: { url: string }) {
       }}
       className="btn-secondary h-[2.3em] px-[1em] text-[0.78em]"
     >
-      {state === "copied" ? "Link copied ✓" : state === "failed" ? "Copy failed — select the link" : "Copy invite link"}
+      {state === "copied" ? "Link copied ✓" : state === "failed" ? "Copy failed — select the link" : "Copy link"}
     </button>
   );
 }
@@ -291,6 +291,12 @@ export function InvitationTag({ soundEnabled, onStartOver, inlineQr = false }: {
             </ul>
 
             <div className="mt-[0.8em] flex flex-wrap items-center justify-center gap-[0.5em]">
+              {invite && (
+                <p className="w-full text-center" aria-label={`Room code ${invite.inviteToken.split("").join(" ")}`}>
+                  <span className="block text-[0.62em] tracking-[0.16em] text-[#4e2f42]/60 uppercase">Room code</span>
+                  <span className="font-mono text-[1.9em] leading-none font-bold tracking-[0.28em] text-[#4e2f42]">{invite.inviteToken}</span>
+                </p>
+              )}
               {invite && <CopyLink url={invite.inviteUrl} />}
               {invite && convex && (
                 <Link href={`/room/${invite.roomId}`} className="btn-primary h-[2.3em] px-[1em] text-[0.78em]">

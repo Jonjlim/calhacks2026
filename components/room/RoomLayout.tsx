@@ -15,6 +15,7 @@ import { BookCorner } from "@/components/book/BookCorner";
 import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
 import { book, useBookOpen } from "@/components/book/bookStore";
 import { AgentDetails } from "@/components/council/AgentDetails";
+import { BudgetTab } from "./BudgetTab";
 import { GiftFinale, useFinaleStep } from "@/components/finale/GiftFinale";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
@@ -359,10 +360,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <a href={`/room/${room.id}/phone`} className={chip}>List view</a>
         {data.invitePath && <InviteCard path={data.invitePath} />}
-        {actions && !preview && <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
-          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
-          className={chip} />}
       </div>
+      {actions && !preview && !engaged && !bookOpen && (
+        <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} placement="top-center"
+          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
+          className={chip} />
+      )}
+      {actions && !preview && !ended && /^[a-z0-9]{20,40}$/.test(room.id) && <BudgetTab roomId={room.id} />}
 
       {/* The shares board (components/room/BudgetBoard) is built but switched off for now. To bring it back, render <BudgetBoard data={data} actions={actions} /> here on the map stage. */}
 
@@ -532,7 +536,8 @@ function InviteCard({ path }: { path: string }) {
       <div className="mt-2 overflow-hidden rounded-xl bg-white">
         <QrModulesSvg modules={modules} className="h-auto w-full" label="QR code to join this gift room" scannable />
       </div>
-      <p className="mt-2 font-mono text-[11px] break-all text-dusk/55">{code.slice(0, 8)}…</p>
+      <p className="mt-2 text-center text-[11px] tracking-wide text-dusk/55 uppercase">Room code</p>
+      <p className="text-center font-mono text-[26px] font-bold tracking-[0.3em] text-dusk" aria-label={`Room code ${code.split("").join(" ")}`}>{code}</p>
       <button
         className="btn-secondary mt-2 h-9 w-full text-[13px]"
         onClick={async () => {

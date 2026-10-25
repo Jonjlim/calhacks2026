@@ -147,7 +147,7 @@ export async function readCatalog(
       const doc = await ctx.db.get(id);
       if (!doc || doc.roomId !== room._id) continue;
       const listing = toListing(doc);
-      const rows = rankListings({ listings: [listing], clues, budgetMinor: room.budgetMinor, limit: 1 });
+      const rows = rankListings({ listings: [listing], clues, budgetMinor: room.budgetMinor, budgetMinMinor: room.budgetMinMinor, limit: 1 });
       if (rows[0]) {
         recommendations.push({ ...rows[0], id: `box:${id}`, roomId: room._id, createdAt: selection.selectedAt });
         shownIds.add(id);

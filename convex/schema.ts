@@ -41,6 +41,8 @@ export default defineSchema({
     deadlineAt: v.optional(v.number()),
     currency: V.currency,
     budgetMinor: v.optional(v.number()),
+    /** The group's soft minimum (mean of friends' lowest amounts); budgetMinor is its soft maximum. See lib/budget.ts. */
+    budgetMinMinor: v.optional(v.number()),
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
@@ -62,6 +64,9 @@ export default defineSchema({
     displayName: v.string(),
     role: V.participantRole,
     joinedAt: v.number(),
+    /** This friend's own comfortable range for the gift. Private: only the group's soft range is shared. */
+    budgetMinMinor: v.optional(v.number()),
+    budgetMaxMinor: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
