@@ -230,7 +230,7 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
     // The icon rides on the island and scales with the camera (small when zoomed out, large up close); its menu stays one readable size.
     return (
       <>
-        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={44} zIndexRange={selected ? [60, 50] : [20, 0]}>
+        <Html position={[offset[0], 1.7, offset[2] * 0]} center distanceFactor={24} zIndexRange={selected ? [60, 50] : [20, 0]}>
           <div data-map-token className={cls} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
           <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
             onPointerDown={(e) => drag.begin(k, from, e)}
