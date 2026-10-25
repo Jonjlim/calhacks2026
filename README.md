@@ -4,6 +4,19 @@
 
 **Cal Hacks 13.0 · October 2026** · [![Devpost](https://img.shields.io/badge/Devpost-View%20Submission-003E54?logo=devpost&logoColor=white)](https://devpost.com/software/unwrap-y7w16s?ref_content=my-projects-tab&ref_feature=my_projects)
 
+## ✨ Explore Unwrap
+
+![Unwrap 3D World](public/screenshots/gift-world.png)
+
+### From Sketch to Storybook
+![Sketch Animation](public/screenshots/sketch-animation.png)
+
+### Meet the AI Council
+![AI Council](public/screenshots/ai-council-map.png)
+
+### Discover the Perfect Gift
+![Gift Reveal](public/screenshots/gift-reveal.png)
+
 ## What is Unwrap?
 
 Gift ideas often live across group chats, old conversations, half-remembered interests, and one friend's mental list. Unwrap gives those clues a shared place to grow. Friends contribute memories and wishes; an AI Council organizes the clues and researches possible gifts; the group explores the connections in a whimsical floating-island world; and a storybook catalogue makes it easy to compare the real products and choose together.
