@@ -16,10 +16,11 @@ import { StylizedTree, type TreeKind } from "../props/Flora";
  * memory in it still come from the room. These are decorative templates, not
  * claims about the recipient.
  */
-export type ThemeLook = "adventure" | "trips" | "creative" | "style" | "cozy" | "wishes" | "meadow";
+export type ThemeLook = "adventure" | "trips" | "creative" | "style" | "cozy" | "wishes" | "loves" | "meadow";
 
 export function lookFor(label: string, jar?: string): ThemeLook {
   const t = label.toLowerCase();
+  if (/\b(love|loves|favou?rite|adore)/.test(t)) return "loves";
   if (/(trip|travel|journey|vacation|holiday|beach|flight|getaway|experience|tour)/.test(t)) return "trips";
   if (/(fashion|style|cloth|wear|jewel|accessor|outfit|shoe|bag|scarf|dress)/.test(t)) return "style";
   if (/(hik|outdoor|trail|camp|adventure|mountain|travel|nature|bowl|sport|walk|run)/.test(t)) return "adventure";
@@ -56,6 +57,7 @@ export const LOOKS: Record<ThemeLook, { palette: IslandPalette; shape: IslandSha
     palette: pal("#8cb97c", "#bfdc92", "#ecf1b8", "#7fae6e", [[0, "#8fae6e"], [0.1, "#d7b4b4"], [0.3, "#e0b6c4"], [0.6, "#b9a2cf"], [1, "#9a8cc0"]]),
     shape: { seed: 733, radius: 2.15, stretch: 1.12, depth: 3.2, hilliness: 0.26 },
   },
+  loves: { palette: MID_PALETTE, shape: { seed: 317, radius: 2.1, stretch: 1.1, depth: 3.1, hilliness: 0.25 } },
   meadow: { palette: MID_PALETTE, shape: { seed: 317, radius: 2.1, stretch: 1.1, depth: 3.1, hilliness: 0.25 } },
 };
 
@@ -66,6 +68,7 @@ const TREES: Record<ThemeLook, { kind: TreeKind; palette?: "green" | "autumn"; s
   creative: { kind: "round", palette: "autumn", spots: [[-0.9, -0.3, 0.85], [0.9, 0.2, 0.75]] },
   cozy: { kind: "tall", spots: [[-1.0, 0.1, 0.8], [0.95, -0.5, 0.7], [0.4, 0.9, 0.6]] },
   wishes: { kind: "blossom", spots: [[-0.8, -0.2, 0.95], [0.9, 0.3, 0.8]] },
+  loves: { kind: "blossom", spots: [[-0.9, -0.3, 0.8], [0.9, 0.3, 0.65]] },
   meadow: { kind: "round", spots: [[-0.9, -0.3, 0.7]] },
 };
 
@@ -151,6 +154,8 @@ export function ThemeIcon({ look }: { look: ThemeLook }) {
       return <svg {...p}><path d="M5 9h11v6a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4z" /><path d="M16 10.5h1.5a2.2 2.2 0 0 1 0 4.4H16M8 5.5c0 1 .8 1 .8 2M12 5.5c0 1 .8 1 .8 2" /></svg>;
     case "wishes":
       return <svg {...p}><path d="M12 3.5l2.4 5.2 5.6.7-4.1 3.9 1 5.6L12 16.2 7.1 18.9l1-5.6L4 9.4l5.6-.7z" /></svg>;
+    case "loves":
+      return <svg {...p}><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z" /></svg>;
     default:
       return <svg {...p}><circle cx="12" cy="9" r="2.4" /><path d="M12 6.6c0-2.2-3.2-2.2-3.2.2M12 6.6c0-2.2 3.2-2.2 3.2.2M9.6 9c-2.2 0-2.2 3 .2 3M14.4 9c2.2 0 2.2 3-.2 3M12 11.4V20M12 16c-2.5 0-3.4-1.6-3.4-3M12 17.5c2.2 0 3.2-1.4 3.2-2.8" /></svg>;
   }
