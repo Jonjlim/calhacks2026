@@ -5,13 +5,14 @@ import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { AVATAR_WORLD_SCALE, type AvatarId, StorybookAvatar } from "@/components/characters/StorybookAvatar";
-import { BOX_DROP_RADIUS, dragResult, RING_RADII, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme } from "@/lib/map/rings";
+import { BOX_DROP_RADIUS, dragResult, RING_RADII, RING_STRETCH, ringDistance, type RingDragResult, type RingTheme, type RingZone, ZONE_EDGES, zoneAt } from "@/lib/map/rings";
 import { portraitUrl } from "@/lib/room/avatars";
 import { IslandMesh } from "../FloatingIsland";
 import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
 import { GIFT_SPOT } from "../sceneConfig";
 import type { IslandShape } from "../terrain";
 import { Jar } from "./TowerInterior";
+import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
 import { ringBase } from "./stageLayout";
 import s from "./gift-rings.module.css";
@@ -35,6 +36,8 @@ export interface RingAction {
 export interface RingsWorld {
   clues: { key: string; text: string; author: string; avatar: AvatarId; theme: RingTheme; x: number; z: number }[];
   themes: { key: string; theme: RingTheme; label: string; count: number; x: number; z: number }[];
+  /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number }[];
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: RingTheme[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean }[];
   selectedListingId?: string;
   boxLabel: string;
@@ -43,8 +46,8 @@ export interface RingsWorld {
   highlight?: ReadonlySet<string> | null;
   composer?: { x: number; z: number; node: ReactNode } | null;
   onSelect(key: string | null): void;
-  /** A click on empty sky, as an offset from the present; null closes whatever is open. */
-  onEmpty(point: [number, number] | null): void;
+  /** A click on empty sky, as an offset from the present, and the zone it landed in; null closes whatever is open. */
+  onEmpty(point: [number, number] | null, zone?: RingZone): void;
   onDrag(key: string, result: RingDragResult): void;
   actionsFor(key: string): { caption: ReactNode; actions: RingAction[] } | null;
 }
@@ -59,6 +62,7 @@ const SHAPES: Record<"clue" | "theme" | "gift", IslandShape> = {
 const DETAIL = { rings: 8, segments: 44, layers: 9 };
 
 type Kind = "clue" | "theme" | "gift";
+const modeFor = (zone: RingZone | null): MapCursorMode => (zone === "box" ? "box" : zone === "gift" ? "gift" : "memory");
 const kindOf = (key: string): Kind => (key.startsWith("gift:") ? "gift" : key.startsWith("theme:") ? "theme" : "clue");
 
 /** Shared drag state between the DOM labels and the scene. */
@@ -82,6 +86,7 @@ function useRingDrag(center: THREE.Vector3, onDrag: RingsWorld["onDrag"]) {
       const d = drag.current;
       if (!d || e.pointerId !== d.id) return;
       if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
+      if (!d.moved) mapCursor.set("drag");
       d.moved = true;
       const p = hitAt(e.clientX, e.clientY);
       if (!p) return;
@@ -155,7 +160,8 @@ function Token({ k, rings, from, drag, face, label, offset, dim }: { k: string; 
   const info = selected ? rings.actionsFor(k) : null;
   return (
     <Html position={offset} center zIndexRange={selected ? [60, 50] : [20, 0]}>
-      <div className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+      <div data-map-token className={`${s.token} ${selected ? s.on : ""} ${dim ? s.dim : ""}`} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
+        onPointerEnter={() => mapCursor.set("node")} onPointerLeave={() => mapCursor.set("memory")}>
         <button type="button" className={s.face} aria-label={label} aria-expanded={selected}
           onPointerDown={(e) => drag.begin(k, from, e)}
           onClick={() => drag.clickable(k) && rings.onSelect(selected ? null : k)}>
@@ -214,12 +220,12 @@ function useMapNavigation(center: THREE.Vector3) {
       mapView.pan(-(e.clientX - p.x) * k, -(e.clientY - p.y) * k * 1.3);
       p.x = e.clientX;
       p.y = e.clientY;
-      document.body.style.cursor = "grabbing";
+      mapCursor.set("pan");
     };
     const up = (e: PointerEvent) => {
       if (pan.current?.id !== e.pointerId) return;
       pan.current = null;
-      document.body.style.cursor = "";
+      mapCursor.set("memory");
     };
     const wrapper = gl.domElement.parentElement ?? gl.domElement;
     const wheel = (e: WheelEvent) => {
@@ -266,10 +272,37 @@ function useMapNavigation(center: THREE.Vector3) {
   };
 }
 
+/** Faint filled bands for each zone; the one under the pointer glows a little. */
+function ZoneBands({ center, hover }: { center: THREE.Vector3; hover: RingZone | null }) {
+  const bands: [RingZone, number, number, string][] = [
+    ["box", 0.01, ZONE_EDGES.box, "#ffe2a6"],
+    ["gift", ZONE_EDGES.box, ZONE_EDGES.gift, "#f4d58f"],
+    ["theme", ZONE_EDGES.gift, ZONE_EDGES.theme, "#d8cff0"],
+    ["outer", ZONE_EDGES.theme, ZONE_EDGES.outer, "#fff3df"],
+  ];
+  return (
+    <group position={[center.x, center.y - 1.05, center.z]}>
+      {bands.map(([zone, inner, outer, color]) => (
+        <mesh key={zone} rotation={[-Math.PI / 2, 0, 0]} scale={[RING_STRETCH, 1, 1]}>
+          <ringGeometry args={[inner, outer, 160]} />
+          <meshBasicMaterial color={color} transparent opacity={hover === zone ? 0.16 : 0.05} depthWrite={false} fog={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const center = useMemo(() => new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z), []);
   const drag = useRingDrag(center, rings.onDrag);
   const nav = useMapNavigation(center);
+  const [zone, setZone] = useState<RingZone | null>(null);
+  const zoneOf = (e: ThreeEvent<PointerEvent | MouseEvent>) => zoneAt(e.point.x - center.x, e.point.z - center.z);
+  const hover = (e: ThreeEvent<PointerEvent>) => {
+    const next = zoneOf(e);
+    if (next !== zone) setZone(next);
+    if (mapCursor.mode !== "pan" && mapCursor.mode !== "drag") mapCursor.set(modeFor(next));
+  };
   const place = (key: string, x: number, z: number): [number, number] => (drag.preview?.key === key ? [drag.preview.x, drag.preview.z] : [x, z]);
   const world = (x: number, z: number, lift = 0) => new THREE.Vector3(center.x + x, center.y + lift, center.z + z);
   const dim = (key: string) => !!rings.highlight && !rings.highlight.has(key);
@@ -284,16 +317,17 @@ export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: bool
     const x = e.point.x - center.x;
     const z = e.point.z - center.z;
     if (ringDistance(x, z) < BOX_DROP_RADIUS) rings.onSelect("box");
-    else rings.onEmpty(rings.selectedKey || rings.composer ? null : [x, z]);
+    else rings.onEmpty(rings.selectedKey || rings.composer ? null : [x, z], zoneAt(x, z));
   };
 
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[center.x, center.y - 0.2, center.z]} onClick={onBackdrop} onPointerDown={nav.start}
-        onPointerOver={() => { if (!document.body.style.cursor) document.body.style.cursor = "grab"; }} onPointerOut={() => { if (document.body.style.cursor === "grab") document.body.style.cursor = ""; }}>
+        onPointerMove={hover} onPointerOut={() => setZone(null)}>
         <planeGeometry args={[220, 220]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
+      <ZoneBands center={center} hover={zone} />
       <Ring center={center} radius={RING_RADII.input} label="everything shared" glow={result === "pass" ? "#e48e88" : null} />
       <Ring center={center} radius={RING_RADII.theme} label={rings.themes.length ? "themes" : undefined} />
       <Ring center={center} radius={RING_RADII.gift} label={rings.gifts.length ? "gift ideas" : undefined} glow={result === "support" ? "#9fcf7f" : null} />
@@ -343,6 +377,13 @@ export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: bool
           </group>
         );
       })}
+
+      {rings.ideas.map((idea, i) => (
+        <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)}>
+          <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={dim(idea.key)} offset={[0, -0.4, 2.2]} label={`${idea.author}'s gift idea`}
+            face={<span className={s.idea}><img src={portraitUrl(idea.avatar)} alt="" /><span><b>{idea.text}</b><small>gift idea · {idea.author}</small></span></span>} />
+        </RingIsland>
+      ))}
 
       <group position={[center.x, center.y, center.z]}>
         <Token k="box" rings={rings} from={[0, 0]} drag={{ ...drag, begin: () => undefined }} dim={dim("box")} offset={[0, 1.2, 9]} label="Our gift box"

@@ -23,6 +23,7 @@ import { roomStage } from "./roomStage";
 import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
 import { useGiftRings } from "./useGiftRings";
+import { MapCursor } from "./MapCursor";
 import type { RoomActions, RoomData } from "./types";
 
 /**
@@ -149,6 +150,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
+      {stage === "map" && !preview && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
       {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
@@ -193,7 +195,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click the sky to add a memory · drag the sky to move · scroll to zoom" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click outside to add a memory · click near the present for a gift idea · drag to move" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
           {primary}

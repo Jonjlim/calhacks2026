@@ -60,3 +60,14 @@ describe("drag results", () => {
     expect(dragResult("gift", out, ringPoint(95, 12.3))).toBeNull();
   });
 });
+
+describe("zones", () => {
+  it("splits the map halfway between rings", async () => {
+    const { zoneAt, ringPoint: at, RING_RADII: R } = await import("./rings");
+    expect(zoneAt(...at(40, 2))).toBe("box");
+    expect(zoneAt(...at(40, R.gift))).toBe("gift");
+    expect(zoneAt(...at(40, R.theme))).toBe("theme");
+    expect(zoneAt(...at(40, R.input))).toBe("outer");
+    expect(zoneAt(...at(40, R.input + 9))).toBe("outer");
+  });
+});

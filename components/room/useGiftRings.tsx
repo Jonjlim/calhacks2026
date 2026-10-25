@@ -4,7 +4,7 @@ import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import type { RingAction, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "@/components/world/room/gift-rings.module.css";
 import type { ClueKind, Result } from "@/lib/contracts";
-import { layoutRings, RING_THEMES, type RingDragResult, themeForKind, type RingTheme } from "@/lib/map/rings";
+import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import type { RoomActions, RoomData } from "./types";
@@ -14,6 +14,11 @@ import type { RoomActions, RoomData } from "./types";
  * action goes through the existing room actions; dragging only casts or
  * clears listing votes, or asks the organizer's existing selection to run.
  */
+/** Text this long, or this many lines, is a pasted conversation: read privately instead of shared as one memory. */
+const PASTE_CHARS = 280;
+const PASTE_LINES = 3;
+const looksPasted = (text: string) => text.length > PASTE_CHARS || text.split(/\n/).filter((l) => l.trim()).length >= PASTE_LINES;
+
 export function useGiftRings({ data, actions, isOrganizer, active, onShares, onPaste }: {
   data: RoomData;
   actions?: RoomActions;
@@ -24,7 +29,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
 }): { rings: RingsWorld | null; notice: string | null; error: string | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [composer, setComposer] = useState<{ x: number; z: number; kind: ClueKind | null } | null>(null);
+  // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
+  const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind } | null>(null);
   const [why, setWhy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +59,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     }
   }, []);
 
-  const clues = useMemo(() => data.publishedClues.filter((c) => c.status === "active"), [data.publishedClues]);
+  const allClues = useMemo(() => data.publishedClues.filter((c) => c.status === "active"), [data.publishedClues]);
+  // Friends' gift ideas float in the inner ring; everything else is a memory on the outer ring.
+  const clues = useMemo(() => allClues.filter((c) => !isGiftIdea(c.text)), [allClues]);
+  const ideas = useMemo(() => allClues.filter((c) => isGiftIdea(c.text)), [allClues]);
   const listingById = useMemo(() => new Map(data.listings.map((l) => [l.id, l])), [data.listings]);
   const recs = useMemo(() => [...data.recommendations].filter((r) => listingById.has(r.listingId)).sort((a, b) => b.score - a.score), [data.recommendations, listingById]);
   const layout = useMemo(
@@ -74,7 +83,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     const l = listingById.get(listingId);
     return l?.priceStatus === "observed" && l.priceMinor !== undefined ? formatMinor(l.priceMinor) : "Price unknown";
   };
-  const allClueIds = clues.map((c) => c.id);
+  const allClueIds = allClues.map((c) => c.id);
   const findGifts: RingAction | null = isOrganizer && actions
     ? { icon: "🌱", label: recs.length ? "Find more gifts" : "Find gifts", tone: "gold", disabled: pending || !allClueIds.length, run: () => void run(() => actions.startResearch(allClueIds), "The council is looking for real gifts from these memories.") }
     : null;
@@ -136,6 +145,16 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
         ] : [],
       };
     }
+    const idea = ideas.find((c) => `idea:${c.id}` === key);
+    if (idea) {
+      return {
+        caption: <><b>{idea.text.slice(GIFT_IDEA_PREFIX.length)}</b><br />{name(idea.publisherId) === "You" ? "Your" : `${name(idea.publisherId)}’s`} gift idea · research turns it into real listings</>,
+        actions: [
+          ...(findGifts ? [{ ...findGifts, label: "Find this gift" }] : []),
+          ...(actions && idea.publisherId === me.id ? [{ icon: "↩", label: "Take it back", disabled: pending, run: () => void run(() => actions.withdrawClue(idea.id), "Your gift idea was withdrawn.").then((ok) => ok && setSelectedKey(null)) }] : []),
+        ],
+      };
+    }
     const clue = clues.find((c) => `clue:${c.id}` === key);
     if (!clue) return null;
     const theme = RING_THEMES[themeForKind(clue.kind)].label;
@@ -149,40 +168,57 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   };
 
   // The text box is uncontrolled: its value reaches the 3D labels a frame late, so React must not overwrite it.
-  const add = (text: string) => {
-    text = text.trim();
-    if (!composer?.kind || !text || !actions) return;
-    const kind = composer.kind;
-    void run(() => actions.addManualClue(kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(kind)].label}.`).then((ok) => {
-      if (ok) setComposer(null);
-    });
+  const add = (raw: string) => {
+    const text = raw.trim();
+    if (!composer || !text || !actions) return;
+    const done = (ok: boolean) => { if (ok) setComposer(null); };
+    if (composer.zone === "gift") {
+      void run(async () => {
+        const shared = await actions.addManualClue("interest", GIFT_IDEA_PREFIX + text);
+        const id = shared.ok ? (shared.value as { _id?: string; id?: string })._id ?? (shared.value as { id?: string }).id : undefined;
+        // The idea is saved either way; a busy council just means research starts on the next "Find gifts".
+        if (id && isOrganizer) void actions.startResearch([...allClueIds, id]).catch(() => undefined);
+        return shared;
+      }, isOrganizer ? "Gift idea shared. The council is looking for real listings." : "Gift idea shared with the room.").then(done);
+      return;
+    }
+    if (looksPasted(text)) {
+      void run(() => actions.importEvidence("Pasted on the map", text), "Reading your paste privately. Review the clues it finds before anything is shared.").then((ok) => { done(ok); if (ok) onPaste(); });
+      return;
+    }
+    void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
   };
-  const composerNode = composer && actions && (composer.kind === null ? (
-    <div className={s.compose} aria-label="Add to the map">
-      {([["interest", "💭", "A memory"], ["explicit_wish", "🎁", "A wish"], ["paste", "💬", "Paste a chat"]] as const).map(([kind, icon, label], i) => (
-        <button key={kind} type="button" className={s.act} style={{ ["--i" as string]: i }} onClick={() => (kind === "paste" ? (setComposer(null), onPaste()) : setComposer({ ...composer, kind }))}>
-          <span aria-hidden>{icon}</span>
-          <small>{label}</small>
-        </button>
-      ))}
-      <i className={s.dot} />
-    </div>
-  ) : (
-    <div className={s.write}>
-      <textarea autoFocus defaultValue="" maxLength={280} aria-label={composer.kind === "explicit_wish" ? "A wish for her" : "A memory of her"} placeholder={composer.kind === "explicit_wish" ? "Something she wished for…" : "Something only you know about her…"}
+  const composerNode = composer && actions && (
+    <div className={s.write} data-map-token>
+      {composer.zone === "memory" && (
+        <div className={s.kinds} role="radiogroup" aria-label="What is it?">
+          {([["interest", "💭 Memory"], ["explicit_wish", "🎁 Wish"]] as const).map(([kind, label]) => (
+            <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} onClick={() => setComposer({ ...composer, kind })}>{label}</button>
+          ))}
+          <button type="button" onClick={() => { setComposer(null); onPaste(); }} aria-label="Add a photo or screenshot privately">📷 Photo</button>
+        </div>
+      )}
+      <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
+        className={composer.zone === "gift" ? s.ideaInput : undefined}
+        placeholder={composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat"}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(e.currentTarget.value); }
           if (e.key === "Escape") setComposer(null);
         }} />
-      <p>Enter shares it with the room · Esc cancels</p>
+      <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
     </div>
-  ));
+  );
 
   const rings: RingsWorld = {
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
       return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarFor(participants, clue.publisherId), theme: c.theme, x: c.x, z: c.z };
+    }),
+    ideas: ideas.map((idea, i) => {
+      // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
+      const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
+      return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarFor(participants, idea.publisherId), x, z };
     }),
     themes: layout.themes.map((t) => ({ key: `theme:${t.id}`, theme: t.id, label: RING_THEMES[t.id].label, count: t.count, x: t.x, z: t.z })),
     gifts: layout.gifts.map((g, i) => {
@@ -199,10 +235,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       setSelectedKey(key);
       if (key !== "box") setWhy(false);
     },
-    onEmpty: (point) => {
+    onEmpty: (point, zone?: RingZone) => {
       setSelectedKey(null);
       setWhy(false);
-      setComposer(point && actions ? { x: point[0], z: point[1], kind: null } : null);
+      setComposer(point && actions ? { x: point[0], z: point[1], zone: zone === "gift" ? "gift" : "memory", kind: "interest" } : null);
     },
     onDrag: (key: string, result: RingDragResult) => {
       if (!result) return;

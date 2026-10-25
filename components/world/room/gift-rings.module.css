@@ -61,3 +61,25 @@
 
 @keyframes bloom { from { opacity: 0; transform: translateY(-8px) scale(.6); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .act, .caption { animation: none; } .face { transition: none; } }
+
+/* One add box: memory or wish outside, gift idea near the present */
+.kinds { display: flex; gap: 4px; }
+.kinds button { border: 1px solid rgb(255 255 255 / .55); background: rgb(47 39 55 / .55); color: #fff; border-radius: 14px; padding: 4px 10px; font: 600 11px var(--font-sans); cursor: pointer; }
+.kinds button[aria-checked="true"] { background: var(--color-ivory); color: var(--color-dusk); border-color: var(--color-ivory); }
+.ideaInput { border-style: dashed !important; border-radius: 22px !important; font-style: normal !important; font-family: var(--font-sans) !important; font-size: 13px !important; font-weight: 600 !important; }
+.idea { display: flex; align-items: center; gap: 7px; width: max-content; max-width: 190px; background: #fff8e3; border: 2px dashed var(--color-gold); border-radius: 22px; padding: 5px 12px 5px 5px; box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); text-align: left; }
+.idea img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; object-position: top; flex: none; }
+.idea b { display: block; font-size: 12px; line-height: 1.2; color: var(--color-dusk); }
+.idea small { display: block; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #a07a2c; }
+
+/* The viewer's following cursor on the map */
+.mapCursorOn, .mapCursorOn * { cursor: none !important; }
+.mapCursorOn textarea, .mapCursorOn input { cursor: text !important; }
+.cursor { position: fixed; left: 0; top: 0; z-index: 9999; pointer-events: none; display: flex; align-items: flex-start; gap: 1px; opacity: 0; transition: opacity .15s; will-change: transform; white-space: nowrap; }
+.cursor svg { width: 18px; height: 20px; fill: var(--who); stroke: #fff; stroke-width: 1.4; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .4)); flex: none; transition: transform .15s; }
+.cursor b { margin-top: 13px; background: var(--who); color: #2b2337; font: 700 10px var(--font-sans); padding: 2px 7px; border-radius: 8px; box-shadow: 0 2px 6px rgb(0 0 0 / .2); }
+.cursor i { margin: 14px 0 0 4px; font: 600 9.5px var(--font-sans); font-style: normal; color: #fff; background: rgb(47 39 55 / .78); padding: 2px 7px; border-radius: 8px; }
+.cursor i:empty, .cursor[data-ui="true"] i { display: none; }
+.cursor[data-mode="gift"] i { background: #a07a2c; }
+.cursor[data-mode="node"] svg { transform: scale(1.15); }
+.cursor[data-mode="pan"] svg, .cursor[data-mode="drag"] svg { transform: scale(.9) rotate(-12deg); }

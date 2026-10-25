@@ -132,3 +132,23 @@ export function dragResult(kind: "clue" | "theme" | "gift", from: [number, numbe
   if (end - start > VOTE_DRAG_DISTANCE) return "pass";
   return null;
 }
+
+export type RingZone = "box" | "gift" | "theme" | "outer";
+
+/** Zone boundaries, halfway between neighbouring rings. */
+export const ZONE_EDGES = {
+  box: BOX_DROP_RADIUS,
+  gift: (RING_RADII.gift + RING_RADII.theme) / 2,
+  theme: (RING_RADII.theme + RING_RADII.input) / 2,
+  outer: RING_RADII.input + 3,
+} as const;
+
+/** Which zone a local (x, z) offset from the present falls in. Clicking there adds the zone's kind of thing. */
+export function zoneAt(x: number, z: number): RingZone {
+  const r = ringDistance(x, z);
+  return r < ZONE_EDGES.box ? "box" : r < ZONE_EDGES.gift ? "gift" : r < ZONE_EDGES.theme ? "theme" : "outer";
+}
+
+/** Prefix that marks a manual clue as a friend's gift idea until the contract has its own kind (MAP-021). */
+export const GIFT_IDEA_PREFIX = "Gift idea: ";
+export const isGiftIdea = (text: string) => text.startsWith(GIFT_IDEA_PREFIX);
