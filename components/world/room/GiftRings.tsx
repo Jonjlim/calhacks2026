@@ -15,6 +15,7 @@ import { Jar } from "./TowerInterior";
 import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
 import { ringBase } from "./stageLayout";
+import { useRings } from "./ringsStore";
 import s from "./gift-rings.module.css";
 
 /**
@@ -135,6 +136,8 @@ function useRingDrag(center: THREE.Vector3, onDrag: RingsWorld["onDrag"]) {
 /** One floating island that glides to its ring position and bobs gently. */
 function RingIsland({ at, kind, delay, animate, muted, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; children?: ReactNode }) {
   const group = useRef<THREE.Group>(null);
+  // Set once: passing a fresh position on every render would snap the island back to its entrance spot each time.
+  const start = useMemo(() => at.clone().setY(at.y - 3), []); // eslint-disable-line react-hooks/exhaustive-deps
   const born = useRef(-1);
   const palette = kind === "theme" ? MID_PALETTE : FAR_PALETTE;
   useFrame(({ clock }, dt) => {
@@ -148,7 +151,7 @@ function RingIsland({ at, kind, delay, animate, muted, children }: { at: THREE.V
     if (animate) g.position.y = at.y + Math.sin(clock.elapsedTime * 0.9 + at.x) * 0.18 - (1 - grow) * 3;
   });
   return (
-    <group ref={group} position={at.clone().setY(at.y - 3)}>
+    <group ref={group} position={start}>
       <IslandMesh shape={SHAPES[kind]} palette={palette} detail={DETAIL} />
       {children}
     </group>
@@ -208,30 +211,50 @@ function useMapNavigation(center: THREE.Vector3) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const gl = useThree((st) => st.gl);
   const size = useThree((st) => st.size);
-  const pan = useRef<{ id: number; x: number; y: number } | null>(null);
+  const pan = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
   useEffect(() => {
     mapView.reset(true);
+    return () => mapView.reset(true);
+  }, []);
+  useEffect(() => {
     const worldPerPixel = () => (2 * camera.position.distanceTo(center) * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, size.height);
     const move = (e: PointerEvent) => {
       const p = pan.current;
       if (!p || e.pointerId !== p.id) return;
+      // A click wobbles a pixel or two; only a real drag moves the map.
+      if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 5) return;
+      if (!p.moved) {
+        p.moved = true;
+        mapView.dragging = true;
+        mapCursor.set("pan");
+      }
       const k = worldPerPixel();
       // Screen-down is toward the viewer on the tilted map, which is foreshortened.
       mapView.pan(-(e.clientX - p.x) * k, -(e.clientY - p.y) * k * 1.3);
       p.x = e.clientX;
       p.y = e.clientY;
-      mapCursor.set("pan");
     };
     const up = (e: PointerEvent) => {
       if (pan.current?.id !== e.pointerId) return;
+      if (pan.current.moved) mapCursor.set("memory");
       pan.current = null;
-      mapCursor.set("memory");
+      mapView.dragging = false;
     };
     const wrapper = gl.domElement.parentElement ?? gl.domElement;
     const wheel = (e: WheelEvent) => {
       if ((e.target as HTMLElement | null)?.closest?.("textarea")) return;
       e.preventDefault();
-      mapView.zoomBy(Math.exp(e.deltaY * 0.0012));
+      const lines = e.deltaMode === 1;
+      const mouseNotch = !lines && e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY);
+      if (e.ctrlKey || lines || mouseNotch) {
+        // Pinch on a trackpad, or a mouse wheel: zoom, a little per notch.
+        const amount = e.ctrlKey ? e.deltaY * 0.01 : Math.sign(e.deltaY) * (lines ? 0.08 : Math.min(0.12, Math.abs(e.deltaY) * 0.001));
+        mapView.zoomBy(Math.exp(amount));
+      } else {
+        // Two fingers on a trackpad: move around, like the sky is being slid.
+        const k = worldPerPixel();
+        mapView.pan(e.deltaX * k, e.deltaY * k * 1.3);
+      }
     };
     const key = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -258,8 +281,7 @@ function useMapNavigation(center: THREE.Vector3) {
       window.removeEventListener("pointercancel", up);
       wrapper.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", key);
-      document.body.style.cursor = "";
-      mapView.reset(true);
+      mapView.dragging = false;
     };
   }, [camera, gl, size.height, center]);
   return {
@@ -267,7 +289,7 @@ function useMapNavigation(center: THREE.Vector3) {
       if (e.nativeEvent.button !== 0) return;
       e.nativeEvent.preventDefault();
       window.getSelection()?.removeAllRanges();
-      pan.current = { id: e.nativeEvent.pointerId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+      pan.current = { id: e.nativeEvent.pointerId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, moved: false };
     },
   };
 }
@@ -292,7 +314,12 @@ function ZoneBands({ center, hover }: { center: THREE.Vector3; hover: RingZone |
   );
 }
 
-export function GiftRings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
+export function GiftRings({ animate }: { animate: boolean }) {
+  const rings = useRings();
+  return rings ? <Rings rings={rings} animate={animate} /> : null;
+}
+
+function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const center = useMemo(() => new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z), []);
   const drag = useRingDrag(center, rings.onDrag);
   const nav = useMapNavigation(center);

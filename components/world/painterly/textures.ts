@@ -398,6 +398,117 @@ export function ribbonTexture(): THREE.Texture {
   });
 }
 
+/**
+ * Parchment face of the hanging gift tag, lettered "Begin". `aspect` is the
+ * tag's height / width and `chamfer`, `holeY` are fractions of its width and
+ * height, so the inked border follows the cut corners and the punched hole.
+ * The lettering uses the brand display face; it is redrawn once that web font
+ * has loaded so the first frame never bakes in a fallback serif.
+ */
+export function giftTagTexture(aspect: number, chamfer: number, holeY: number, side: "front" | "back" = "front"): THREE.Texture {
+  return cached(`giftTag-${side}`, () => {
+    const W = 512;
+    const H = Math.round(W * aspect);
+    const [c, ctx] = canvas(W, H);
+    const tex = finish(c, false);
+    const css = getComputedStyle(document.documentElement);
+    const family = css.getPropertyValue("--font-cormorant").trim() || "Georgia";
+    const hand = css.getPropertyValue("--font-caveat").trim() || "cursive";
+
+    const draw = () => {
+      const rng = mulberry32(91);
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#f6ead0";
+      ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 70; i++) {
+        dab(ctx, rng() * W, rng() * H, 30 + rng() * 50, 18 + rng() * 26, rng() * 3, pick(rng, ["#fbf3e0", "#efdcb8", "#f3e4c6"]), 0.32);
+      }
+      // Warm, slightly toasted edges, like card stock that has been handled.
+      const edge = ctx.createRadialGradient(W / 2, H * 0.55, W * 0.3, W / 2, H * 0.55, H * 0.75);
+      edge.addColorStop(0, "rgba(160,110,60,0)");
+      edge.addColorStop(1, "rgba(160,110,60,0.28)");
+      ctx.fillStyle = edge;
+      ctx.fillRect(0, 0, W, H);
+
+      // Inked border following the tag's cut corners (the printed front only).
+      const ch = chamfer * W;
+      const inset = 26;
+      ctx.save();
+      ctx.strokeStyle = "#6b4658";
+      ctx.globalAlpha = side === "front" ? 0.55 : 0;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([14, 9]);
+      ctx.beginPath();
+      ctx.moveTo(ch + inset * 0.6, inset);
+      ctx.lineTo(W - ch - inset * 0.6, inset);
+      ctx.lineTo(W - inset, ch + inset * 0.6);
+      ctx.lineTo(W - inset, H - inset);
+      ctx.lineTo(inset, H - inset);
+      ctx.lineTo(inset, ch + inset * 0.6);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+
+      // Reinforcement ring around the punched hole.
+      const hy = holeY * H;
+      ctx.save();
+      ctx.strokeStyle = "#c9a46a";
+      ctx.lineWidth = 9;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(W / 2, hy, 38, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      if (side === "back") {
+        // The blank reverse: where the invitation gets written.
+        for (let i = 0; i < 3; i++) {
+          const y = H * (0.46 + i * 0.13);
+          pencil(ctx, rng, [[W * 0.2, y], [W * 0.5, y + 1], [W * 0.8, y]], "#8a6a7a", 2.5, 0.35);
+        }
+        paperGrain(ctx, rng, Math.max(W, H), 2600, 0.08);
+        tex.needsUpdate = true;
+        return;
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      // A tiny handwritten note above the word.
+      ctx.fillStyle = "#7a5566";
+      ctx.globalAlpha = 0.85;
+      ctx.font = `500 58px ${hand}`;
+      ctx.fillText("for you —", W / 2, H * 0.4);
+      ctx.globalAlpha = 1;
+      // The word itself: letterpressed, with a faint pressed-in highlight.
+      ctx.font = `600 150px ${family}`;
+      ctx.fillStyle = "rgba(255,250,235,0.7)";
+      ctx.fillText("Begin", W / 2 + 2, H * 0.64 + 3);
+      ctx.fillStyle = "#4e2f42";
+      ctx.fillText("Begin", W / 2, H * 0.64);
+
+      // Small printed play mark between two flourishes.
+      const py = H * 0.76;
+      ctx.fillStyle = "#b5654f";
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 12, py - 15);
+      ctx.lineTo(W / 2 + 16, py);
+      ctx.lineTo(W / 2 - 12, py + 15);
+      ctx.closePath();
+      ctx.fill();
+      pencil(ctx, rng, [[W / 2 - 110, py], [W / 2 - 70, py - 4], [W / 2 - 34, py]], "#b08a5a", 3, 0.8);
+      pencil(ctx, rng, [[W / 2 + 34, py], [W / 2 + 70, py - 4], [W / 2 + 110, py]], "#b08a5a", 3, 0.8);
+
+      paperGrain(ctx, rng, Math.max(W, H), 2600, 0.08);
+      tex.needsUpdate = true;
+    };
+
+    draw();
+    if (side === "back") return tex;
+    document.fonts?.load(`600 150px ${family}`).then(() => document.fonts.load(`500 58px ${hand}`)).then(draw, () => undefined);
+    return tex;
+  });
+}
+
 /** Terracotta / slate roof shingles. */
 export function roofTexture(key: "coral" | "slate" | "lilac"): THREE.Texture {
   return cached(`roof-${key}`, () => {

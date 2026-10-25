@@ -10,6 +10,12 @@ describe("ring layout", () => {
     for (const kind of ["ownership", "exclusion", "timing", "uncertain"]) expect(themeForKind(kind)).toBe("moment");
   });
 
+  it("keeps every clue in place when another one arrives", () => {
+    const two = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }], []).clues;
+    const three = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }, { id: "c", kind: "interest" }], []).clues;
+    expect(three.slice(0, 2)).toEqual(two);
+  });
+
   it("puts clues on the outer ring and only shows themes that have clues", () => {
     const layout = layoutRings([{ id: "a", kind: "interest" }, { id: "b", kind: "interest" }], []);
     expect(layout.themes).toEqual([expect.objectContaining({ id: "interest", count: 2 })]);

@@ -7,14 +7,15 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
-import { QrModulesSvg } from "@/components/unwrap/UnwrapInvitation";
+import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { mapView } from "@/components/world/room/mapView";
+import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, reduceCouncil } from "@/lib/council/contracts";
-import { inviteUrl } from "@/lib/invite";
+import { appOrigin, inviteUrl } from "@/lib/invite";
 import { inviteQrModules } from "@/lib/invitation/realQr";
 import { avatarFor, portraitUrl } from "@/lib/room/avatars";
 import { PHASE_LABEL, roomPhase } from "@/lib/room/phase";
@@ -95,9 +96,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       // Ids and kinds only; clue text stays in the DOM overlays.
       clues: data.publishedClues.filter((c) => c.status === "active").map((c) => ({ id: c.id, kind: c.kind, publisherId: c.publisherId })),
       onPick,
-      rings: map.rings,
     });
-  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick, map.rings]);
+  }, [room.id, me.id, data.council, data.publishedClues, participants, setCouncil, onPick]);
+  // The map's data goes straight to the rings, so updates don't re-render the rest of the world.
+  useEffect(() => ringsStore.set(map.rings), [map.rings]);
+  useEffect(() => () => ringsStore.set(null), []);
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {
@@ -301,7 +304,7 @@ function InviteCard({ path }: { path: string }) {
   const [open, setOpen] = useState(true);
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => setOrigin(window.location.origin), []);
-  const url = origin ? inviteUrl(path, origin) : null;
+  const url = origin ? inviteUrl(path, appOrigin(origin)) : null;
   const modules = useMemo(() => (url ? inviteQrModules(url) : null), [url]);
   if (!url || !modules) return null;
   const code = path.split("/").pop() ?? "";

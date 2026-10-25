@@ -5,9 +5,10 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
 import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
-import { CameraTour, TOUR_START } from "./cameraPath";
+import { CameraTour, giftClosePose, TOUR_START } from "./cameraPath";
+import { giftTag } from "./giftTag/giftTagStore";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
-import { type InvitationFrame, invitationFrame } from "./unwrap/invitationLayout";
+import { lobbyPose, topPose } from "./unwrap/invitationLayout";
 import { roomStage } from "@/components/room/roomStage";
 import { doorPose, gardenPose, mapPose, towerPose } from "./room/stageLayout";
 import { mapView } from "./room/mapView";
@@ -21,10 +22,12 @@ function pullBack(pose: CameraPose, k: number): CameraPose {
 
 /**
  * The only camera controller. During the intro it follows the shared intro
- * clock (storybook framing → authored tour → landing); afterwards it holds the
- * responsive landing composition with a small, damped pointer parallax. The
- * view offset shifts the projection centre right so the island sits beside
- * the editorial column without changing the perspective.
+ * clock (storybook framing → authored approach → close on the present). On the
+ * title screen it then holds that close-up perfectly still while the "Begin"
+ * tag is in play. Elsewhere (classic landing, rooms) it holds the responsive
+ * landing composition with a small, damped pointer parallax; the view offset
+ * shifts the projection centre right so the island sits beside the editorial
+ * column without changing the perspective.
  */
 export function WorldCamera({ parallax, roomActive = false, reducedMotion = false }: { parallax: boolean; roomActive?: boolean; reducedMotion?: boolean }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -32,7 +35,7 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
   const pointer = useRef({ x: 0, y: 0 });
   const smoothed = useRef({ x: 0, y: 0 });
   const rest = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3() }), []);
-  const poses = useRef<{ landing: CameraPose; story: CameraPose; tour: CameraTour; invite: InvitationFrame } | null>(null);
+  const poses = useRef<{ landing: CameraPose; close: CameraPose; story: CameraPose; tour: CameraTour; lobby: CameraPose; top: CameraPose } | null>(null);
   const live = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3(), fov: 30, shiftX: 0, shiftY: 0 }), []);
   const applied = useRef({ fov: -1, shiftX: -1, shiftY: -1, w: 0, h: 0 });
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
@@ -45,7 +48,8 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       landing = { position: [cam[0]!, cam[1]!, cam[2]!], target: [cam[3]!, cam[4]!, cam[5]!], fov: cam[6]!, shiftX: 0, shiftY: 0 };
     }
     const story = storybookPose(size.width, size.height);
-    poses.current = { landing, story, tour: new CameraTour(story, landing), invite: invitationFrame(size.width, size.height) };
+    const close = giftClosePose(size.width, size.height);
+    poses.current = { landing, close, story, tour: new CameraTour(story, close), lobby: lobbyPose(size.width, size.height), top: topPose(size.width, size.height) };
     rest.position.set(...landing.position);
     rest.target.set(...landing.target);
     applied.current.fov = -1;
@@ -78,6 +82,11 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
     camera.lookAt(live.target);
   };
 
+  useEffect(() => {
+    // QA hook (dev only): inspect the live camera from the browser console.
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __camera?: THREE.PerspectiveCamera }).__camera = camera;
+  }, [camera]);
+
   useFrame((_, dt) => {
     const p = poses.current;
     if (!p) return;
@@ -97,24 +106,20 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       return;
     }
 
-    // Create-a-room: glide in to the gift, hold while it becomes the invitation, glide back.
-    if (unwrapClock.active && !unwrapClock.staticPreview) {
+    // The title screen rests on the close-up; everywhere else rests on the landing view.
+    const home = giftTag.enabled ? p.close : p.landing;
+
+    // Chapter 2: while the Begin tag flies to the right, glide back from the
+    // close-up to the lobby framing (the present in the left part of the
+    // screen); once the tree has grown, rise to look down into the box, where
+    // the canopy becomes the QR code.
+    if (unwrapClock.active) {
       smoothed.current.x = smoothed.current.y = 0;
-      const { close, top } = p.invite;
-      // landing → close on the present → rise over it to look down on the code. Closing rewinds the clock.
       const t = unwrapClock.t;
-      const a = span(t, UNWRAP_TIMES.approachingGift, UNWRAP_TIMES.giftAnticipation + 0.55);
-      const b = span(t, UNWRAP_TIMES.unfoldingPaper + 0.95, UNWRAP_TIMES.assemblingQR + 0.25);
-      const ea = a * a * (3 - 2 * a);
-      const eb = b * b * (3 - 2 * b);
-      live.position.set(...p.landing.position).lerp(tmpPos.set(...close.position), ea).lerp(tmpPos.set(...top.position), eb);
-      live.target.set(...p.landing.target).lerp(tmpPos.set(...close.target), ea).lerp(tmpPos.set(...top.target), eb);
-      const fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.fov, close.fov, ea), top.fov, eb);
-      const shiftX = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftX, 0, ea), top.shiftX, eb);
-      const shiftY = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftY, 0, ea), top.shiftY, eb);
-      project(fov, shiftX, shiftY);
-      camera.position.copy(live.position);
-      camera.lookAt(live.target);
+      const still = unwrapClock.staticPreview;
+      const up = still ? 1 : span(t, UNWRAP_TIMES.topView[0], UNWRAP_TIMES.topView[1]);
+      if (up > 0) applyPose(p.lobby, p.top, up);
+      else applyPose(home, p.lobby, span(t, UNWRAP_TIMES.reframe[0], UNWRAP_TIMES.reframe[1]));
       return;
     }
 
@@ -148,6 +153,13 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       } else {
         applyPose(scenePose, scenePose, 1);
       }
+      return;
+    }
+
+    if (giftTag.enabled) {
+      // Title screen: locked on the close-up. No parallax, no drift.
+      smoothed.current.x = smoothed.current.y = 0;
+      applyPose(p.close, p.close, 1);
       return;
     }
 

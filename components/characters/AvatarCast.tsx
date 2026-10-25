@@ -40,10 +40,10 @@ interface CastMember {
 const GIFT: [number, number] = [GIFT_SPOT.x, GIFT_SPOT.z];
 
 export const CAST: CastMember[] = [
-  { avatar: "curious", at: [2.3, 2.55], facing: [1.2, 9], routine: { kind: "greeter", every: 11 }, cue: { t: INTRO_TIMES.giftReveal + 0.5, clip: "Wave" } },
+  { avatar: "curious", at: [2.3, 2.55], facing: [1.2, 9], routine: { kind: "greeter", every: 11 }, cue: { t: INTRO_TIMES.approachingGift + 0.5, clip: "Wave" } },
   { avatar: "dreamer", at: [-1.05, 1.25], facing: GIFT, routine: { kind: "sitter" } },
-  { avatar: "kind", at: [-3.35, 2.05], facing: [-2.4, 3.2], routine: { kind: "gardener", every: 13 }, cue: { t: INTRO_TIMES.worldFlythrough - 0.3, clip: "Celebrate" } },
-  { avatar: "calm", at: [-2.05, -1.2], facing: [-0.4, 3], routine: { kind: "keeper", every: 16 }, cue: { t: INTRO_TIMES.worldFlythrough + 0.3, clip: "Wave" } },
+  { avatar: "kind", at: [-3.35, 2.05], facing: [-2.4, 3.2], routine: { kind: "gardener", every: 13 }, cue: { t: INTRO_TIMES.cameraSettling + 0.2, clip: "Celebrate" } },
+  { avatar: "calm", at: [-2.05, -1.2], facing: [-0.4, 3], routine: { kind: "keeper", every: 16 }, cue: { t: INTRO_TIMES.cameraSettling + 0.7, clip: "Wave" } },
   { avatar: "explorer", at: [3.0, 3.45], facing: [4.6, 3.85], routine: { kind: "stroller", from: [3.0, 3.42], to: [4.55, 3.8], speed: 0.42, pause: 2.5 } },
 ];
 
@@ -163,7 +163,13 @@ function PlaceholderCast({ animate }: { animate: boolean }) {
   );
 }
 
-export function AvatarCast({ animate }: { animate: boolean }) {
+/**
+ * The island's own storybook spirits. `cast={false}` (the landing page, where
+ * only players who really join appear) places none but still reports the
+ * world as ready for the intro.
+ */
+export function AvatarCast({ animate, cast = true }: { animate: boolean; cast?: boolean }) {
+  if (!cast) return <Ready />;
   return (
     <AvatarBoundary fallback={<PlaceholderCast animate={animate} />}>
       <Suspense fallback={null}>

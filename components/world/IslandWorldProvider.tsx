@@ -9,7 +9,6 @@ import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { useUnwrapPhase, unwrapClock } from "@/components/unwrap/unwrapTimeline";
 import { roomStage, useRoomStage } from "@/components/room/roomStage";
 import type { CouncilActor, CouncilEvent, DecorationSpec } from "@/lib/council/contracts";
-import type { RingsWorld } from "./room/GiftRings";
 
 const WorldCanvas = dynamic(() => import("./WorldCanvas"), { ssr: false });
 /**
@@ -26,8 +25,6 @@ export interface RoomWorld {
   clues: { id: string; kind: string; publisherId: string }[];
   /** Clicking a meaningful object in the scene opens its readable overlay in the DOM. */
   onPick?: (target: PickTarget) => void;
-  /** The gift map (D19): room-visible clues, themes and gifts, plus the room's own callbacks. */
-  rings?: RingsWorld | null;
 }
 
 /** Things in the 3D room a viewer can click to read about. */
@@ -126,7 +123,7 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
     <WorldContext.Provider value={value}>
       {visible && <div className="fixed inset-0 z-0 world-fallback" aria-hidden="true">
         {webgl && <ErrorBoundary key={retry} fallback={<div className="world-fallback h-full" />}>
-          <div className={`h-full transition-opacity duration-[1400ms] ${ready ? "opacity-100" : "opacity-0"} ${phase !== "landingReady" || unwrap !== "landing" ? "pointer-events-none" : ""}`}>
+          <div className={`h-full transition-opacity duration-[1400ms] ${ready ? "opacity-100" : "opacity-0"} ${phase !== "landingReady" ? "pointer-events-none" : ""}`}>
             <WorldCanvas reducedMotion={reducedMotion} soundEnabled={soundEnabled} painterlyStrength={painterlyStrength} introActive={phase !== "landingReady"} onReady={markReady} council={activeCouncil} roomActive={!!roomId} onAssetStatus={assetStatus} />
           </div>
         </ErrorBoundary>}
