@@ -215,3 +215,66 @@
 .bubblePhoto { border-radius: 6px !important; width: 34px !important; height: 34px !important; object-position: center !important; }
 .photoBadge { position: absolute; bottom: -7px; right: -6px; font-style: normal; font-size: 12px; background: var(--color-ivory); border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; box-shadow: 0 2px 6px rgb(0 0 0 / .25); }
 .bubble { position: relative; }
+
+/* The AI council's familiars on the map: a name tag and, only when something real happened, a thought bubble. */
+.familiar {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.familiarName {
+  font: 600 11px/1 var(--font-figtree, system-ui);
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #3b2d44;
+  background: color-mix(in srgb, #fffaf1 86%, var(--tint));
+  border: 1px solid color-mix(in srgb, var(--tint) 55%, transparent);
+  box-shadow: 0 6px 14px -8px rgba(65, 52, 76, 0.5);
+}
+.councilBubble {
+  position: relative;
+  margin: 0;
+  width: max-content;
+  min-width: 120px;
+  max-width: 230px;
+  padding: 7px 12px;
+  border-radius: 16px;
+  font: 500 12.5px/1.25 var(--font-figtree, system-ui);
+  color: #3b2d44;
+  text-align: center;
+  background: #fffaf1;
+  border: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  box-shadow: 0 10px 22px -12px rgba(65, 52, 76, 0.6);
+  animation: councilPop 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.councilBubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  border-bottom: 1.5px solid color-mix(in srgb, var(--tint) 70%, transparent);
+  transform: translateX(-50%) rotate(45deg);
+}
+.councilBubble.working::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--tint);
+  animation: councilPulse 1s ease-in-out infinite;
+}
+.councilBubble.failed { background: #fff0ec; color: #8c3b2c; }
+@keyframes councilPop { from { opacity: 0; transform: translateY(6px) scale(0.85); } to { opacity: 1; transform: none; } }
+@keyframes councilPulse { 50% { opacity: 0.35; transform: scale(0.7); } }
+@media (prefers-reduced-motion: reduce) {
+  .councilBubble, .councilBubble.working::before { animation: none; }
+}

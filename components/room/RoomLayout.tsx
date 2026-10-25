@@ -363,6 +363,7 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
         <h2 className="font-display text-[28px] leading-tight">{COUNCIL_LABEL[drawer.actor]}</h2>
         <p className="mt-1 text-[14.5px] text-dusk/75">{poseFor(m).caption}</p>
         {m.summary && <p className="mt-3 rounded-xl bg-white/60 px-3 py-2 text-[14px] leading-snug">{m.summary}</p>}
+        <CouncilLog actor={drawer.actor} events={data.council?.events ?? []} />
         <p className="mt-3 text-[12px] text-dusk/50">Status comes from the agent’s real task events{m.status === "idle" ? "; nothing has run yet" : ""}.</p>
       </section>
     );
@@ -374,6 +375,26 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
       <PublishedClueRail clues={data.publishedClues} participants={participants} me={me} actions={actions} />
       <RoomAgentTools data={data} actions={actions} />
     </>
+  );
+}
+
+/** Everything one council member did in the latest run, from the stored task events. */
+function CouncilLog({ actor, events }: { actor: (typeof COUNCIL_ACTORS)[number]; events: NonNullable<RoomData["council"]>["events"] }) {
+  const mine = events.filter((e) => e.actor === actor).sort((a, b) => a.sequence - b.sequence);
+  if (!mine.length) return null;
+  const mark = { started: "…", completed: "✓", failed: "✕" } as const;
+  return (
+    <ol className="mt-3 flex flex-col gap-1.5" aria-label={`${COUNCIL_LABEL[actor]} log`}>
+      {mine.map((e) => (
+        <li key={e.eventId} className="flex gap-2 rounded-xl bg-white/50 px-3 py-1.5 text-[13px] leading-snug">
+          <span aria-hidden className="w-4 shrink-0 text-center font-semibold" style={{ color: e.status === "failed" ? "#d95b4a" : COUNCIL_TINT[actor] }}>{mark[e.status]}</span>
+          <span className="min-w-0 flex-1">
+            {e.status === "started" ? poseFor({ actor, status: "started" }).caption : e.result?.summary ?? e.result?.error ?? poseFor({ actor, status: e.status }).caption}
+          </span>
+          <time className="shrink-0 text-[11.5px] text-dusk/45">{new Date(e.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</time>
+        </li>
+      ))}
+    </ol>
   );
 }
 

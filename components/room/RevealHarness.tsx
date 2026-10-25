@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { SAMPLE_SESSION } from "@/lib/council/sampleSession";
+import type { CouncilEvent } from "@/lib/council/contracts";
 import { RoomLayout } from "@/components/room/RoomLayout";
 import type { RoomData } from "@/components/room/types";
 import type { GiftSelection, ProductListing, PublishedClue } from "@/lib/contracts";
@@ -23,6 +25,15 @@ export function RevealHarness() {
   useEffect(() => {
     setTimeOfDay("day");
     setReady(true);
+  }, []);
+  // `?council=live` replays a recorded council run event by event, as live runs arrive.
+  const [events, setEvents] = useState<CouncilEvent[]>([]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("council") !== "live") return;
+    const t0 = Date.now();
+    const timers = SAMPLE_SESSION.map(({ at, event }) => setTimeout(() => setEvents((e) => [...e, event]), at + 3000));
+    void t0;
+    return () => timers.forEach(clearTimeout);
   }, []);
   const data = useMemo<RoomData | null>(() => {
     if (!ready) return null;
@@ -68,7 +79,8 @@ export function RevealHarness() {
       votes: {},
       selection,
       evidence: [],
+      council: { run: null, events, decorations: [], excluded: [] } as unknown as RoomData["council"],
     };
-  }, [ready]);
+  }, [ready, events]);
   return data ? <RoomLayout data={data} /> : null;
 }
