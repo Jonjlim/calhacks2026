@@ -15,13 +15,14 @@ import { BookCorner } from "@/components/book/BookCorner";
 import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
 import { book, useBookOpen } from "@/components/book/bookStore";
 import { AgentDetails } from "@/components/council/AgentDetails";
+import { BudgetTab } from "./BudgetTab";
 import { GiftFinale, useFinaleStep } from "@/components/finale/GiftFinale";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
-import { sfx } from "@/components/world/sfx";
+import { playWhoosh, sfx } from "@/components/world/sfx";
 import { hasChosenSky, setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { isDarkSky, SKIES } from "@/components/world/timeOfDay";
 import { mapView } from "@/components/world/room/mapView";
@@ -111,6 +112,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
   const [resolvedStage, setStageState] = useState<Stage | null>(null);
   const stage: Stage = resolvedStage ?? "map";
+  // The camera pulling back from the present to the map gets a whoosh; arriving straight on the map doesn't.
+  const lastStage = useRef(stage);
+  useEffect(() => {
+    if (stage === "map" && lastStage.current !== "map") playWhoosh();
+    lastStage.current = stage;
+  }, [stage]);
   const firstStage = useRef(true);
   useEffect(() => {
     const view = new URLSearchParams(window.location.search).get("view");
@@ -280,18 +287,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const phase = roomPhase({ councilStatus: isResearchActive(liveResearch) ? "running" : data.council?.run?.status ?? null, recommendationCount: data.recommendations.length, proposalStatus: data.proposal.revision?.status ?? null });
   const working = COUNCIL_ACTORS.filter((a) => members[a].status === "started" && a !== "courier");
   const activeClues = data.publishedClues.filter((c) => c.status === "active");
-  const ask = useResultAction(actions?.startResearch);
   const resume = useResultAction(actions?.resumeCouncil);
   const run = data.council?.run;
 
   // One contextual primary action, matching the real phase.
   let primary: ReactNode = null;
-  if (phase === "collect") {
-    primary = isOrganizer ? (
-      <button className="btn-primary h-11 px-5" disabled={data.councilUnavailable || !activeClues.length || ask.pending || !actions} onClick={() => ask.run(activeClues.map((c) => c.id))}>
-        {activeClues.length ? "Wake the council" : "Waiting for memories…"}
-      </button>
-    ) : (
+  if (phase === "collect" && !isOrganizer) {
+    primary = (
       <span className="text-[13.5px] text-dusk/65">Add memories from your phone</span>
     );
   } else if (phase === "researching") {
@@ -361,10 +363,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
         <a href={`/room/${room.id}/phone`} className={chip}>List view</a>
         {data.invitePath && <InviteCard path={data.invitePath} />}
-        {actions && !preview && <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName}
-          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
-          className={chip} />}
       </div>
+      {actions && !preview && !engaged && !bookOpen && (
+        <GiftTwinInviteButton roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} placement="top-center"
+          twin={data.agentCollaborators?.collaborators.find((collaborator) => collaborator.kind === "gift_twin")}
+          className={chip} />
+      )}
+      {actions && !preview && !ended && /^[a-z0-9]{20,40}$/.test(room.id) && <BudgetTab roomId={room.id} />}
 
       {/* The shares board (components/room/BudgetBoard) is built but switched off for now. To bring it back, render <BudgetBoard data={data} actions={actions} /> here on the map stage. */}
 
@@ -394,6 +399,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
+          {stage === "map" && !!data.mapUnavailable?.length && <p role="alert" className="max-w-[440px] text-[12.5px] text-dusk/80">{data.mapUnavailable.join(", ")} temporarily unavailable. Your other map items are still here.</p>}
           <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Add a memory or gift idea · use the photo icon to share pictures · drag to look around" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
@@ -436,7 +442,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           </div>
         </div>
       </div>
-      {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
+      {resume.error && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{resume.error.message}</p>}
 
       {stage === "map" && !preview && !engaged && <BookOfPossibilities data={data} actions={actions} isOrganizer={isOrganizer} onChoose={chooseFromBook} />}
 
@@ -446,6 +452,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           isOrganizer={isOrganizer}
           onPlan={() => setFinaleOpen(true)}
           onReplay={replayReveal}
+          roomId={actions && !preview ? room.id as Id<"rooms"> : undefined}
         />
       )}
 
@@ -547,7 +554,8 @@ function InviteCard({ path }: { path: string }) {
       <div className="mt-2 overflow-hidden rounded-xl bg-white">
         <QrModulesSvg modules={modules} className="h-auto w-full" label="QR code to join this gift room" scannable />
       </div>
-      <p className="mt-2 font-mono text-[11px] break-all text-dusk/55">{code.slice(0, 8)}…</p>
+      <p className="mt-2 text-center text-[11px] tracking-wide text-dusk/55 uppercase">Room code</p>
+      <p className="text-center font-mono text-[26px] font-bold tracking-[0.3em] text-dusk" aria-label={`Room code ${code.split("").join(" ")}`}>{code}</p>
       <button
         className="btn-secondary mt-2 h-9 w-full text-[13px]"
         onClick={async () => {

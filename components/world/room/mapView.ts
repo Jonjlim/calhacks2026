@@ -18,7 +18,7 @@ export const CAMERA_FRAME_PRIORITY = -2;
 
 const PAN_X = 36;
 const PAN_Z = 28;
-const ZOOM_MIN = 0.3;
+const ZOOM_MIN = 0.22;
 const ZOOM_MAX = 1.6;
 /** Offsets from the default elevation, in radians (the default is about 53 degrees). */
 export const PITCH_MIN = -0.72;
@@ -33,9 +33,12 @@ export interface MapViewState {
   zoom: number;
   yaw: number;
   pitch: number;
+  /** Lift and centered framing for a real gift close-up. */
+  lift: number;
+  giftFocus: number;
 }
 
-const HOME: MapViewState = { x: 0, z: 0, zoom: 1, yaw: 0, pitch: 0 };
+const HOME: MapViewState = { x: 0, z: 0, zoom: 1, yaw: 0, pitch: 0, lift: 0, giftFocus: 0 };
 
 class MapView {
   target: MapViewState = { ...HOME };
@@ -46,6 +49,10 @@ class MapView {
   locked = false;
   /** Slower easing for scripted moves (focusing an island), so they glide for a second or two. */
   private gliding = false;
+  private flight: { from: MapViewState; elapsed: number; duration: number } | null = null;
+  private beforeGift: MapViewState | null = null;
+  get giftArrived(): boolean { return this.target.giftFocus === 1 && this.flight === null; }
+
   private listeners = new Set<() => void>();
   /** Bumps on every user gesture, so authored guidance can yield instead of resuming over one. */
   interaction = 0;
@@ -70,6 +77,7 @@ class MapView {
   /** Moves the focus point in world axes. */
   pan(dx: number, dz: number) {
     if (this.locked) return;
+    this.flight = null;
     this.gliding = false;
     this.interaction++;
     this.target.x = clamp(this.target.x + dx, -PAN_X, PAN_X);
@@ -85,6 +93,7 @@ class MapView {
 
   zoomBy(factor: number) {
     if (this.locked) return;
+    this.flight = null;
     this.gliding = false;
     this.interaction++;
     this.target.zoom = clamp(this.target.zoom * factor, ZOOM_MIN, ZOOM_MAX);
@@ -93,6 +102,7 @@ class MapView {
 
   orbit(dYaw: number, dPitch: number) {
     if (this.locked) return;
+    this.flight = null;
     this.gliding = false;
     this.interaction++;
     this.target.yaw += dYaw;
@@ -106,13 +116,43 @@ class MapView {
    */
   focus(x: number, z: number, zoom = 0.55, shot?: { yaw?: number; pitch?: number }) {
     if (this.locked || this.dragging) return;
+    this.flight = null;
+    this.beforeGift = null;
     this.gliding = true;
+    this.target.lift = 0;
+    this.target.giftFocus = 0;
     this.target.x = clamp(x, -PAN_X, PAN_X);
     this.target.z = clamp(z, -PAN_Z, PAN_Z);
     this.target.zoom = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
     if (shot?.yaw !== undefined) this.target.yaw = shot.yaw;
     if (shot?.pitch !== undefined) this.target.pitch = clamp(shot.pitch, PITCH_MIN, PITCH_MAX);
     this.emit();
+  }
+
+  /** A finite camera dolly: the real island grows continuously under the viewer. */
+  focusGift(x: number, z: number) {
+    if (this.locked) return;
+    const previous = this.beforeGift ?? { ...this.current };
+    this.focus(x, z - 1, 0.24);
+    this.beforeGift = previous;
+    this.target.lift = 3.7; // map target is 2 below the island; gift is 1.7 above it
+    this.target.giftFocus = 1;
+    this.flight = { from: { ...this.current }, elapsed: 0, duration: 1.2 };
+  }
+
+  trackGift(x: number, z: number) {
+    if (this.locked || this.target.giftFocus !== 1) return;
+    this.target.x = clamp(x, -PAN_X, PAN_X);
+    this.target.z = clamp(z - 1, -PAN_Z, PAN_Z);
+    this.gliding = true;
+  }
+
+  returnFromGift() {
+    if (this.locked) return;
+    const to = this.beforeGift ?? { ...HOME };
+    this.beforeGift = null;
+    this.target = { ...to };
+    this.flight = { from: { ...this.current }, elapsed: 0, duration: 0.9 };
   }
 
   /**
@@ -130,6 +170,8 @@ class MapView {
 
   /** Back to the default overview. `instant` also snaps the eased value. */
   reset(instant = false) {
+    this.flight = null;
+    this.beforeGift = null;
     this.gliding = !instant;
     this.target = { ...HOME };
     if (instant) this.current = { ...HOME };
@@ -138,6 +180,17 @@ class MapView {
 
   /** Eases the current view toward the target; returns it. */
   step(dt: number, reducedMotion: boolean): MapViewState {
+    if (this.flight) {
+      const flight = this.flight;
+      flight.elapsed += Math.max(0, Math.min(dt, 0.1));
+      const t = reducedMotion ? 1 : Math.min(1, flight.elapsed / flight.duration);
+      const eased = t * t * t * (t * (t * 6 - 15) + 10);
+      for (const key of Object.keys(HOME) as (keyof MapViewState)[]) {
+        this.current[key] = flight.from[key] + (this.target[key] - flight.from[key]) * eased;
+      }
+      if (t === 1) { this.flight = null; this.gliding = false; }
+      return this.current;
+    }
     const rate = this.gliding ? 3.2 : 9;
     const k = reducedMotion ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * rate);
     const follow = this.dragging ? 1 : k;
@@ -148,6 +201,8 @@ class MapView {
     c.zoom += (t.zoom - c.zoom) * k;
     c.yaw += (t.yaw - c.yaw) * follow;
     c.pitch += (t.pitch - c.pitch) * follow;
+    c.lift += (t.lift - c.lift) * k;
+    c.giftFocus += (t.giftFocus - c.giftFocus) * k;
     if (this.gliding && Math.abs(t.x - c.x) + Math.abs(t.z - c.z) + Math.abs(t.zoom - c.zoom) + Math.abs(t.yaw - c.yaw) + Math.abs(t.pitch - c.pitch) < 0.02) this.gliding = false;
     return c;
   }

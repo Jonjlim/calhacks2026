@@ -18,6 +18,12 @@
 }
 @keyframes bookIn { from { opacity: 0; transform: translateY(2cqh) scale(0.9) rotateX(10deg); } }
 .stage.instant *, .stage.instant { animation-duration: 0s !important; animation-delay: 0s !important; }
+/* Reopening or skipping shows finished artwork; page turns and gift actions keep their normal motion. */
+.stage.drawn:not(.out), .drawn .book { animation: none; }
+.drawn .stroke { animation: none; stroke-dashoffset: 0; }
+.drawn .wash { animation: none; opacity: 0.55; transform: none; }
+.drawn .paperWash { animation: none; opacity: 1; }
+.drawn .content { transition: none; }
 
 .ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 .paperWash { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; mix-blend-mode: multiply; background: radial-gradient(circle at 18% 14%, rgb(246 200 160 / 0.35), transparent 38%), radial-gradient(circle at 86% 88%, rgb(190 200 230 / 0.35), transparent 40%); opacity: 0; animation: washIn calc(1.4s * var(--k, 1)) ease-out calc(2.1s * var(--k, 1)) forwards; }

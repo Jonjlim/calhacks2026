@@ -1,5 +1,6 @@
 "use client";
 
+import { GiftOrbitMenu } from "@/components/room/GiftOrbitMenu";
 import { Html, QuadraticBezierLine } from "@react-three/drei";
 import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type PointerEvent as ReactPointerEvent, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -25,9 +26,9 @@ import { StylizedTree } from "../props/Flora";
 import { platformTop } from "../props/Stonework";
 import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
 import { MagicTrail } from "./MagicTrail";
-import { giftBundles } from "@/lib/map/giftBundles";
 import { MapBridge } from "./MapBridge";
 import { MainIslandOccluders, OCCLUDERS } from "./MainIslandOccluders";
+import { giftBundles } from "@/lib/map/giftBundles";
 import { WeaveThread, type WeaveMode } from "./WeaveThread";
 import { buildBody } from "../convergence/GiftConvergence";
 import { paint } from "../painterly/materials";
@@ -318,7 +319,10 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
           {pulse && <span key={`${pulse.name}${pulse.value}`} className={`${s.pulse} ${pulse.value > 0 ? s.pulseYes : s.pulsePass}`} style={{ ["--who" as string]: pulse.color }}>{pulse.name} {pulse.value > 0 ? "♥ feels like her" : "✕ not really"}</span>}
           </div>
         </Html>
-        {info && (
+        {info && (k.startsWith("gift:") ? (
+          <Html fullscreen zIndexRange={[90, 80]} style={{ pointerEvents: "none" }}><GiftOrbitMenu gift={rings.gifts.find(g => g.key === k)!} detail={info} onMap
+            evaluations={rings.evaluations?.[k]} onClose={() => rings.onSelect(null)} /></Html>
+        ) : (
           <Html position={[offset[0], 1.2, 0]} center zIndexRange={[70, 60]}>
             <div data-map-token className={cls} style={{ marginTop: 470 }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onPointerEnter={enter} onPointerLeave={leave}>
         {info && (
@@ -345,7 +349,8 @@ function Token({ k, rings, from, drag, face, label, offset, dim, onTop }: { k: s
         )}
             </div>
           </Html>
-        )}
+        ))}
+
       </>
     );
   }

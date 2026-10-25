@@ -38,7 +38,7 @@ export const start = mutation({
       clues.push({ ...fields, id: _id });
     }
     const room = member.room;
-    const brief = buildSearchBrief({ roomId: room._id, knowledgeRevision: room.knowledgeRevision, clues, budgetMinor: room.budgetMinor, occasion: room.occasion });
+    const brief = buildSearchBrief({ roomId: room._id, knowledgeRevision: room.knowledgeRevision, clues, budgetMinor: room.budgetMinor, budgetGuidance: room.budgetGuidance, occasion: room.occasion });
     if (!brief.queryTerms.length) return err("validation_failed", "Share an interest or wish before asking the council.");
     const previous = await ctx.db.query("councilRuns").withIndex("by_room_request", q => q.eq("roomId", room._id).eq("idempotencyKey", args.idempotencyKey)).unique();
     if (previous?.researchJobId) return ok({ runId: previous.runId, jobId: previous.researchJobId });
@@ -239,7 +239,7 @@ export const researchHttp = httpAction(async (ctx, request) => {
     if (data.job.status === "succeeded") {
       const listings = data.listings.map(({ _id, _creationTime, ...l }) => ({ ...l, id: _id }));
       const clues = data.clues.map(({ _id, _creationTime, ...c }) => ({ ...c, id: _id }));
-      const ranked = rankListings({ listings, clues, budgetMinor: data.room.budgetMinor, limit: 12 });
+      const ranked = rankListings({ listings, clues, budgetMinor: data.room.budgetMinor, budgetGuidance: data.room.budgetGuidance, limit: 12 });
       return json(200, { ok: true, listings: ranked.flatMap(r => {
         const l = listings.find(l => l.id === r.listingId);
         if (!l) return [];

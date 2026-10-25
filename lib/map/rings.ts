@@ -159,7 +159,7 @@ export function layoutRings(clues: readonly RingClueInput[], gifts: readonly Rin
     const radius = gift.favored
       ? GIFT_MIN_RADIUS
       : clamp(
-          RING_RADII.gift + clamp((0.6 - gift.score) * 6, -2, 3) - clamp(gift.up - gift.down, -3, 3) * 0.9 - themePull * 0.5 - (themes.length > 1 ? 1 : 0) + (gift.resting ? 3.5 : 0) + (gift.faded ? 2.5 : 0),
+          RING_RADII.gift + clamp((0.6 - gift.score) * 6, -2, 3) - clamp(gift.up - gift.down, -3, 3) * 2.2 - themePull * 0.5 - (themes.length > 1 ? 1 : 0) + (gift.resting ? 3.5 : 0) + (gift.faded ? 2.5 : 0),
           GIFT_MIN_RADIUS,
           RING_RADII.theme - 1.2,
         );

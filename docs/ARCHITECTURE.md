@@ -6,6 +6,12 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D26 — Gift story and the recipient's gift tag (2026-10-25)
+
+The reveal now says what the room did in one line ("The council read N memories, proposed N directions and threw out N, searched N times across N products; your group voted N times → this gift") and plays a short storybook: memories, the words that came up most, the room's photos, the council's numbers, then the gift. All numbers are counts of existing Convex rows; nothing is estimated.
+
+The organizer can opt in to a **gift tag**: a QR and link (`/gift/<token>`) the recipient opens without signing in. This is Unwrap's first public, unauthenticated read. Its boundary: one new table, `giftStories`, with a 128-bit random token, organizer-only create/revoke, and a public `story.byToken` query that returns not-found for revoked tags, deleted rooms, rooms with no active gift, or malformed tokens. It shows only active published memories of kind `interest`, `explicit_wish` or `timing`, with no authors and no friends' typed gift ideas. It shows friends' first names, gift titles and images, theme and direction labels, and counts. It never shows prices, links, caps, payments, unpublished or private material, exclusions, or things she owns. Photos appear only if the organizer ticked "Include the room's photos". The tag is purged first when the room is deleted. No new service or provider. Contract: "Gift story and gift tag (D26)" in [CONTRACTS.md](CONTRACTS.md).
+
 ### D25 — TikTok inspiration on trend clouds (trial, 2026-10-25)
 
 The existing public TikTok search actor (`xmolodtsov/tiktok-search-scraper`, same Apify account, $0.50 cap) was only reachable for reviewed fashion terms and had no UI. A trend cloud's "See TikToks" now runs one search for that cloud's own query, which is already a sourced, screened Google Trends suggestion, so no memory, name or free text becomes a TikTok search. One search per room and query per day, only on an explicit tap; 12 posts fetched, up to 6 public, non-advertising posts kept as links only (no captions, profiles or media). The board plays them with TikTok's own embedded player. Labelled as inspiration, never facts about the recipient or checked products. Same provider and service boundary as D13/D17.

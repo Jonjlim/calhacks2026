@@ -144,10 +144,11 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         const yaw = Math.atan2(dx, dz) + view.yaw;
         // Never lower than a scenic low angle (so the view stays above the islands' undersides) nor straight overhead.
         const el = THREE.MathUtils.clamp(Math.asin(dy / Math.hypot(dx, dy, dz)) + view.pitch, 0.2, 1.42);
+        const fy = ty + view.lift;
         const fx = tx + view.x;
         const fz = tz + view.z;
         // On wide screens the world sits a little right of centre, leaving a clear gutter on the left for the council dock.
-        return { ...base, shiftX: w > 900 ? 0.055 : 0, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
+        return { ...base, shiftX: w > 900 ? 0.055 * (1 - view.giftFocus) : 0, position: [fx + dist * Math.cos(el) * Math.sin(yaw), fy + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, fy, fz] };
       };
       const scenePose = poseOf(shown);
       if (convergence.active) {

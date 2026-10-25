@@ -254,8 +254,6 @@ function Checkout({ data }: { data: RoomData }) {
   return (
     <>
       <Head data={data} kicker="Step 2 · Checkout" title="Your share" />
-      <div className={s.sim} role="note"><b>Simulated checkout</b> No card is asked for. Nothing is charged and no order is placed.</div>
-
       <section className={s.receipt} aria-label="Order summary">
         <h3>Order summary</h3>
         {lines.map((l) => (
@@ -411,7 +409,7 @@ export function TheEnd({ data, reduced }: { data: RoomData; reduced: boolean }) 
             <li className={s.endTotal}><b>Together</b><span>{formatMinor(total, currency)}</span></li>
           </ul>
         )}
-        <p className={s.theEnd}>The End</p>
+        <a href="/" className={s.home}>Back to home</a>
       </motion.div>
     </motion.div>
   );

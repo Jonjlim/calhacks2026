@@ -72,4 +72,28 @@ describe("map camera state", () => {
     expect(mapView.target.x).toBe(12);
     mapView.dragging = false;
   });
+  it("flies toward the actual gift continuously and arrives after the authored duration", () => {
+    mapView.focusGift(10, 7);
+    expect(mapView.current.zoom).toBe(1); // setting the target never cuts the camera
+    for (let i = 0; i < 36; i++) mapView.step(1 / 60, false);
+    expect(mapView.current.zoom).toBeCloseTo(0.62, 5);
+    expect(mapView.current.x).toBeCloseTo(5, 5);
+    expect(mapView.giftArrived).toBe(false);
+    for (let i = 0; i < 40; i++) mapView.step(1 / 60, false);
+    expect(mapView.current).toMatchObject({ x: 10, z: 6, zoom: 0.24, lift: 3.7, giftFocus: 1 });
+    expect(mapView.giftArrived).toBe(true);
+  });
+
+  it("returns to the previous framing and honors reduced motion", () => {
+    mapView.focus(4, -2, 0.8);
+    mapView.orbit(0.4, 0.1);
+    const previous = { ...mapView.step(0.016, true) };
+    mapView.focusGift(12, 5);
+    mapView.step(0.016, true);
+    expect(mapView.giftArrived).toBe(true);
+    mapView.returnFromGift();
+    expect(mapView.step(0.016, true)).toEqual(previous);
+    expect(mapView.giftArrived).toBe(false);
+  });
+
 });

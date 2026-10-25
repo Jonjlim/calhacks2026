@@ -81,7 +81,7 @@ export const startResearch = mutation({
     }
     const brief = buildSearchBrief({
       roomId: room._id, knowledgeRevision: room.knowledgeRevision, clues,
-      ...(budgetMinor === undefined ? {} : { budgetMinor }), occasion: room.occasion,
+      ...(budgetMinor === undefined ? {} : { budgetMinor }), budgetGuidance: room.budgetGuidance, occasion: room.occasion,
     });
     const direction = args.directionId ? await ctx.db.get(args.directionId) : null;
     if (args.directionId) {

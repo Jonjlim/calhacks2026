@@ -56,6 +56,7 @@ export interface RoomData {
   /** Screened AI notes and evaluations, kept separate from participant votes. */
   agentCollaborators?: AgentCollaboratorFeed;
   /** Gift map extras (D19). Optional: the room still works if the deployment lacks them. */
+  mapUnavailable?: string[];
   mapSignals?: OkValue<FunctionReturnType<typeof api.mapSignals.listSignals>>;
   mapThemes?: OkValue<FunctionReturnType<typeof api.agents.themes.listThemes>>;
   questionPoll?: QuestionPollView | null;
@@ -69,10 +70,10 @@ export interface RoomData {
   searchPools?: SearchPoolSummary[];
   /** The room's decision log, for "How we got here" (D23 trial). */
   trail?: TrailEntry[];
-  /** TikTok inspiration searches for trend clouds (D23 trial). */
-  tiktokLooks?: TikTokLookView[];
   /** The simulated checkout and the end of the game. Absent when the backend has no simulation. */
   simulation?: SimulationApi;
+  /** TikTok inspiration searches for trend clouds (D23 trial). */
+  tiktokLooks?: TikTokLookView[];
 }
 
 /** The shared, clearly simulated checkout (convex/payments/simulation): where the group is, and what this person can do next. */

@@ -25,3 +25,13 @@ describe("question support stays separate from evidence and scoped to its direct
     expect(questionSupport(coffee, steering, "direction-a")).toBe(0);
   });
 });
+
+it("human votes override even a much stronger AI score and withdrawal restores the order", () => {
+  const rows = [{ listingId: "trail", score: 0.99 }, { listingId: "cup", score: 0.01 }];
+  const steering = { giftNet: new Map([["cup", 1]]), polls: [] };
+  expect(steerRanked(rows, [hiking, coffee], steering).map(r => r.listingId)).toEqual(["cup", "trail"]);
+  steering.giftNet = new Map([["trail", -1]]);
+  expect(steerRanked(rows, [hiking, coffee], steering)[0]?.listingId).toBe("cup");
+  steering.giftNet.clear();
+  expect(steerRanked(rows, [hiking, coffee], steering)[0]?.listingId).toBe("trail");
+});

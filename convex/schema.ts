@@ -41,6 +41,9 @@ export default defineSchema({
     deadlineAt: v.optional(v.number()),
     currency: V.currency,
     budgetMinor: v.optional(v.number()),
+    /** Unused (see participants). */
+    budgetMinMinor: v.optional(v.number()),
+    budgetGuidance: v.optional(V.budgetGuidance),
     knowledgeRevision: v.number(),
     currentRevisionId: v.optional(v.id("proposalRevisions")),
     currentSelectionId: v.optional(v.id("giftSelections")),
@@ -56,12 +59,20 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   }).index("by_invite_token", ["inviteToken"]),
 
+  budgetRanges: defineTable({
+    roomId: v.id("rooms"), participantId: v.id("participants"),
+    minMinor: v.number(), maxMinor: v.number(), currency: v.literal("USD"), updatedAt: v.number(),
+  }).index("by_room", ["roomId"]).index("by_room_participant", ["roomId", "participantId"]),
+
   participants: defineTable({
     roomId: v.id("rooms"),
     userId: v.string(),
     displayName: v.string(),
     role: V.participantRole,
     joinedAt: v.number(),
+    /** Unused: an earlier budget attempt left these on some dev rows. Budgets now live in budgetRanges. */
+    budgetMinMinor: v.optional(v.number()),
+    budgetMaxMinor: v.optional(v.number()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
@@ -494,6 +505,21 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_room_query", ["roomId", "query"]),
 
+  /**
+   * The gift tag (D26): an opt-in, revocable link the organizer gives the recipient to read how friends chose the gift.
+   * The token is the only key to the public story; it shows published memories and the gift, never prices, caps or private imports.
+   */
+  giftStories: defineTable({
+    roomId: v.id("rooms"),
+    token: v.string(),
+    createdBy: v.id("participants"),
+    includePhotos: v.boolean(),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_room", ["roomId"]),
+
   /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
   mapDirections: defineTable({
     roomId: v.id("rooms"),
@@ -531,6 +557,7 @@ export default defineSchema({
     runId: v.string(),
     source: v.union(v.literal("web"), v.literal("asi1")),
     demoKey: v.optional(v.string()),
+    /** Set by dev3/fetch-council's real agents; production already holds such a row, so the schema must accept it. */
     agentAddress: v.optional(v.string()),
     roomId: v.optional(v.id("rooms")),
     researchJobId: v.optional(v.id("researchJobs")),

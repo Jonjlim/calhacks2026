@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { refreshBudgetGuidance } from "./lib/budgets";
 import { getMembership, getUserId, isLiveRoom, requireMember } from "./lib/auth";
 import { purgeParticipantPrivateData } from "./lib/evidence";
 import { cleanText, isMoney, LIMITS } from "./lib/input";
@@ -21,10 +22,12 @@ import { FROZEN_STATUSES, isTerminalAttempt } from "./payments/stateMachine";
 const OCCASION_MAX_CHARS = 80;
 const INVITE_TOKEN_MAX_CHARS = 128;
 
+/** Room codes are four easy-to-read characters: no 0/O, 1/I/L, so they can be said aloud. */
+const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 function newInviteToken(): string {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(4);
   crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
 }
 
 export function joinPath(inviteToken: string): string {
@@ -131,7 +134,8 @@ export const joinRoom = mutation({
     const userId = await getUserId(ctx);
     if (!userId) return err<Out>("unauthorized", "Sign in to join a room.");
 
-    const token = args.inviteToken.trim();
+    const raw = args.inviteToken.trim();
+    const token = raw.length <= 8 ? raw.toUpperCase() : raw;
     if (!token || token.length > INVITE_TOKEN_MAX_CHARS) {
       return err<Out>("not_found", "That invite link is not valid.");
     }
@@ -154,6 +158,7 @@ export const joinRoom = mutation({
       role: "contributor",
       joinedAt: Date.now(),
     });
+    await refreshBudgetGuidance(ctx, room._id);
     // A new participant changes the allocation inputs for any live proposal.
     await recomputeProposal(ctx, room._id);
 
@@ -217,7 +222,8 @@ export const getInvite = query({
  */
 export const previewInvite = query({
   args: { inviteToken: v.string() },
-  handler: async (ctx, { inviteToken }) => {
+  handler: async (ctx, { inviteToken: rawToken }) => {
+    const inviteToken = rawToken.trim().length <= 8 ? rawToken.trim().toUpperCase() : rawToken.trim();
     type Out = {
       roomId: Doc<"rooms">["_id"];
       title: string;
@@ -372,7 +378,10 @@ export const leaveRoom = mutation({
       for (const event of events) if (event.participantId === me._id) await ctx.db.delete(event._id);
     }
 
+    const budgetRange = await ctx.db.query("budgetRanges").withIndex("by_room_participant", q => q.eq("roomId", roomId).eq("participantId", me._id)).unique();
+    if (budgetRange) await ctx.db.delete(budgetRange._id);
     await ctx.db.delete(me._id);
+    await refreshBudgetGuidance(ctx, roomId);
     await recomputeProposal(ctx, roomId);
     if (publishedChanged) await bumpKnowledgeRevision(ctx, roomId);
     return ok(null);

@@ -1,5 +1,50 @@
 # Contracts
 
+## Member budget ranges (2026-10-25)
+
+Owner: Dev 2. Consumers: Dev 1 (join prompt/right-edge slider), Dev 3 (buyer and
+direction context), Dev 4 (ranking/research briefs). Additive, no data migration.
+
+```ts
+interface MemberBudgetRange {
+  roomId: string; participantId: string;
+  minMinor: number; maxMinor: number; currency: "USD"; updatedAt: number;
+}
+interface GroupBudgetGuidance {
+  lowerMinor: number; upperMinor: number; currency: "USD";
+  responseCount: number; participantCount: number; conflicting: boolean;
+}
+```
+
+- `budgetRanges` is contributor-private, indexed by `roomId` and by
+  `[roomId, participantId]`. Values are integer cents, 0 ≤ min ≤ max ≤ 10,000,000.
+- `budgets.state({roomId})` is a member-only query returning
+  `Result<{range: MemberBudgetRange | null, guidance: GroupBudgetGuidance | null,
+  participantCount: number}>`. It returns only the caller's range.
+- `budgets.setRange({roomId,minMinor,maxMinor})` is a member-only mutation returning
+  `Result<MemberBudgetRange>`. It resolves the participant from auth; no caller
+  can choose another owner. Expected errors: unauthorized, not_found,
+  validation_failed. No AI tool can call this mutation.
+- `Room.budgetGuidance?`, `SearchBrief.budgetGuidance?`, and
+  `BuyerSnapshot.budgetGuidance?` contain only the derived group guidance. Lower is
+  the rounded arithmetic mean of submitted minima; upper is the smallest submitted
+  maximum times the CURRENT number of room participants. Missing ranges remain
+  unknown (never zero); responseCount makes incomplete guidance visible. No
+  submitted ranges means no guidance. Conflicting is true when lower > upper;
+  retain the requested formulas rather than silently swapping them.
+- Set, join and leave recompute guidance atomically. Leaving deletes the private
+  range; room purge includes it. Live catalog ranking reads current guidance,
+  including for already-fetched products. Updates do not spend on a new search,
+  change knowledgeRevision, or modify shares, approvals, payment/contribution caps.
+- Guidance changes only the budget-fit score, not eligibility: products outside
+  either bound remain candidates. It is not copied into the provider's maxPrice
+  or into budgetMinor. Unknown prices remain unknown. Models get aggregates only
+  and are told the bounds are context, never a cutoff or spending authorization.
+- First room entry asks for an explicit range. The right-edge two-handle bar stays
+  editable; saved sliders update on release/key change. Suggested initial values
+  are not stored or counted until a member confirms them. The raw ranges never
+  appear in participant projections, council payloads, logs or recipient tools.
+
 Shared interfaces for parallel work. These TypeScript shapes are documentation, not compiled code. When implementation starts, copy them into `lib/contracts/` and keep this file authoritative for names and semantics.
 
 Owners change this document in the same PR as the code. Consumers mock; they do not invent sibling types.
@@ -930,6 +975,8 @@ May enqueue `AgentJob` `evaluate_thread`.
 | Migration | BE-018 hardening (Dev 2; consumers Dev 1, Dev 3): additive `mediaUploadGrants` table; clients must call `generateEvidenceUploadUrl` once per file before uploading (the shipped `MediaDrop` already does). Server-side `contentType` is the upload request's `Content-Type` header (size is measured by Convex); mutations cannot read bytes, so the extraction action is the first code that sees them. |
 
 Limits: photos and screenshots PNG/JPEG/WebP, at most 3 files, 2.2 MB each (the model adapter's per-image cap), EXIF/GPS stripped in the browser before upload by re-encoding. The server validates type and size and never trusts that. Voice notes: one file, at most 60 seconds. `recipientMarkers` carries the uploader's per-photo tap point marking the recipient (photo sources; a photo without a marker yields scene-only observations). The same `extractClues` job handles every media kind: the action reads the files, deletes them in the same transaction that stores the text rows (and on failure, timeout, or source withdrawal), and writes `PrivateMessage` rows (screenshots, voice notes) or observation rows plus proposed clues (photos) on that source.
+
+After sharing a room photo, the map waits for the saved photo to arrive on the room subscription, focuses its island, and opens its private review panel. Closing the composer is not a published clue: the uploader must still review and publish each suggestion. Failed photo reads and completed reads without suggestions must not remain labeled “Reading”.
 
 ### `extractClues`
 
@@ -1990,6 +2037,8 @@ money, or changes the explicit listing votes table. Organizer-only
 ties remain open or can be skipped through the existing dismissal operation.
 Existing answerSharpen remains for compatibility; the live map uses poll votes.
 
+Gift selection UI: Pass records the gift's downvote on the first click; a reason can be added separately. Gift vote counts and own-vote state are visible alongside the selected product. Votes remain advisory: they do not publish facts, select products or approve payments. One net vote moves the gift 2.2 world units along its ring radius (bounded by the existing ring limits), making human steering more visible without changing source relevance. Selecting a gift runs a 1.2-second eased camera dolly to the actual island photo (reduced motion snaps). The orbit UI uses that same visible photo, with no replacement image, and appears after arrival; closing glides back to the prior view. Four main orbit actions: add to box, support, pass, and its recorded journey. Ownership/price feedback and the source link remain secondary actions.
+
 Research ordering applies direct gift votes, then question support, then existing
 relevance/deterministic tie order BEFORE truncating a pool. Question support is
 an advisory signal from explicitly linked product IDs or literal product-title
@@ -2129,3 +2178,16 @@ Natural narration (D30): `GET /api/moss-voice/speak` → `{ available }` (true w
 `unauthorized`, `validation_failed`, `unavailable` or `provider_timeout`. Members
 only. The narrator uses it when available and falls back to `speechSynthesis` per
 line on any failure. Lines marked `typing: true` are never spoken.
+Map subscriptions fail independently: an unavailable optional endpoint (for example TikTok inspiration) must not remove saved photos, directions, or other successfully loaded map data. The room names the unavailable feature instead of treating it as an empty successful result. Combine reports when no new direction was saved.
+
+### Gift story and gift tag (D26, Dev 4)
+
+Owner: Dev 4. Consumers: Dev 1 (reveal panel, `/gift/[token]`). Additive; no existing field changes.
+
+- `GiftStory = { recipientName, occasion, friends: string[], gifts: { title, imageUrl? }[], memories: string[], words: { word, count }[], themes: string[], directions: { label, why }[], photos: string[], stats: { memories, friends, photos, themes, directions, thrownOut, searches, products, votes } }`. First names only. `memories` are active published clues of kind `interest`/`explicit_wish`/`timing`, without authors or the `Gift idea: ` prefix. `thrownOut` = decision-log `rejected` lines + retired directions. `votes` = up/down votes + map signals.
+- `story.summary({ roomId })` → `Result<GiftStory>`, membership-checked, photos always included.
+- `story.tag({ roomId })` → `Result<{ token, includePhotos, createdAt } | null>`, membership-checked.
+- `story.createTag({ roomId, includePhotos })` → `Result<{ token, includePhotos, createdAt }>`. Organizer only (`unauthorized`); needs an active gift selection (`validation_failed`). Reuses the live tag so a printed QR keeps working; `includePhotos` updates in place.
+- `story.revokeTag({ roomId })` → `Result<{ revoked }>`. Organizer only.
+- `story.byToken({ token })` → `Result<GiftStory>`. **Public, no auth.** `not_found` for malformed, revoked, deleted-room or no-active-gift. `photos` is empty unless the tag includes them. No prices or source links.
+- New `giftStories` table `{ roomId, token, createdBy, includePhotos, createdAt, revokedAt? }`, indexed `by_token` and `by_room`, purged with the room.
