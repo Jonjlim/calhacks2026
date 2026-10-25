@@ -34,6 +34,53 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(potteryTools.context.ret
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("persisted live Google Trends discovery", () => {
+  it("shops an explicitly selected sourced suggestion instead of always using the first", async () => {
+    const s = await completed();
+    const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, idempotencyKey: "picked-second", discoveryQuery: "mkm pottery tools" };
+    const result = value(await s.alex.mutation(api.research.research.startResearch, args));
+    const job = await s.t.run(ctx => ctx.db.get(result.jobId));
+    expect(job?.brief).toMatchObject({ queryTerms: ["mkm pottery tools"], budgetMinor: 8000 });
+    expect(job?.inputHash).toContain(s.jobId);
+    expect(job?.inputHash).toContain("mkm pottery tools");
+    expect(value(await s.alex.mutation(api.research.research.startResearch, { ...args, idempotencyKey: "repeat-second" }))).toEqual(result);
+    expect(await s.alex.mutation(api.research.research.startResearch, { ...args, discoveryQuery: "xiem pottery tools" }))
+      .toMatchObject({ ok: false, error: { code: "validation_failed" } });
+    const different = value(await s.alex.mutation(api.research.research.startResearch, { ...args, idempotencyKey: "picked-fourth", discoveryQuery: "xiem pottery tools" }));
+    expect(different.jobId).not.toBe(result.jobId);
+  });
+  it("deduplicates the first suggestion whether omitted or selected explicitly", async () => {
+    const s = await completed();
+    const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, idempotencyKey: "default-suggestion" };
+    const first = value(await s.alex.mutation(api.research.research.startResearch, args));
+    expect(value(await s.alex.mutation(api.research.research.startResearch, { ...args, discoveryQuery: "  dirty girls pottery tools  " }))).toEqual(first);
+  });
+  it("refuses invented, empty, unbound and oversized direction text before creating research", async () => {
+    const s = await completed();
+    const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, idempotencyKey: "bad-direction" };
+    for (const discoveryQuery of ["made up viral gift", " ", "x".repeat(201)]) {
+      expect(await s.alex.mutation(api.research.research.startResearch, { ...args, discoveryQuery }))
+        .toMatchObject({ ok: false, error: { code: "validation_failed" } });
+    }
+    expect(await s.alex.mutation(api.research.research.startResearch, {
+      roomId: s.roomId, publishedClueIds: [s.clue._id], idempotencyKey: "unbound", discoveryQuery: "mkm pottery tools",
+    })).toMatchObject({ ok: false, error: { code: "validation_failed" } });
+    expect(await s.outsider.mutation(api.research.research.startResearch, { ...args, discoveryQuery: "mkm pottery tools" }))
+      .toMatchObject({ ok: false, error: { code: "unauthorized" } });
+    expect(await s.t.run(ctx => ctx.db.query("researchJobs").collect())).toEqual([]);
+  });
+  it("allows an empty-source default fallback but never an explicit invented direction", async () => {
+    const s = await completed();
+    await s.t.run(async ctx => {
+      const job = (await ctx.db.get(s.jobId))!;
+      await ctx.db.patch(s.jobId, { sample: { ...job.sample!, suggestions: [] } });
+    });
+    const args = { roomId: s.roomId, publishedClueIds: [s.clue._id], trendJobId: s.jobId, idempotencyKey: "empty-default" };
+    const fallback = value(await s.alex.mutation(api.research.research.startResearch, args));
+    expect((await s.t.run(ctx => ctx.db.get(fallback.jobId)))?.brief?.queryTerms).toContain("pottery tools");
+    expect(await s.alex.mutation(api.research.research.startResearch, { ...args, idempotencyKey: "empty-explicit", discoveryQuery: "mkm pottery tools" }))
+      .toMatchObject({ ok: false, error: { code: "validation_failed" } });
+  });
+
   it("denies outsiders before creating jobs", async () => {
     const s = await setup();
     expect(await s.outsider.mutation(f.startDiscovery, s.args)).toMatchObject({ ok: false, error: { code: "unauthorized" } });

@@ -94,3 +94,58 @@ confirmed published interest/wish (e.g. "pottery tools", "rock climbing", "film 
 
 Names, numbers and long phrases are refused before any paid call. Needs Jonathon's deploy
 (new `trendJobs` table) before it works on the shared deployment.
+
+## Phase 2 — chosen ideas in the gift rings
+
+The current map-first plan is on `origin/refactor` (`9550a1a` when this work began).
+It proposes outer memories → middle themes → inner sourced listings → the box.
+The MapTheme/DirectionSignal contracts remain proposed; this work does not invent
+new theme tables or change Alan's agent implementation.
+
+Dev 4 now supports choosing a specific returned trend/style query:
+
+```ts
+api.research.research.startResearch({
+  roomId,
+  publishedClueIds,
+  idempotencyKey: "new-key-for-this-choice",
+  trendJobId: sample.jobId,
+  discoveryQuery: sample.suggestions[1].query,
+});
+```
+
+Use `fashionJobId` plus a returned `sample.directions[i].searchQuery` for public
+style samples. Without `discoveryQuery`, old callers still choose the first
+suggestion. Explicitly choosing that same first item reuses an existing open
+job. Different choices use distinct fingerprints and require new request keys.
+Invented queries are refused; same-room/current-clue/freshness checks stay in
+place. Selection itself makes no external discovery call or preference write;
+it schedules the ordinary research pipeline when deployed and invoked.
+
+Suggested consumer flow (not implemented here):
+
+1. Alan's agent reads the available room-scoped discovery view and proposes an
+   idea with the source URL, observation window, retrieval time and supporting
+   published clue. Existing public discovery starts stay explicit human actions.
+2. Ally renders it as a suggested direction by the relevant theme. “Research
+   this” chooses its exact returned query using the call above.
+3. Sourced products appear on the inner ring. A source path may explain “found
+   while researching MKM pottery tools”; the observed related-search signal
+   does not prove any individual SKU is trending. Keep personal exclusions ahead
+   of trends and keep product prices/shipping/stock with product sources.
+4. “Pass” is an attributed, undoable direction/theme reaction under Dev 2's agreed
+   map contract. It must not withdraw confirmed interests, erase the source,
+   become a private dislike, or silently invalidate everybody's products. The
+   exact shared dismissal behavior still needs the theme/signal checkpoint.
+
+Remaining integration: Dev 3 snapshot/tool wiring and theme generation, Dev 2
+map projection and dismiss semantics, Dev 1 node actions/links. MAP-011 theme IDs
+must derive from recommendation clue IDs after the proposed map contract is
+accepted. No new provider, paid run, UI change, deployment or experience-gift
+promotion is included. Maps/studio spikes remain deferred until the documented
+team approval and architecture decision.
+
+Validation on this branch: full offline suite **617 passed / 3 live skipped**;
+`npm run typecheck` passed for frontend and Convex. Discovery selection is tested
+against persisted fixture jobs; no new live Apify run was made. This validates
+the backend seam, not the unbuilt agent/map interactions or a shared deployment.

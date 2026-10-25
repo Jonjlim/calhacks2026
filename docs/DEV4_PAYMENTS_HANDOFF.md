@@ -91,7 +91,8 @@ On `dev4/phase2-payments` (base `origin/refactor` at `9550a1a`):
   injected fake transport and in-memory store. No keys, network, Convex writes,
   actual card entry, funds or orders. It is suitable for engineering rehearsal;
   a product demo must visibly say simulation if it renders these outcomes.
-- All 130 payment tests pass. Frontend/Convex typecheck is checked separately.
+- All 130 payment tests pass. Frontend and Convex TypeScript checks pass.
+  The combined branch suite passes 617 tests; 3 live tests are skipped.
 
 This does not implement BE-015's missing durable claim bridge, organizer-total
 policy, webhook HTTP route, capture-operation claims or UI. Do not enable or

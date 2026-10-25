@@ -1549,3 +1549,23 @@ The offline rehearsal injects a fake HTTP transport into the real Stripe adapter
 and exercises existing state-machine functions. Its in-memory claim store is a
 test double, not an implementation of Dev 2's durable port or webhook receipt.
 It creates no Convex records, reads no keys and calls no external service.
+
+
+### Choose a sourced discovery direction (Dev 4, Phase 2)
+
+`research/research.startResearch` accepts additive optional `discoveryQuery` with
+`trendJobId` or `fashionJobId`. Existing callers keep the first-direction behavior.
+The value must be 1–200 characters after trimming and exactly match one query in
+that current same-room discovery's suggestions/directions. Arbitrary model text,
+queries without a discovery job, empty samples with an explicit selection,
+withdrawn support, expired samples and foreign jobs are refused before research
+is created. A different selected query needs a new request key; selecting the
+first query explicitly deduplicates with the old default call.
+
+Owner: Dev 4. Consumers: Dev 1 ring actions, Dev 3 discovery planning. No schema
+migration or agent/UI changes. The existing research job stores the selected
+phrase in `brief.queryTerms`; its fingerprint binds the discovery job and query.
+This records a search direction, not a new recipient clue or popularity score.
+Show source context as “found while researching [query]”, never as proof that
+an individual returned product is trending. Dismissing an idea on the map must
+use Dev 2's agreed theme/signal semantics; this endpoint does not persist passes.
