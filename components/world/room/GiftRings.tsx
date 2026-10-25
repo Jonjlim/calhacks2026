@@ -122,7 +122,7 @@ function useRingDrag(center: THREE.Vector3, onDrag: RingsWorld["onDrag"]) {
   return {
     preview,
     begin(key: string, from: [number, number], e: ReactPointerEvent) {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || mapView.locked) return;
       const hit = hitAt(e.clientX, e.clientY);
       if (!hit) return;
       drag.current = { key, from, hit, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, last: from };
@@ -195,7 +195,7 @@ function Ring({ center, radius, label, glow }: { center: THREE.Vector3; radius: 
       </mesh>
       {label && (
         <Html position={[radius * RING_STRETCH * Math.cos(0.3), 0, radius * Math.sin(0.3)]} center zIndexRange={[5, 0]}>
-          <span className={s.ringLabel}>{label}</span>
+          <span data-map-ui className={s.ringLabel}>{label}</span>
         </Html>
       )}
     </group>
@@ -286,7 +286,7 @@ function useMapNavigation(center: THREE.Vector3) {
   }, [camera, gl, size.height, center]);
   return {
     start(e: ThreeEvent<PointerEvent>) {
-      if (e.nativeEvent.button !== 0) return;
+      if (e.nativeEvent.button !== 0 || mapView.locked) return;
       e.nativeEvent.preventDefault();
       window.getSelection()?.removeAllRanges();
       pan.current = { id: e.nativeEvent.pointerId, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY, moved: false };
@@ -339,7 +339,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
   const giftAt = new Map(rings.gifts.map((g) => [g.listingId, place(g.key, g.x, g.z)]));
 
   const onBackdrop = (e: ThreeEvent<MouseEvent>) => {
-    if (e.delta > 6) return;
+    if (e.delta > 6 || mapView.locked) return;
     e.stopPropagation();
     const x = e.point.x - center.x;
     const z = e.point.z - center.z;

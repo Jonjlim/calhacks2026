@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { INTRO_TIMES } from "@/components/intro/introTimeline";
+import { isWideLayout, WORLD_SHARE } from "@/components/unwrap/parchmentLayout";
 import { platformTop } from "./props/Stonework";
 import { type CameraPose, GIFT_SPOT, type Vec3 } from "./sceneConfig";
 
@@ -40,6 +41,22 @@ export function giftClosePose(width: number, height: number): CameraPose {
     shiftX: 0,
     shiftY: aspect < 1 ? 0.06 : 0,
   };
+}
+
+/**
+ * The close-up the Great Gift Convergence ends on: the approved gift close-up,
+ * with the present in the left share of the screen so the gift's story can sit
+ * on the right, the same composition as the invitation.
+ */
+export function convergencePose(width: number, height: number): CameraPose {
+  const close = giftClosePose(width, height);
+  const wide = isWideLayout(width, height);
+  // Stepped back along the same line of sight so the present can rise and the gift has room above the pedestal.
+  const k = 1.38;
+  const [px, py, pz] = close.position;
+  const [tx, ty, tz] = close.target;
+  const pose = { ...close, position: [tx + (px - tx) * k, ty + (py - ty) * k, tz + (pz - tz) * k] as [number, number, number] };
+  return { ...pose, shiftX: wide ? -(1 - WORLD_SHARE) / 2 : 0, shiftY: wide ? 0 : -0.14 };
 }
 
 const lerp3 = (a: Vec3, b: Vec3, k: number): Vec3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];

@@ -5,7 +5,9 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
 import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
-import { CameraTour, giftClosePose, TOUR_START } from "./cameraPath";
+import { convergence } from "@/components/convergence/convergenceClock";
+import { cameraPush as pushProgress, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
+import { CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
 import { giftTag } from "./giftTag/giftTagStore";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
 import { lobbyPose, topPose } from "./unwrap/invitationLayout";
@@ -138,6 +140,24 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         return { ...base, position: [px + view.x, py, pz + view.z], target: [tx + view.x, ty, tz + view.z] };
       };
       const scenePose = poseOf(shown);
+      if (convergence.active) {
+        // The Great Gift Convergence owns the camera: it starts exactly where the map was, glides in to the present, and glides back when the reveal is closed.
+        const end = convergencePose(w, size.height);
+        const began = convergence.startPose;
+        if (!began) {
+          convergence.startPose = {
+            position: camera.position.toArray() as [number, number, number],
+            target: live.target.toArray() as [number, number, number],
+            fov: camera.fov,
+            shiftX: applied.current.shiftX < 0 ? scenePose.shiftX : applied.current.shiftX,
+            shiftY: applied.current.shiftY < 0 ? scenePose.shiftY : applied.current.shiftY,
+          };
+        }
+        if (convergence.instant && !convergence.leaving) applyPose(end, end, 1);
+        else if (convergence.leaving) applyPose(end, scenePose, smoother(tspan(convergence.exit, 0, EXIT_TIME)));
+        else applyPose(convergence.startPose ?? scenePose, end, pushProgress(convergence.t));
+        return;
+      }
       if (roomStage.glide && !reducedMotion) {
         // Garden ↔ map: one continuous pull-back (or push-in) in the same sky.
         const k = roomStage.glideProgress;

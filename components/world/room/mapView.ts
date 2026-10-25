@@ -23,13 +23,17 @@ class MapView {
   current: MapViewState = { x: 0, z: 0, zoom: 1 };
   /** While a finger or mouse is dragging the sky, the view follows it exactly instead of easing. */
   dragging = false;
+  /** The gift reveal owns the camera: nothing moves the map meanwhile. */
+  locked = false;
 
   pan(dx: number, dz: number) {
+    if (this.locked) return;
     this.target.x = clamp(this.target.x + dx, -PAN_X, PAN_X);
     this.target.z = clamp(this.target.z + dz, -PAN_Z, PAN_Z);
   }
 
   zoomBy(factor: number) {
+    if (this.locked) return;
     this.target.zoom = clamp(this.target.zoom * factor, ZOOM_MIN, ZOOM_MAX);
   }
 

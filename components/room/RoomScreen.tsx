@@ -22,6 +22,7 @@ import {
 import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
 import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
 import { RoomLayout } from "./RoomLayout";
+import { RevealHarness } from "./RevealHarness";
 import type { RoomActions, RoomData } from "./types";
 
 export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surface?: RoomSurface }) {
@@ -31,6 +32,7 @@ export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surf
   useEffect(() => {
     if (surface === "stage" && guessSurface() === "phone") router.replace(phonePath(roomId));
   }, [surface, roomId, router]);
+  if (process.env.NODE_ENV !== "production" && roomId === "dev-reveal") return <RevealHarness />;
   return convex ? <LiveRoomGate roomId={roomId} surface={surface} /> : <PreviewRoom roomId={roomId} />;
 }
 

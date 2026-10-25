@@ -7,7 +7,10 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
+import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
+import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
 import { mapView } from "@/components/world/room/mapView";
@@ -77,8 +80,71 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
     firstStage.current = false;
   }, [resolvedStage, reducedMotion]);
 
+  // --- The Great Gift Convergence: the organizer's reveal of the chosen gift (local presentation of Convex's persisted selection).
+  const engaged = useConvergenceActive();
+  const convState = useConvergenceState();
+  const selection = data.selection?.status === "active" ? data.selection : null;
+  const revealedKey = selection ? `unwrap:revealed:${selection.id}` : null;
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    try {
+      setSeen(!!revealedKey && localStorage.getItem(revealedKey) === "1");
+    } catch {
+      setSeen(false);
+    }
+  }, [revealedKey]);
+  useEffect(() => {
+    if (convState !== "complete" || !revealedKey || convergence.instant) return;
+    try {
+      localStorage.setItem(revealedKey, "1");
+    } catch {
+      // ignore
+    }
+    setSeen(true);
+  }, [convState, revealedKey]);
+  const ringsRef = useRef<ReturnType<typeof useGiftRings>["rings"]>(null);
+  const startReveal = useCallback(
+    (instant: boolean) => {
+      const sel = data.selection?.status === "active" ? data.selection : null;
+      const rings = ringsRef.current;
+      if (!sel || !rings || convergence.active) return;
+      const rec = data.recommendations.find((r) => r.listingId === sel.listingId);
+      const cited = new Set(rec?.publishedClueIds ?? []);
+      const kindOf = new Map(data.publishedClues.map((c) => [c.id, c.kind]));
+      const inputs: ArtifactInput[] = [
+        ...rings.clues.map((c): ArtifactInput => ({ key: c.key, source: kindOf.get(c.key.slice(5)) === "explicit_wish" ? "wish" : "memory", text: c.text, x: c.x, z: c.z, supports: cited.has(c.key.slice(5)) })),
+        ...rings.ideas.map((i): ArtifactInput => ({ key: i.key, source: "idea", text: i.text, x: i.x, z: i.z })),
+        // The other real gifts the room considered; the chosen one is the reveal itself.
+        ...rings.gifts.filter((g) => g.listingId !== sel.listingId).map((g): ArtifactInput => ({ key: g.key, source: "gift", text: g.title, x: g.x, z: g.z })),
+      ];
+      convergence.start({ selectionId: sel.id, inputs, total: inputs.length, instant: instant || reducedMotion });
+    },
+    [data.selection, data.recommendations, data.publishedClues, reducedMotion],
+  );
+  const replayReveal = useCallback(() => {
+    convergence.abort();
+    startReveal(false);
+  }, [startReveal]);
+  // The reveal is only ever the room's current choice: if it changes or is cleared, the reveal is dropped.
+  useEffect(() => {
+    if (convergence.active && convergence.selectionId !== (selection?.id ?? null)) convergence.abort();
+  }, [selection?.id]);
+  useEffect(() => {
+    if (stage !== "map" && convergence.active) convergence.abort();
+  }, [stage]);
+  useEffect(() => () => convergence.abort(), []);
+  useEffect(() => {
+    mapView.locked = engaged;
+    document.documentElement.dataset.convergence = engaged ? "on" : "off";
+    return () => {
+      mapView.locked = false;
+      delete document.documentElement.dataset.convergence;
+    };
+  }, [engaged]);
+
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
-  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }) });
+  const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
+  ringsRef.current = map.rings;
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {
@@ -153,13 +219,13 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
-      {stage === "map" && !preview && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
+      {stage === "map" && !preview && !engaged && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
       {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
       {/* Identity */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        className="pointer-events-auto absolute top-5 left-5 flex items-center gap-3 rounded-[20px] paper-card px-4 py-2.5">
+        className={`absolute top-5 left-5 flex items-center gap-3 rounded-[20px] paper-card px-4 py-2.5 transition-opacity duration-500 ${engaged ? "pointer-events-none !opacity-0" : "pointer-events-auto"}`}>
         <a href="/" className="font-display text-[24px] leading-none font-semibold" aria-label="Unwrap home">unwrap<span className="text-coral-soft">.</span></a>
         <span className="h-7 w-px bg-dusk/15" aria-hidden />
         <div className="leading-tight">
@@ -175,7 +241,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       </motion.div>
 
       {/* Invite + small toggles */}
-      <div className="pointer-events-auto absolute top-5 right-5 flex flex-col items-end gap-2">
+      <div className={`absolute top-5 right-5 flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
           <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
           <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
@@ -190,7 +256,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       )}
 
       {/* Phase bar */}
-      <div className="pointer-events-auto absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)]">
+      <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <span className="flex gap-1" aria-hidden>
           {COUNCIL_ACTORS.map((a) => (
             <span key={a} className={`h-2.5 w-2.5 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
@@ -201,6 +267,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Click outside to add a memory · click near the present for a gift idea · drag to move" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
+          {stage === "map" && selection && isOrganizer && !preview && (
+            <button className="btn-primary h-11 px-5" onClick={() => startReveal(false)}>{seen ? "Replay reveal" : "Reveal our gift"} <span aria-hidden>✨</span></button>
+          )}
           {primary}
           {stage === "map" ? (
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("garden")}>Back to the present</button>
@@ -222,8 +291,17 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       </div>
       {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
 
+      {selection && (
+        <ConvergenceOverlay
+          gift={{ selection, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues }}
+          isOrganizer={isOrganizer}
+          onPlan={() => setDrawer({ kind: "shares" })}
+          onReplay={replayReveal}
+        />
+      )}
+
       <AnimatePresence>
-        {drawer && (
+        {drawer && !engaged && (
           <motion.aside key="drawer" role="dialog" aria-modal="false" aria-label="Details"
             initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 40, opacity: 0 }} transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="pointer-events-auto absolute top-24 right-5 bottom-28 flex w-[min(440px,calc(100vw-40px))] flex-col overflow-hidden rounded-[24px] bg-[#fbf7f0]/96 shadow-[0_30px_60px_-30px_rgba(60,36,30,0.6)] ring-1 ring-dusk/10 backdrop-blur-md">

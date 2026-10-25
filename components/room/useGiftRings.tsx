@@ -19,13 +19,16 @@ const PASTE_CHARS = 280;
 const PASTE_LINES = 3;
 const looksPasted = (text: string) => text.length > PASTE_CHARS || text.split(/\n/).filter((l) => l.trim()).length >= PASTE_LINES;
 
-export function useGiftRings({ data, actions, isOrganizer, active, onShares, onPaste }: {
+export function useGiftRings({ data, actions, isOrganizer, active, onShares, onPaste, onReveal, revealSeen = false }: {
   data: RoomData;
   actions?: RoomActions;
   isOrganizer: boolean;
   active: boolean;
   onShares(): void;
   onPaste(): void;
+  /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
+  onReveal?(instant: boolean): void;
+  revealSeen?: boolean;
 }): { rings: RingsWorld | null; notice: string | null; error: string | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -116,6 +119,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       return {
         caption: <><b>{selection.listingSnapshot.title}</b> · {priceOf(selection.listingId)} · {approved}/{participants.length} approved</>,
         actions: [
+          ...(onReveal ? [{ icon: "✨", label: isOrganizer ? (revealSeen ? "Replay reveal" : "Reveal our gift") : "See our gift", tone: "gold" as const, run: () => onReveal(!isOrganizer) }] : []),
           { icon: "🧾", label: "Shares & approvals", tone: "gold", run: onShares },
           { icon: "✨", label: why ? "Hide the path" : "Why this?", on: why, run: () => setWhy((w) => !w) },
           ...(isOrganizer && actions ? [{ icon: "↩", label: "Take it out", disabled: pending, run: () => void run(() => actions.clearSelection(), "The box is empty again. Approvals for the old version no longer count.") }] : []),
