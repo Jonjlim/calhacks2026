@@ -201,6 +201,8 @@ const mapSharpens: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 const mapDirections: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("mapDirections").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const roomTrail: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("roomTrail").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
 const participants: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
@@ -240,6 +242,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["mapThemes", mapThemes],
   ["mapSharpens", mapSharpens],
   ["mapDirections", mapDirections],
+  ["roomTrail", roomTrail],
   ["roomPhotos", roomPhotos],
   ["participants", participants],
 ];

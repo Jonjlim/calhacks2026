@@ -15,6 +15,7 @@ import { emptyTrendNote, isTrendKey, TREND_KEY_PREFIX, trendKey } from "@/lib/ma
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { BoxPanel } from "./BoxPanel";
+import { HowWeGotHere } from "./HowWeGotHere";
 import type { RoomActions, RoomData } from "./types";
 
 /** One colour per storybook friend, shared by cursors, pledge arcs, vote chips and faces. */
@@ -53,7 +54,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; story: ReactNode | null } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -71,6 +72,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const [trendAsked, setTrendAsked] = useState<number | null>(null);
   /** Index of the photo open in the large tap-the-person view, if any. */
   const [marking, setMarking] = useState<number | null>(null);
+  /** "How we got here": the whole room's story, or one gift's (its listing id). */
+  const [story, setStory] = useState<{ listingId?: string } | null>(null);
+  const closeStory = useCallback(() => setStory(null), []);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -171,7 +175,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   const openBox = () => setSelectedKey("box");
-  if (!active) return { rings: null, notice, error, openBox };
+  if (!active) return { rings: null, notice, error, openBox, story: null };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -188,7 +192,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     if (!actions) return;
     void run(() => actions.startResearch(allClueIds), "The council is looking for real gifts from these memories.").then((ok) => ok && setResearchFrom(from));
   };
-  const findGiftsFrom = (from: string, label?: string): RingAction[] => isOrganizer && actions
+  // With directions (D23 trial), gifts are found per direction; the council's room-wide search is set aside.
+  const findGiftsFrom = (from: string, label?: string): RingAction[] => isOrganizer && actions && !actions.proposeDirections
     ? [{ icon: "sprout", label: label ?? (recs.length ? "Find more gifts" : "Find gifts"), more: !label, disabled: !!pending || !allClueIds.length, run: () => startSearch(from) }]
     : [];
 
@@ -336,6 +341,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
           { icon: "present", label: isOrganizer ? (inBox ? "In the box" : "Put in the box") : "Vote for the box", tone: "gold", on: inBox, more: true, disabled: !!pending, run: () => choose(listingId) },
           { icon: "home", label: "She already has it", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "owned"), "Shared with the room: she already owns this. Ideas are being rechecked.") },
           { icon: "coins", label: "Too pricey for me", more: true, disabled: !!pending, run: () => void run(() => actions.reactToGift(listingId, "price"), "Saved for you. Budgets and private limits did not change.") },
+          { icon: "thread", label: "How we got here", more: true, run: () => setStory({ listingId }) },
           { icon: "open", label: "Open the listing", more: true, run: () => window.open(listing.sourceUrl, "_blank", "noopener,noreferrer") },
           ...(trendByListing.has(listingId) ? [{ icon: "trend" as const, label: "See the trend", more: true, run: () => window.open(trendByListing.get(listingId)!.sourceUrl, "_blank", "noopener,noreferrer") }] : []),
         ] : [],
@@ -614,7 +620,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   } : null;
   const boxPanel = (
     <BoxPanel proposal={data.proposal} selection={selection} listing={selection ? listingById.get(selection.listingId) : undefined} participants={participants} me={me}
-      isOrganizer={isOrganizer} actions={actions} avatarOf={avatarOf} colorOf={colorOf} why={!!selection && whyListing === selection.listingId} onWhy={() => setWhyListing((w) => (selection && w !== selection.listingId ? selection.listingId : null))} onClose={() => setSelectedKey(null)}
+      isOrganizer={isOrganizer} actions={actions} avatarOf={avatarOf} colorOf={colorOf} why={!!selection && whyListing === selection.listingId}
+      // "Why this gift?" lights the path on the map and opens the whole story behind it.
+      onWhy={() => { if (selection) { setWhyListing(selection.listingId); setStory({ listingId: selection.listingId }); } }} onClose={() => setSelectedKey(null)}
       onReveal={onReveal ? () => { setSelectedKey(null); onReveal(!isOrganizer); } : undefined} revealLabel={isOrganizer ? (revealSeen ? "Replay reveal" : "Reveal our gift") : "See our gift"} />
   );
 
@@ -657,8 +665,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const councilActs: RingAction[] = actions ? [
     ...(actions.proposeDirections ? [{ icon: "spark" as const, label: thinking ? "Combining…" : directions.length ? "New directions" : "Combine into directions", disabled: !!pending || clues.length < 2, run: proposeDirections }] : []),
     { icon: "gather", label: pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes", disabled: !!pending || clues.length < 3, run: () => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes") },
-    ...(isOrganizer ? [{ icon: "sprout" as const, label: searching ? "Searching…" : recs.length ? "Find more gifts" : "Find gifts", disabled: !!pending || searching || !allClueIds.length, run: () => startSearch("box") }] : []),
+    ...(isOrganizer && !actions.proposeDirections ? [{ icon: "sprout" as const, label: searching ? "Searching…" : recs.length ? "Find more gifts" : "Find gifts", disabled: !!pending || searching || !allClueIds.length, run: () => startSearch("box") }] : []),
     { icon: "scales", label: pending === "sharpen" ? "Thinking…" : "Help us choose", disabled: !!pending || recs.length < 2 || sharpenOpen, run: () => void run(() => actions.sharpen(), "The council has one question for you.", "sharpen") },
+    ...(data.trail ? [{ icon: "thread" as const, label: "How we got here", disabled: !data.trail.length, run: () => setStory({}) }] : []),
   ] : [];
   const act = (label: string) => councilActs.find((a) => a.label === label);
   let nextStep: RingsWorld["nextStep"] = null;
@@ -789,5 +798,20 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const trendFailed = trendAsked !== null && trendJob && trendJob.createdAt >= trendAsked - 5000 && (trendJob.status === "failed" || trendJob.status === "stale")
     ? `The trend lookup stopped${trendJob.lastError ? `: ${trendJob.lastError}` : "."} Memories and gifts are unchanged.`
     : null;
-  return { rings, notice, error: error ?? trendFailed, openBox };
+  // "How we got here": the decision log, lit along the chosen gift's path when one is open.
+  let storyNode: ReactNode | null = null;
+  if (story && data.trail) {
+    const rec = story.listingId ? recs.find((r) => r.listingId === story.listingId) : undefined;
+    const listing = story.listingId ? listingById.get(story.listingId) : undefined;
+    const via = directionOf(rec?.foundBy?.directionId);
+    // The boxed gift may have left the shown shortlist; its box snapshot still names it.
+    const title = listing?.title ?? (selection && selection.listingId === story.listingId ? selection.listingSnapshot.title : undefined);
+    storyNode = (
+      <HowWeGotHere entries={data.trail} onClose={closeStory}
+        {...(rec && listing ? { chain: whyChain(rec, listing) } : {})}
+        {...(title ? { giftTitle: title } : {})}
+        {...(story.listingId ? { focus: { listingId: story.listingId, ...(via ? { directionId: via.id, clueIds: via.clueIds } : rec ? { clueIds: rec.publishedClueIds } : {}) } } : {})} />
+    );
+  }
+  return { rings, notice, error: error ?? trendFailed, openBox, story: storyNode };
 }

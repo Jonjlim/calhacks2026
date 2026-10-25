@@ -137,6 +137,39 @@ describe("the council proposing directions without a model", () => {
   });
 });
 
+describe("how we got here", () => {
+  it("records each step as one readable line, for members only", async () => {
+    const s = await setup();
+    vi.stubEnv("LLM_API_KEY", "");
+    unwrap(await s.alex.action(api.agents.directions.propose, { roomId: s.roomId }));
+    const [d] = unwrap(await s.alex.query(api.agents.directions.list, { roomId: s.roomId }));
+    await s.finish(await s.search(d!.id as Id<"mapDirections">, "a1"));
+    unwrap(await s.alex.mutation(api.mapSignals.setDirection, { roomId: s.roomId, targetKind: "direction", targetId: d!.id, value: -1 }));
+    const trail = unwrap(await s.alex.query(api.trail.list, { roomId: s.roomId }));
+    expect(trail.map((e) => e.stage)).toEqual(expect.arrayContaining(["council", "search", "steering"]));
+    expect(trail.find((e) => e.stage === "council" && e.outcome === "kept")).toMatchObject({ actor: "council", directionId: d!.id });
+    expect(trail.find((e) => e.stage === "search")?.text).toMatch(/^Searched Google Shopping for “pottery pottery tools”: \d+ results came back/);
+    expect(trail.find((e) => e.stage === "steering")).toMatchObject({ outcome: "rejected", who: expect.any(String) });
+    expect(trail.find((e) => e.stage === "steering")?.text).toContain("passed on the direction");
+    const eve = s.t.withIdentity({ subject: "user_eve|session2" });
+    expect((await eve.query(api.trail.list, { roomId: s.roomId })).ok).toBe(false);
+  });
+
+  it("names shares on approval but never anyone's private maximum", async () => {
+    const s = await setup();
+    await s.finish(await s.search(undefined, "g1"));
+    const listing = (await s.t.run((ctx) => ctx.db.query("productListings").first()))!;
+    unwrap(await s.alex.mutation(api.proposals.selectGift, { roomId: s.roomId, listingId: listing._id }));
+    unwrap(await s.alex.mutation(api.proposals.setContributionLimit, { roomId: s.roomId, amountMinor: 987_654 }));
+    const proposal = unwrap(await s.alex.query(api.proposals.getProposal, { roomId: s.roomId }));
+    unwrap(await s.alex.mutation(api.proposals.approveRevision, { revisionId: proposal.revision!.id as Id<"proposalRevisions"> }));
+    const trail = unwrap(await s.alex.query(api.trail.list, { roomId: s.roomId }));
+    expect(trail.find((e) => e.stage === "choice")?.text).toContain("in the box");
+    expect(trail.filter((e) => e.stage === "money").map((e) => e.text).join(" ")).toMatch(/approved the \$[\d.,]+ version/);
+    expect(JSON.stringify(trail)).not.toMatch(/9,?876\.54|987654/);
+  });
+});
+
 describe("answers and reactions stay out of the memory list", () => {
   it("a preset sharpen answer is a vote, not a memory", async () => {
     const s = await setup();

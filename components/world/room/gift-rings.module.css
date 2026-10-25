@@ -406,6 +406,40 @@
 .directionCloud { --cloud: #f1eefb; --edge: #b9aee6; }
 .directionMark { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #6a5aa8; font-style: normal; }
 
+/* "How we got here" (D23 trial): the room's decision log as one flow, in the world's ivory card */
+.storyBackdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgb(65 52 76 / .45), rgb(40 24 44 / .72)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: markVeil .25s ease-out both; }
+.storyCard { width: min(760px, 100%); max-height: 92vh; overflow-y: auto; padding: 18px 22px 16px; border-radius: 22px; background: linear-gradient(180deg, var(--color-ivory), #f7ecd7); color: var(--color-dusk); font: 500 13px/1.45 var(--font-sans); box-shadow: 0 30px 60px -24px rgb(40 24 44 / .7), 0 0 0 1px rgb(217 182 111 / .5); animation: boxIn .35s cubic-bezier(.2,.9,.3,1.2) both; }
+.storyHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.storyHead small { font: 700 10px var(--font-sans); letter-spacing: .12em; text-transform: uppercase; color: #a07a2c; }
+.storyHead h2 { margin: 2px 0 4px; font: italic 600 26px/1.1 var(--font-display); }
+.storyHead p { margin: 0; font-size: 12px; color: var(--color-plum-soft); }
+.storyClose { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid rgb(65 52 76 / .2); border-radius: 50%; background: rgb(255 255 255 / .6); color: var(--color-dusk); cursor: pointer; }
+.storyWhy { margin: 14px 0 6px; padding: 12px 14px; border-radius: 16px; background: #f6e7c8; box-shadow: 0 0 0 1px rgb(217 182 111 / .6); }
+.storyWhy h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font: 700 12px var(--font-sans); letter-spacing: .04em; color: #7a5a1c; }
+.storyWhy .chain { font-size: 12.5px; color: #4a3820; }
+.storyFlow { list-style: none; margin: 14px 0 0; padding: 0; }
+.storyStage { position: relative; display: grid; grid-template-columns: 36px 1fr; gap: 10px; padding-bottom: 14px; }
+/* The thread that joins the stages, from one numbered node to the next */
+.storyStage::before { content: ""; position: absolute; left: 17px; top: 34px; bottom: 0; width: 2px; background: linear-gradient(rgb(217 182 111 / .9), rgb(217 182 111 / .35)); }
+.storyStage:last-child::before { display: none; }
+.storyNode { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #a07a2c; box-shadow: 0 0 0 2px var(--color-gold), 0 6px 14px -8px rgb(40 24 44 / .7); }
+.storyNode i { position: absolute; right: -5px; bottom: -4px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-dusk); color: var(--color-ivory); font: 700 9px/16px var(--font-sans); font-style: normal; text-align: center; }
+.storyStage h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 6px 0 6px; font: 600 17px/1.2 var(--font-display); }
+.storyStage h4 small { font: 600 11px var(--font-sans); color: var(--color-plum-soft); }
+.storyEmpty { opacity: .55; }
+.storyNone { margin: 0; font-size: 12px; color: var(--color-plum-soft); }
+.storyStage ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.storyRow { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 12px; background: rgb(255 255 255 / .55); border-left: 3px solid rgb(65 52 76 / .2); }
+.storyRow b { font: 700 11px var(--font-sans); letter-spacing: .02em; white-space: nowrap; }
+.storyRow time { font-size: 10.5px; color: var(--color-plum-soft); white-space: nowrap; }
+.storyKept { border-left-color: #86b766; }
+.storyOut { border-left-color: #e08f8a; background: rgb(224 143 138 / .1); }
+.storyOut span { color: #7a3a34; }
+.storyLit { background: #fff; box-shadow: 0 0 0 2px var(--color-gold); }
+.storyFoot { margin: 6px 0 0; font-size: 11px; color: var(--color-plum-soft); }
+@media (max-width: 520px) { .storyRow { grid-template-columns: 1fr; gap: 2px; } }
+@media (prefers-reduced-motion: reduce) { .storyBackdrop, .storyCard { animation: none; } }
+
 /* "Why this gift?": the path the council actually took, one step per line */
 .note:has(.chain) { max-width: 300px; }
 .chain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; text-align: left; }

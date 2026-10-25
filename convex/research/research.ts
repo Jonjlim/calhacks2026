@@ -17,6 +17,7 @@ import { normalizeDataset } from "./normalize";
 import { readCatalog } from "./catalog";
 import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
+import { logTrail } from "../lib/trail";
 import { usableFashionJob } from "./fashion";
 import { usableTrendJob } from "./trendJobs";
 
@@ -188,10 +189,16 @@ export const settleJob = internalMutation({
     if (!job || job.status !== "running") return null;
     if (await staleUnlessCurrent(ctx, job)) return null;
     await ctx.db.patch(job._id, { status: args.status, lastError: args.message });
+    await logSearch(ctx, job, "rejected", `The search for “${job.brief?.queryTerms[0] ?? "gifts"}” ${args.status === "failed" ? "failed" : "didn’t finish"}: ${args.message}`);
     await enqueueResearchContinuation(ctx, job._id);
     return null;
   },
 });
+
+/** "How we got here": what one product search did (D23 trial). */
+async function logSearch(ctx: MutationCtx, job: Doc<"researchJobs">, outcome: "kept" | "rejected", text: string) {
+  await logTrail(ctx, job.roomId, { stage: "search", actor: "search", outcome, text, ...(job.directionId ? { directionId: job.directionId } : {}) });
+}
 
 export const completeJob = internalMutation({
   args: { jobId: v.id("researchJobs"), raw: v.any(), retrievedAt: v.number() },
@@ -200,8 +207,10 @@ export const completeJob = internalMutation({
     if (!job || job.status !== "running") return null; // duplicate callbacks cannot insert twice
     if (await staleUnlessCurrent(ctx, job)) return null;
     const listings = normalizeDataset(args.raw, args.retrievedAt);
+    const query = job.brief?.queryTerms[0] ?? "gifts";
     if (!listings.length) {
       await ctx.db.patch(job._id, { status: "failed", lastError: "No usable product listings were returned." });
+      await logSearch(ctx, job, "rejected", `Searched Google Shopping for “${query}”, but no listing had a source, a US price and a retrieval time, so none were kept.`);
       await enqueueResearchContinuation(ctx, job._id);
       return null;
     }
@@ -211,6 +220,8 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
+    const raw = Array.isArray(args.raw) ? args.raw.reduce((n: number, page: { shopping_results?: unknown[] }) => n + (page?.shopping_results?.length ?? 0), 0) : 0;
+    await logSearch(ctx, job, "kept", `Searched Google Shopping for “${query}”: ${raw || listings.length} results came back and ${Math.min(listings.length, 60)} had a source link, a US price and a retrieval time.${raw > listings.length ? ` ${raw - listings.length} were dropped as incomplete or repeated.` : ""}`);
     await enqueueResearchContinuation(ctx, job._id);
     return null;
   },

@@ -17,6 +17,7 @@ import type { Result } from "../../lib/contracts";
 import { requireMember } from "../lib/auth";
 import { cleanText, LIMITS } from "../lib/input";
 import { bumpKnowledgeRevision } from "../lib/knowledge";
+import { logTrail } from "../lib/trail";
 import { err, memberError, ok } from "../lib/result";
 import { BASE_INSTRUCTIONS, containsSensitiveData } from "./engine";
 import { IDEA_CALLS_PER_WINDOW } from "./ideas";
@@ -305,6 +306,9 @@ export const answerSharpen = mutation({
         else await ctx.db.insert("votes", { roomId: row.roomId, listingId, participantId: member.me._id, value: "up", updatedAt: Date.now() });
       }
       await ctx.db.patch(sharpenId, { status: "answered", answer: option, answeredBy: member.me._id });
+      await logTrail(ctx, row.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "kept",
+        ...(chosen.listingIds[0] ? { listingId: chosen.listingIds[0] } : {}),
+        text: `${member.me.displayName || "A friend"} answered “${row.question}” with ${chosen.label}. Counted as a vote for that gift, not as a memory.` });
       return ok<Out>({});
     }
     const text = cleanText(chosen.clue, LIMITS.clueTextMaxChars);
@@ -315,6 +319,9 @@ export const answerSharpen = mutation({
     });
     await ctx.db.patch(sharpenId, { status: "answered", answer: option, answeredBy: member.me._id });
     await bumpKnowledgeRevision(ctx, row.roomId);
+    await logTrail(ctx, row.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "kept", clueIds: [clueId],
+      ...(row.directionId ? { directionId: row.directionId } : {}),
+      text: `${member.me.displayName || "A friend"} answered “${row.question}”: ${chosen.label}. Shared as their memory: “${text}”` });
     return ok<Out>({ clueId });
   },
 });

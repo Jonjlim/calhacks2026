@@ -8,6 +8,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { err, memberError, ok } from "./lib/result";
+import { logTrail, shortTitle } from "./lib/trail";
 import * as V from "./validators";
 
 type Tally = { up: number; down: number; flag_duplicate: number };
@@ -46,6 +47,10 @@ export const castVote = mutation({
     } else {
       await ctx.db.insert("votes", { roomId, listingId, participantId: member.me._id, value, updatedAt: now });
     }
+    // "How we got here" (D23 trial): only a changed vote is a new decision.
+    if (existing?.value !== value) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, listingId,
+      outcome: value === "up" ? "kept" : value === "down" ? "rejected" : "info",
+      text: `${member.me.displayName || "A friend"} ${value === "up" ? "pulled in" : value === "down" ? "passed on" : "voted on"} “${shortTitle(listing.title)}”.` });
     return ok<Out>({ listingId, tally: await tallyFor(ctx, listingId) });
   },
 });

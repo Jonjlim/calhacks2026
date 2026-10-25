@@ -256,6 +256,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
       {stage === "map" && !preview && !engaged && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
+      {/* "How we got here" (D23 trial): portaled above the world, like the photo viewer. */}
+      {map.story}
       {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 

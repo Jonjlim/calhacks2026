@@ -59,7 +59,11 @@ export interface RoomData {
   directions?: MapDirection[];
   /** What each search that fed the map did, for "Why this gift?" (D23 trial). */
   searchPools?: SearchPoolSummary[];
+  /** The room's decision log, for "How we got here" (D23 trial). */
+  trail?: TrailEntry[];
 }
+
+export type TrailEntry = OkValue<FunctionReturnType<typeof api.trail.list>>[number];
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
 

@@ -53,25 +53,57 @@ export function acceptDirections(
   trends: readonly CaughtTrend[],
   isSensitive: (text: string) => boolean,
 ): DirectionDraft[] {
+  return screenDirections(output, memories, trends, isSensitive).accepted;
+}
+
+/** What the checks threw out, in words the room can read ("How we got here"). */
+export interface RejectedDirection { label: string; reason: string }
+
+/** Same rules as acceptDirections, also saying why each refused direction was refused. */
+export function screenDirections(
+  output: DirectionsOutput,
+  memories: readonly DirectionMemory[],
+  trends: readonly CaughtTrend[],
+  isSensitive: (text: string) => boolean,
+): { accepted: DirectionDraft[]; rejected: RejectedDirection[] } {
   const accepted: DirectionDraft[] = [];
+  const rejected: RejectedDirection[] = [];
   const queries = new Set<string>();
   for (const d of output.directions) {
-    const cited = [...new Set(d.memories)].map((n) => memories[n]).filter((m): m is DirectionMemory => !!m);
-    if (cited.length !== new Set(d.memories).size || !cited.length) continue;
-    if (cited.length < 2 && !cited.some((m) => m.kind === "explicit_wish")) continue;
-    if (!cited.some((m) => positive(m.kind))) continue;
     const label = tidy(d.label, 48);
+    const refuse = (reason: string) => rejected.push({ label, reason });
+    const cited = [...new Set(d.memories)].map((n) => memories[n]).filter((m): m is DirectionMemory => !!m);
+    if (cited.length !== new Set(d.memories).size || !cited.length) { refuse("it cited a memory nobody shared"); continue; }
+    if (cited.length < 2 && !cited.some((m) => m.kind === "explicit_wish")) { refuse("it rested on one memory that isn't a wish"); continue; }
+    if (!cited.some((m) => positive(m.kind))) { refuse("it only cited things she owns or doesn't want"); continue; }
     const query = tidy(d.query, 60).toLowerCase();
     const why = tidy(d.why, 220);
-    if ([label, query, why].some((t) => UNSAFE.test(t) || isSensitive(t))) continue;
-    if (queries.has(query)) continue;
+    if ([label, query, why].some((t) => UNSAFE.test(t) || isSensitive(t))) { refuse("it included a link, a price or a sensitive detail"); continue; }
+    if (queries.has(query)) { refuse("it repeated another direction's search"); continue; }
     const trend = d.trend === undefined ? undefined : trends[d.trend];
-    if (d.trend !== undefined && !trend) continue;
+    if (d.trend !== undefined && !trend) { refuse("it used a trend nobody caught"); continue; }
     queries.add(query);
     const broad = d.broad || (cited.length === 1 && isBroadPhrase(cited[0]!.text));
     accepted.push({ label, query, why, clueIds: cited.map((m) => m.id), ...(trend ? { trend } : {}), broad });
   }
-  return accepted.slice(0, MAX_DIRECTIONS);
+  for (const extra of accepted.slice(MAX_DIRECTIONS)) rejected.push({ label: extra.label, reason: `only ${MAX_DIRECTIONS} directions fit on the map` });
+  return { accepted: accepted.slice(0, MAX_DIRECTIONS), rejected };
+}
+
+/**
+ * How the reader turned memories into search words, for the log:
+ * only the ones it actually changed ("we hiked mt hood" → "hiking").
+ */
+export function memoryReadings(memories: readonly DirectionMemory[], limit = 4): { text: string; reading: string }[] {
+  const out: { text: string; reading: string }[] = [];
+  for (const m of memories) {
+    if (!positive(m.kind)) continue;
+    const reading = shoppingPhrases(m.text).join(" + ");
+    const plain = m.text.trim().toLowerCase().replace(/[.!?]+$/, "");
+    if (reading && reading !== plain) out.push({ text: m.text, reading });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

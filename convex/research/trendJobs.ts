@@ -11,6 +11,7 @@ import { internalAction, internalMutation, mutation, query } from "../_generated
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 import { requireMember } from "../lib/auth";
 import { err, ok } from "../lib/result";
+import { logTrail } from "../lib/trail";
 import { isTrendSampleFresh, trendSeed } from "./trendPolicy";
 import {
   createTrendProvider, TREND_ACTOR, TREND_BUILD, TREND_DEADLINE_MS, TREND_GEO, TREND_MAX_ROWS, TREND_TIME_RANGE,
@@ -324,6 +325,10 @@ export const completeDiscovery = internalMutation({
       publishedClueId: job.publishedClueId, suggestions, screen: approved ? "model" : "words",
       evidenceSummary: { returnedRows: raw.length, observations: observations.length },
     } });
+    await logTrail(ctx, job.roomId, { stage: "council", actor: "trends", outcome: suggestions.length ? "kept" : "info", clueIds: [job.publishedClueId],
+      text: !observations.length
+        ? `Google Trends had no related US searches for “${job.seedTerm}” in the past 3 months.`
+        : `Google Trends returned ${observations.length} related searches for “${job.seedTerm}”. ${approved ? "The model screen" : "The word filter"} kept ${suggestions.length} that name something to buy or book${suggestions.length ? `: ${suggestions.map((s) => `“${s.query}”`).join(", ")}` : ""}. The rest were news, lookups or places.` });
   },
 });
 

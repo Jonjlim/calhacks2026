@@ -17,12 +17,13 @@ import type { MapDirection, Result } from "../../lib/contracts";
 import { requireMember } from "../lib/auth";
 import { err, memberError, ok } from "../lib/result";
 import { requestRoomTrend, usableTrendJob } from "../research/trendJobs";
+import { logTrail, nameOf } from "../lib/trail";
 import { BASE_INSTRUCTIONS, containsSensitiveData } from "./engine";
 import { IDEA_CALLS_PER_WINDOW } from "./ideas";
 import { configuredModel, validatedModelCall } from "./model";
 import {
-  acceptDirections, acceptProbe, type CaughtTrend, type DirectionDraft, directionsSchema, MAX_DIRECTIONS,
-  MIN_MEMORIES_FOR_DIRECTIONS, presetDirections, probeSchema,
+  acceptProbe, type CaughtTrend, type DirectionDraft, directionsSchema, MAX_DIRECTIONS, memoryReadings,
+  MIN_MEMORIES_FOR_DIRECTIONS, presetDirections, probeSchema, type RejectedDirection, screenDirections,
 } from "./directionsPolicy";
 
 const WINDOW_MS = 10 * 60 * 1000;
@@ -78,6 +79,11 @@ export const storeDirections = internalMutation({
       label: v.string(), query: v.string(), why: v.string(), clueIds: v.array(v.id("publishedClues")),
       trend: v.optional(v.object({ trendJobId: v.id("trendJobs"), query: v.string() })), broad: v.boolean(),
     })),
+    /** For the decision log: how memories were read, and what the checks threw out. */
+    notes: v.optional(v.object({
+      readings: v.array(v.object({ text: v.string(), reading: v.string() })),
+      rejected: v.array(v.object({ label: v.string(), reason: v.string() })),
+    })),
   },
   handler: async (ctx, args) => {
     const room = await ctx.db.get(args.roomId);
@@ -110,13 +116,39 @@ export const storeDirections = internalMutation({
         ...(d.trend ? { trend: d.trend } : {}), broad: d.broad, source: args.source, knowledgeRevision: args.knowledgeRevision, createdAt: now,
       }));
     }
+    // The decision log: how memories were read, what the council proposed and why, and what the checks threw out.
+    const who = await nameOf(ctx, args.participantId);
+    const readings = args.notes?.readings ?? [];
+    if (readings.length) await logTrail(ctx, args.roomId, { stage: "memories", actor: "council", outcome: "info",
+      text: `Read the memories as search words: ${readings.map((r) => `“${r.text}” → ${r.reading}`).join("; ")}.` });
+    const storedDrafts = args.directions.flatMap((d, i) => (stored[i] ? [{ d, id: stored[i]! }] : []));
+    await logTrail(ctx, args.roomId, { stage: "council", actor: "council", participantId: args.participantId, outcome: "info",
+      text: `${who} asked the council to combine memories. ${args.source === "agent" ? "The model" : "A simple rule (no model was available)"} proposed ${args.directions.length + (args.notes?.rejected.length ?? 0)} ${args.directions.length === 1 ? "direction" : "directions"}.` });
+    for (const { d, id } of storedDrafts) {
+      await logTrail(ctx, args.roomId, { stage: "council", actor: "council", outcome: "kept", directionId: id, clueIds: d.clueIds,
+        text: `Kept “${d.label}”: ${d.why}${d.trend ? ` It builds on the caught trend “${d.trend.query}”.` : ""} Search: “${d.query}”.` });
+    }
+    for (const r of args.notes?.rejected ?? []) {
+      await logTrail(ctx, args.roomId, { stage: "council", actor: "checks", outcome: "rejected", text: `Threw out “${r.label}”: ${r.reason}.` });
+    }
+    for (const [i, d] of args.directions.entries()) {
+      if (stored[i]) continue;
+      await logTrail(ctx, args.roomId, { stage: "council", actor: "checks", outcome: "rejected",
+        text: `Skipped “${d.label}”: ${keptQueries.has(d.query) ? "a direction you already searched covers it" : "the map already holds four directions or a memory it cited was withdrawn"}.` });
+    }
+
     // One room-level trend lookup per request: the newest interest or wish that has none yet.
     const clues = (await ctx.db.query("publishedClues").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).collect())
       .filter((c) => c.status === "active" && (c.kind === "interest" || c.kind === "explicit_wish") && !c.text.startsWith(GIFT_IDEA_PREFIX));
     const looked = new Set((await ctx.db.query("trendJobs").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).collect()).map((j) => j.publishedClueId as string));
     for (const clue of [...clues].reverse()) {
       if (looked.has(clue._id)) continue;
-      if ((await requestRoomTrend(ctx, room, args.participantId, clue._id)).ok) break;
+      const trend = await requestRoomTrend(ctx, room, args.participantId, clue._id);
+      if (!trend.ok) continue;
+      const seed = (await ctx.db.get(trend.value.jobId))?.seedTerm;
+      await logTrail(ctx, args.roomId, { stage: "council", actor: "trends", outcome: "info", clueIds: [clue._id],
+        text: `Started one Google Trends lookup for “${seed ?? clue.text}” (from “${clue.text}”), so a few related searches can drift by as ideas.` });
+      break;
     }
     return { stored, stale: false };
   },
@@ -135,11 +167,15 @@ export const storeProbe = internalMutation({
     const latest = await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", args.roomId)).order("desc").first();
     // Never talk over a question the room hasn't answered yet.
     if (latest?.status === "open") return null;
-    return ctx.db.insert("mapSharpens", {
+    const id = await ctx.db.insert("mapSharpens", {
       roomId: args.roomId, askedBy: args.askedBy, directionId: args.directionId, knowledgeRevision: args.knowledgeRevision,
       source: "agent", question: args.question, options: args.options.map((o) => ({ ...o, listingIds: [] })), finalistIds: [],
       status: "open", createdAt: Date.now(),
     });
+    const direction = await ctx.db.get(args.directionId);
+    await logTrail(ctx, args.roomId, { stage: "council", actor: "council", outcome: "info", directionId: args.directionId,
+      text: `“${direction?.label ?? "A direction"}” was still broad, so the council asked the room one question: “${args.question}”` });
+    return id;
   },
 });
 
@@ -162,6 +198,7 @@ export const propose = action({
     const avoid = room.memories.filter((m) => m.kind === "ownership" || m.kind === "exclusion").map((m) => m.text);
     let source: "agent" | "preset" = "preset";
     let drafts: DirectionDraft[] = presetDirections(positive, room.recipient);
+    let rejected: RejectedDirection[] = [];
     const canThink = !room.overBudget && !!process.env.LLM_API_KEY;
     if (canThink) {
       await ctx.runMutation(internal.agents.ideas.recordIdeaCall, { roomId });
@@ -177,8 +214,9 @@ export const propose = action({
           },
         }, directionsSchema);
         const named = (s: string) => s.replaceAll("{name}", room.recipient);
-        const accepted = acceptDirections(output, positive, room.caught, containsSensitiveData)
-          .map((d) => ({ ...d, label: named(d.label), why: named(d.why) }));
+        const screened = screenDirections(output, positive, room.caught, containsSensitiveData);
+        rejected = screened.rejected.map((r) => ({ ...r, label: named(r.label) }));
+        const accepted = screened.accepted.map((d) => ({ ...d, label: named(d.label), why: named(d.why) }));
         if (accepted.length) {
           drafts = accepted;
           source = "agent";
@@ -194,6 +232,7 @@ export const propose = action({
         ...rest, clueIds: clueIds as Id<"publishedClues">[],
         ...(trend ? { trend: { trendJobId: trend.trendJobId as Id<"trendJobs">, query: trend.query } } : {}),
       })),
+      notes: { readings: memoryReadings(positive), rejected },
     });
     if (result.stale) return err("stale_job", "Memories changed while the council was thinking. Try again.");
 

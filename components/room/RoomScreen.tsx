@@ -275,9 +275,11 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
   const cursors = useQuery(api.map.listCursors, args);
   const photos = useQuery(api.photos.listRoomPhotos, args);
   const directions = useQuery(api.agents.directions.list, args);
+  const trail = useQuery(api.trail.list, args);
   const extras: RoomData = {
     ...data,
     directions: directions?.ok ? directions.value : undefined,
+    trail: trail?.ok ? trail.value : undefined,
     mapSignals: signals?.ok ? signals.value : undefined,
     mapThemes: themes?.ok ? themes.value : undefined,
     sharpen: sharpen?.ok ? sharpen.value : undefined,

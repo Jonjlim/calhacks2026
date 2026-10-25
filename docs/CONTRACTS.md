@@ -1785,3 +1785,23 @@ interface MapDirection {
 - `SearchOrigin.source` adds `"direction"` with optional `directionId`. `RecommendationsView` adds optional `searchPools: { jobId, directionId?, query, found, removedByClues, foldedDuplicates, shown }[]`, so "Why this gift?" can show what each search did.
 - **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
 - **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.
+
+#### Decision log — "How we got here" (D23 trial)
+
+```ts
+interface TrailEntry {
+  _id: string;
+  at: number;
+  stage: "memories" | "council" | "steering" | "search" | "choice" | "money";
+  actor: "council" | "checks" | "trends" | "search" | "person";
+  participantId?: string; who?: string;     // set for "person"
+  outcome: "kept" | "rejected" | "info";    // "rejected": a check threw it out, or a friend passed
+  text: string;                             // one plain sentence, ≤ 280 chars
+  directionId?: string; listingId?: string; clueIds?: string[];
+}
+```
+
+- `trail.list({ roomId })` → `Result<TrailEntry[]>`, membership-checked, oldest first, last 300.
+- Append-only `roomTrail` table, written inside the steps themselves: how memories were read as search words; each direction the council kept (with its why and search) and each one the checks threw out (with the reason); the probe question; each Google Trends screen result (seen vs kept); each search's outcome (results, kept, dropped, failures); pulls/passes on directions and gifts, caught/dropped trend clouds, question answers, "she already has it"; who put what in the box; approvals with the **room-visible share** and total, and the "everyone approved — simulated" line.
+- **Privacy:** only room-visible facts. Never raw imports, unpublished guesses, recipient-private data or anyone's contribution maximum. Logging never blocks or changes a decision. Purged with the room.
+- The map opens it from the box's "Why this gift?", a gift's ⋯ menu, and the council menu; lines on the chosen gift's path (same listing, direction or cited memories) are highlighted.

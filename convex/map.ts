@@ -17,6 +17,7 @@ import { requireMember } from "./lib/auth";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
 import { productCategory } from "./research/text";
+import { logTrail } from "./lib/trail";
 import { err, memberError, ok } from "./lib/result";
 import { cleanIdeas, ideasFor } from "./agents/ideas";
 
@@ -243,6 +244,8 @@ export const setFeedback = mutation({
       if (!text) return err("validation_failed", "This listing title is too long to confirm as ownership.");
       publishedClueId = await ctx.db.insert("publishedClues", { roomId: args.roomId, publisherId: member.me._id, kind: "ownership", text, sourceKind: "manual", sourceMessageIds: [], status: "active", publishedAt: Date.now() });
       await bumpKnowledgeRevision(ctx, args.roomId);
+      await logTrail(ctx, args.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "rejected", listingId: args.listingId, clueIds: [publishedClueId],
+        text: `${member.me.displayName || "A friend"} said she already has ${productCategory(listing.title)}, so gifts like that are filtered out.` });
     }
     const feedbackId = await ctx.db.insert("mapFeedback", { roomId: args.roomId, listingId: args.listingId, participantId: member.me._id, kind: args.kind, publishedClueId, active: true, createdAt: Date.now() });
     return ok({ feedbackId });

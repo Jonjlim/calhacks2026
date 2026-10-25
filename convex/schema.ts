@@ -455,6 +455,24 @@ export default defineSchema({
     directionId: v.optional(v.id("mapDirections")),
   }).index("by_room", ["roomId", "createdAt"]),
 
+  /**
+   * The room's decision log (D23 trial): one plain line per step the council, the checks or a friend took.
+   * Append-only and room-visible, so it holds only room-visible facts: never private imports, unpublished clues or caps.
+   */
+  roomTrail: defineTable({
+    roomId: v.id("rooms"),
+    at: v.number(),
+    stage: v.union(v.literal("memories"), v.literal("council"), v.literal("steering"), v.literal("search"), v.literal("choice"), v.literal("money")),
+    actor: v.union(v.literal("council"), v.literal("checks"), v.literal("trends"), v.literal("search"), v.literal("person")),
+    participantId: v.optional(v.id("participants")),
+    /** The decision, kept or thrown out. "rejected" lines show what a check refused. */
+    outcome: v.union(v.literal("kept"), v.literal("rejected"), v.literal("info")),
+    text: v.string(),
+    directionId: v.optional(v.id("mapDirections")),
+    listingId: v.optional(v.id("productListings")),
+    clueIds: v.optional(v.array(v.id("publishedClues"))),
+  }).index("by_room", ["roomId", "at"]),
+
   /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
   mapDirections: defineTable({
     roomId: v.id("rooms"),

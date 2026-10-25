@@ -12,6 +12,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { err, memberError, ok } from "./lib/result";
 import { usableTrendJob } from "./research/trendJobs";
+import { logTrail } from "./lib/trail";
 
 type TargetKind = "clue" | "theme" | "direction" | "trend";
 
@@ -41,12 +42,17 @@ export const setDirection = mutation({
       const id = ctx.db.normalizeId("mapDirections", targetId);
       const direction = id ? await ctx.db.get(id) : null;
       if (!direction || direction.roomId !== roomId) return err<Out>("not_found", "That direction isn't on this map.");
+      if (value !== 0) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: value > 0 ? "kept" : "rejected", directionId: direction._id,
+        text: `${member.me.displayName || "A friend"} ${value > 0 ? "pulled in" : "passed on"} the direction “${direction.label}”.` });
     } else if (targetKind === "trend") {
       // A trend cloud is one returned suggestion of a usable sample in this room: "trendJobId:query".
       const at = targetId.indexOf(":");
       const id = at > 0 ? ctx.db.normalizeId("trendJobs", targetId.slice(0, at)) : null;
       const job = id ? await usableTrendJob(ctx, roomId, id) : null;
-      if (!job?.sample?.suggestions.some((s) => s.query === targetId.slice(at + 1))) return err<Out>("not_found", "That trend has drifted off this map.");
+      const query = targetId.slice(at + 1);
+      if (!job?.sample?.suggestions.some((s) => s.query === query)) return err<Out>("not_found", "That trend has drifted off this map.");
+      if (value !== 0) await logTrail(ctx, roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: value > 0 ? "kept" : "rejected",
+        text: value > 0 ? `${member.me.displayName || "A friend"} caught the trend “${query}” for the council to use.` : `${member.me.displayName || "A friend"} let the trend “${query}” drift away.` });
     } else if (!BUCKET_THEMES.has(targetId)) {
       const id = ctx.db.normalizeId("mapThemes", targetId);
       const theme = id ? await ctx.db.get(id) : null;
