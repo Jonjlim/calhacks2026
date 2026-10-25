@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directionPoint, fadeOf, MAX_DRIFTING, trendClouds } from "./directions";
+import { directionPoint, fadeOf, MAX_DRIFTING, trendClouds, weaveThreads } from "./directions";
 import { RING_RADII, ringDistance } from "./rings";
 import { trendKey } from "./trendIdeas";
 
@@ -57,5 +57,35 @@ describe("where a direction floats", () => {
     const r = ringDistance(x, z);
     expect(r).toBeGreaterThan(RING_RADII.gift);
     expect(r).toBeLessThan(RING_RADII.theme);
+  });
+});
+
+describe("the council's weave", () => {
+  const memoryKeys = ["clue:a", "clue:b", "clue:c", "clue:d"];
+  const directions = [{ id: "d1", key: "direction:d1", clueIds: ["a", "c"] }, { id: "d2", key: "direction:d2", clueIds: ["b", "d"] }];
+  const trail = [
+    { actor: "checks", outcome: "rejected", at: 1_000, text: "Threw out “Old idea”: it cited a memory nobody shared.", clueIds: ["a", "b"] },
+    { actor: "checks", outcome: "rejected", at: 50_000, text: "Threw out “Retro bowling bag”: it repeated another direction's search.", clueIds: ["c", "d"] },
+    { actor: "council", outcome: "kept", at: 50_000, text: "Kept “Trail matcha kit”…", clueIds: ["a", "c"] },
+  ];
+  const base = { memoryKeys, directions, trail, selectedKey: null };
+
+  it("reaches between memories while the council thinks, each pair once", () => {
+    const w = weaveThreads({ ...base, weave: { id: 1, phase: "reaching", since: 49_000, fresh: [] } })!;
+    expect(w.threads.every((t) => t.mode === "reach" && memoryKeys.includes(t.from) && memoryKeys.includes(t.to))).toBe(true);
+    expect(new Set(w.threads.map((t) => [t.from, t.to].sort().join("|"))).size).toBe(w.threads.length);
+  });
+
+  it("weaves only the memories each new direction combines, and frays only this round's refused ideas", () => {
+    const w = weaveThreads({ ...base, weave: { id: 2, phase: "weaving", since: 49_000, fresh: ["d1"] } })!;
+    expect(w.threads.filter((t) => t.mode === "kept").map((t) => `${t.from}>${t.to}`)).toEqual(["clue:a>direction:d1", "clue:c>direction:d1"]);
+    expect(w.threads.filter((t) => t.mode === "frayed")).toEqual([
+      { from: "clue:c", to: "clue:d", mode: "frayed", delay: 0.6, label: "it repeated another direction's search" },
+    ]);
+  });
+
+  it("grows an opened direction's threads again, and stays empty otherwise", () => {
+    expect(weaveThreads({ ...base, weave: null, selectedKey: "direction:d2" })?.threads.map((t) => t.from)).toEqual(["clue:b", "clue:d"]);
+    expect(weaveThreads({ ...base, weave: null })).toBeNull();
   });
 });

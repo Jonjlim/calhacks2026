@@ -147,7 +147,7 @@ export const storeDirections = internalMutation({
     /** For the decision log: how memories were read, and what the checks threw out. */
     notes: v.optional(v.object({
       readings: v.array(v.object({ text: v.string(), reading: v.string() })),
-      rejected: v.array(v.object({ label: v.string(), reason: v.string() })),
+      rejected: v.array(v.object({ label: v.string(), reason: v.string(), clueIds: v.optional(v.array(v.id("publishedClues"))) })),
     })),
     /** A replacement for one retired direction: adds beside the others instead of replacing them all. */
     replaces: v.optional(v.id("mapDirections")),
@@ -211,7 +211,8 @@ export const storeDirections = internalMutation({
         text: `Kept “${d.label}”: ${d.why}${d.trend ? ` It builds on the caught trend “${d.trend.query}”.` : ""} Search: “${d.query}”.` });
     }
     for (const r of args.notes?.rejected ?? []) {
-      await logTrail(ctx, args.roomId, { stage: "council", actor: "checks", outcome: "rejected", text: `Threw out “${r.label}”: ${r.reason}.` });
+      // The memories it cited go with it, so the map can fray the thread between them.
+      await logTrail(ctx, args.roomId, { stage: "council", actor: "checks", outcome: "rejected", ...(r.clueIds?.length ? { clueIds: r.clueIds } : {}), text: `Threw out “${r.label}”: ${r.reason}.` });
     }
     for (const [i, d] of args.directions.entries()) {
       if (stored[i]) continue;
@@ -312,6 +313,8 @@ const toStored = (drafts: DirectionDraft[]) => drafts.map(({ trend, clueIds, ...
   ...(trend ? { trend: { trendJobId: trend.trendJobId as Id<"trendJobs">, query: trend.query } } : {}),
 }));
 
+const toRejected = (rejected: RejectedDirection[]) => rejected.map((r) => ({ ...r, clueIds: r.clueIds as Id<"publishedClues">[] }));
+
 const PASSED_INSTRUCTIONS = `\nFriends passed on the directions in "passedOn" (with their reasons). Propose something clearly different that still combines the memories; respect the reasons (for "too pricey", aim for a simpler or smaller gift).`;
 
 /**
@@ -326,7 +329,7 @@ export const replace = internalAction({
     const { drafts, rejected, source } = await draftDirections(ctx, args.roomId, room, args.passed);
     await ctx.runMutation(internal.agents.directions.storeDirections, {
       roomId: args.roomId, participantId: room.participantId, knowledgeRevision: room.knowledgeRevision, source,
-      directions: toStored(drafts), notes: { readings: [], rejected }, replaces: args.directionId,
+      directions: toStored(drafts), notes: { readings: [], rejected: toRejected(rejected) }, replaces: args.directionId,
     });
     return null;
   },
@@ -348,7 +351,7 @@ export const propose = action({
     const result = await ctx.runMutation(internal.agents.directions.storeDirections, {
       roomId, participantId: room.participantId, knowledgeRevision: room.knowledgeRevision, source,
       directions: toStored(drafts),
-      notes: { readings: memoryReadings(positive), rejected },
+      notes: { readings: memoryReadings(positive), rejected: toRejected(rejected) },
     });
     if (result.stale) return err("stale_job", "Memories changed while the council was thinking. Try again.");
 
