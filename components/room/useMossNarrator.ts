@@ -20,14 +20,24 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
   const latest = useRef<Cue | null>(null);
   const spoken = useRef("");
   const natural = useRef(false);
+  const ready = useRef(false);
   const auth = useRef(token);
   auth.current = token;
   const speakRef = useRef<(cue: Cue | null) => void>(() => undefined);
 
-  // Does this server have the natural voice?
+  // Does this server have the natural voice? Stay quiet until this answers,
+  // so the browser voice does not claim the line first.
   useEffect(() => {
     let live = true;
-    fetch("/api/moss-voice/speak", { cache: "no-store" }).then((r) => r.json()).then((d: { available?: boolean }) => { if (live) natural.current = !!d.available; }).catch(() => undefined);
+    fetch("/api/moss-voice/speak", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { available?: boolean }) => { if (live) natural.current = !!d.available; })
+      .catch(() => { if (live) natural.current = false; })
+      .finally(() => {
+        if (!live) return;
+        ready.current = true;
+        speakRef.current(latest.current);
+      });
     return () => { live = false; };
   }, []);
 
@@ -70,12 +80,12 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
         audio.onended = () => { if (playing === audio) { URL.revokeObjectURL(url); playing = null; } };
         await audio.play();
       } catch {
-        // Aborted by a newer line, or the voice service failed: the browser voice covers it.
-        // A browser can also refuse playback until the first tap; hold the line and say it then.
-        if (!abort.signal.aborted && spoken.current === text) {
-          held = true;
-          browserVoice(text);
-        }
+        if (abort.signal.aborted || spoken.current !== text) return;
+        // The clip is ready and the browser is waiting for a tap. Keep it.
+        // The robotic voice is only for when ElevenLabs itself did not answer.
+        if (playing) { held = true; return; }
+        held = true;
+        browserVoice(text);
       } finally {
         if (inflight === abort) inflight = null;
       }
@@ -83,10 +93,14 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
 
     speakRef.current = (cue) => {
       if (!on.current || !cue?.active || !cue.text) { hush(); spoken.current = ""; return; }
+      if (!ready.current) return;
+      // Signed-in rooms can use ElevenLabs. Wait for the token instead of
+      // starting the browser voice and then refusing to switch.
+      if (natural.current && !auth.current) return;
       if (cue.text === spoken.current) return;
       spoken.current = cue.text;
       hush();
-      if (natural.current && auth.current) void naturalVoice(cue.text);
+      if (natural.current) void naturalVoice(cue.text);
       else browserVoice(cue.text);
     };
     // Always listen, so the current line is known the moment sound turns on.
@@ -100,6 +114,10 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
     const unlock = () => {
       if (!held || !on.current) return;
       held = false;
+      if (playing) {
+        void playing.play().catch(() => { if (latest.current?.text) browserVoice(latest.current.text); });
+        return;
+      }
       spoken.current = "";
       speakRef.current(latest.current);
     };
@@ -118,5 +136,5 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
     on.current = enabled;
     if (enabled) speakRef.current(latest.current);
     else { spoken.current = ""; speakRef.current(null); }
-  }, [enabled]);
+  }, [enabled, token]);
 }

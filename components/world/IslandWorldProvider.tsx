@@ -95,8 +95,6 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
       const gl = canvas.getContext("webgl2");
       setWebgl(!!gl);
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
-      // Voice starts on. A saved "off" is the only way it stays quiet.
-      setSoundEnabled(localStorage.getItem("unwrap:sound") !== "off");
     } catch { setWebgl(false); }
     const value = Number(new URLSearchParams(window.location.search).get("painterly"));
     if (Number.isFinite(value)) setPainterly(Math.min(1, Math.max(0, value)));
