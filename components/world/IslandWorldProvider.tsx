@@ -84,7 +84,7 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
   const unwrap = useUnwrapPhase();
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [ready, setReady] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [painterlyStrength, setPainterly] = useState(0);
   const [council, setCouncil] = useState<RoomWorld | null>(null);
   const [assets, setAssets] = useState<Partial<Record<CouncilActor, "ready" | "failed">>>({});
@@ -95,7 +95,8 @@ export function IslandWorldProvider({ children }: { children: ReactNode }) {
       const gl = canvas.getContext("webgl2");
       setWebgl(!!gl);
       gl?.getExtension("WEBGL_lose_context")?.loseContext();
-      setSoundEnabled(localStorage.getItem("unwrap:sound") === "on");
+      // Voice starts on. A saved "off" is the only way it stays quiet.
+      setSoundEnabled(localStorage.getItem("unwrap:sound") !== "off");
     } catch { setWebgl(false); }
     const value = Number(new URLSearchParams(window.location.search).get("painterly"));
     if (Number.isFinite(value)) setPainterly(Math.min(1, Math.max(0, value)));

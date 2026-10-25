@@ -37,6 +37,7 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
     const onVoices = () => { voice = synth ? pickMossVoice(synth.getVoices()) : null; };
     let playing: HTMLAudioElement | null = null;
     let inflight: AbortController | null = null;
+    let held = false;
 
     const hush = () => {
       inflight?.abort();
@@ -70,7 +71,11 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
         await audio.play();
       } catch {
         // Aborted by a newer line, or the voice service failed: the browser voice covers it.
-        if (!abort.signal.aborted && spoken.current === text) browserVoice(text);
+        // A browser can also refuse playback until the first tap; hold the line and say it then.
+        if (!abort.signal.aborted && spoken.current === text) {
+          held = true;
+          browserVoice(text);
+        }
       } finally {
         if (inflight === abort) inflight = null;
       }
@@ -92,10 +97,18 @@ export function useMossNarrator(enabled: boolean, roomId: string) {
       latest.current = cue;
       speakRef.current(cue);
     };
+    const unlock = () => {
+      if (!held || !on.current) return;
+      held = false;
+      spoken.current = "";
+      speakRef.current(latest.current);
+    };
     synth?.addEventListener?.("voiceschanged", onVoices);
     window.addEventListener("unwrap:room-guide", onCue);
+    window.addEventListener("pointerdown", unlock, true);
     return () => {
       window.removeEventListener("unwrap:room-guide", onCue);
+      window.removeEventListener("pointerdown", unlock, true);
       synth?.removeEventListener?.("voiceschanged", onVoices);
       hush();
     };
