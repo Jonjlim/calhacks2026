@@ -487,6 +487,38 @@ introduced. Offline fixture checks do not establish live model capability or
 prize eligibility.
 
 
+### D22 — Gift Twin local Moss memory (2026-10-25; local and Convex retrieval spikes verified)
+
+Use pinned `@moss-js/moss` in a Convex Node internal action to retrieve private
+recipient evidence for Gift Twin votes. Convex remains authoritative; Moss is an
+ephemeral derived index, rebuilt per evaluation and explicitly closed. Only local
+session add/query operations are used: never cloud create/add/push or disk save.
+Moss credentials stay server-side. The SDK authenticates/downloads its model and
+sends usage telemetry (opaque random session name, counts, timing, device ID);
+document/query text and metadata are not sent to Moss. The existing model provider
+still receives retrieved evidence in role `recipient`. The room and buyer agent
+receive only screened posts through the existing review path. No voice service,
+additional model, database or standalone service is introduced.
+
+The native SDK is externalized for Convex Node packaging. Flag-off and failures
+retain keyword recall. Each call checks upload identity and expiry through Convex;
+no private session is reused between uploads or rooms. Numeric server diagnostics
+separate setup/indexing from retrieval; cold indexing is not a sub-10ms operation.
+The authenticated local macOS spike passed paraphrase, ownership and dislike
+top-hit checks over eight synthetic messages (SDK 1.21.0): retrieval 1.3–2.0 ms,
+indexing 12.5 ms, cold setup/model loading 23.3 seconds. This establishes only the
+small local spike. Native deployment and the synthetic paraphrase probe also
+passed on dev `shiny-dotterel-658`: setup 2.25 s, indexing 27.1 ms, retrieval
+4.1 ms over three synthetic messages. `GIFT_TWIN_MOSS_ENABLED=true` is enabled
+there. Convex replaces JS `process.env` during invocation, so native `getenv`
+cannot see JS assignments. A temporary nonsecret config loaded with Node's
+`loadEnvFile` sets `MOSS_MODEL_CACHE_DIR=/tmp/unwrap-moss-models` in the native
+environment; the file is immediately removed. Only public model artifacts and
+device identity are cached; private session documents are never persisted.
+The full live room-to-model path, production deployment, larger vault performance,
+and cold-start variability remain **unverified**. Automated integration tests cover
+the room path using a mocked SDK; they do not establish live model answer quality.
+
 ## Bounded multi-gift box — Alex-authorized integration
 
 Alex requested both single and multiple gifts in the buying flow. Keep one

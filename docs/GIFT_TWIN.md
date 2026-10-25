@@ -77,6 +77,76 @@ The single-use invite is in a URL fragment and is cleared from the address bar a
 
 ## Run the CLI demo
 
+### Moss semantic memory
+
+The twin can use Moss hybrid retrieval when evaluating room ideas, including new
+ideas found by its watch loop. “Ceramics workshop” can recall “I'd love to learn
+wheel throwing” even with no keyword overlap. Explicit keyword matches are kept
+alongside semantic matches so ownership and contradictions remain available. The
+existing recipient model decides what the evidence means; Moss does not reason
+or authorize anything. Initial insight extraction still scans the authorized
+vault. The buyer/council agents get only the existing screened posts and clues.
+
+Set these **on the Convex deployment**, then deploy the updated functions:
+
+```bash
+npx convex env set GIFT_TWIN_MOSS_ENABLED true
+# Set MOSS_PROJECT_ID and MOSS_PROJECT_KEY privately in the Convex dashboard.
+# Existing LLM_* configuration supplies the reasoning model.
+npx convex dev --once
+```
+
+No changes to recipient pairing or uploads are required. Each evaluation builds
+an isolated in-memory local session from the current authorized upload and closes
+it in `finally`. Messages and query text are never pushed to a Moss cloud index or
+saved as a disk snapshot. Moss does authenticate/download its embedding model and
+send usage telemetry (random session names, counts, timings, SDK/model versions,
+device ID). The SDK's cache contains provider artifacts/device identity, not vault
+snapshots. Raw retrieved evidence is available only to the recipient model; the
+room sees screened sentences. Consent is rechecked before the model call and at
+the final write. Expiry, forget, replacement upload, revoke, and room deletion
+invalidate old work. Missing configuration or SDK failure retains keyword recall.
+
+Synthetic live smoke (uses no room data and creates no cloud index):
+
+```bash
+node scripts/moss-memory-smoke.mts --run --convex-env
+# Or omit --convex-env and supply MOSS_PROJECT_ID / MOSS_PROJECT_KEY in the process environment.
+```
+
+The `--convex-env` option captures credentials from the current dev deployment
+only in process memory; the script never prints them or provider error bodies.
+The local macOS spike with SDK 1.21.0 passed paraphrase, ownership, and dislike
+top-hit checks over eight synthetic messages: query times 1.3–2.0 ms, indexing
+12.5 ms, cold setup/model loading 23.3 seconds. These are a small local sample,
+not an application latency guarantee. Native packaging and a synthetic paraphrase
+probe also passed on development deployment `shiny-dotterel-658`: setup 2.25 s,
+indexing 27.1 ms, retrieval 4.1 ms over three synthetic messages. Moss memory is
+enabled on that deployment. The full live room-to-model path and model answer
+quality still need a recipient-consented room demo; production is not deployed.
+The SDK is externalized in `convex.json` for its native dependency.
+
+Convex substitutes a JavaScript `process.env` object, while the native SDK reads
+the OS environment. Initialization uses Node's `loadEnvFile` with an immediately
+deleted temporary file containing only `MOSS_MODEL_CACHE_DIR` pointing to `/tmp`.
+No secret is written to it. This keeps native model artifacts off the read-only
+filesystem without changing the process home directory.
+
+To repeat the synthetic Convex runtime probe:
+
+```bash
+npx convex run giftTwin/memory:smoke '{}'
+```
+
+Server logs emit `gift_twin_memory` with numeric `setupMs`, `indexingMs`, and
+per-query `queryMs`, or a fixed fallback reason. They contain no private text,
+room/upload identifiers or credentials. A session is rebuilt for each evaluation;
+there is no cross-action private cache. At larger vault sizes indexing, rather
+than retrieval, may dominate. Run the synthetic smoke before a demo to exercise
+model download; this does not prewarm a separate Convex worker.
+
+### Companion demo
+
 Prerequisites: Node 23.6+ (uses built-in TypeScript stripping and `node:sqlite`), a Convex deployment, and this repository on the "recipient" Mac. Optional: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` on the Convex deployment for model-quality extraction and votes; without them the twin uses deterministic patterns.
 
 ```bash

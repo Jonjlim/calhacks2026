@@ -19,6 +19,11 @@ export function modelConfigured(): boolean {
   return Boolean(process.env.LLM_BASE_URL && process.env.LLM_API_KEY && process.env.LLM_MODEL);
 }
 
+export function mossConfigured(): boolean {
+  return process.env.GIFT_TWIN_MOSS_ENABLED === "true" &&
+    Boolean(process.env.MOSS_PROJECT_ID && process.env.MOSS_PROJECT_KEY);
+}
+
 export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -59,7 +64,8 @@ export async function loadUpload(
   uploadId: string,
 ): Promise<{ collaborator: Doc<"agentCollaborators">; room: Doc<"rooms"> } | null> {
   const collaborator = await ctx.db.get(collaboratorId);
-  if (!collaborator || collaborator.status !== "active" || collaborator.vaultUploadId !== uploadId) return null;
+  if (!collaborator || collaborator.status !== "active" || collaborator.vaultUploadId !== uploadId ||
+    (collaborator.vaultExpiresAt ?? 0) <= Date.now()) return null;
   const room = await ctx.db.get(collaborator.roomId);
   if (!isLiveRoom(room)) return null;
   return { collaborator, room };

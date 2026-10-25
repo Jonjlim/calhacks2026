@@ -33,7 +33,7 @@ import {
   type VaultMessage,
 } from "../../lib/agentCollaborators/contracts";
 import { findInsights } from "./extract";
-import { closeVault, loadUpload, modelConfigured, roomIdeas } from "./lib";
+import { closeVault, loadUpload, modelConfigured, mossConfigured, roomIdeas } from "./lib";
 import { twinConfidence, twinInsightCategory, twinVote } from "./schema";
 import { castVotes, reconcileVote } from "./vote";
 
@@ -94,7 +94,9 @@ export const processVault = internalAction({
       const model = modelConfigured() ? configuredModel() : undefined;
       [insights, votes] = await Promise.all([
         findInsights(messages, snap.recipientName, model),
-        castVotes(snap.ideas, messages, snap.recipientName, model),
+        mossConfigured()
+          ? ctx.runAction(internal.giftTwin.memory.vote, args)
+          : castVotes(snap.ideas, messages, snap.recipientName, model),
       ]);
       checkedRefs = snap.ideas.map((idea) => idea.ref);
     } finally {
@@ -109,8 +111,9 @@ export const voteOnNewIdeas = internalAction({
   handler: async (ctx, args) => {
     const snap: AgentSnapshot | null = await ctx.runQuery(internal.giftTwin.agent.snapshot, args);
     if (!snap || snap.ideas.length === 0) return;
-    const messages = await loadMessages(ctx, args, snap.chunkIds);
-    const votes = await castVotes(snap.ideas, messages, snap.recipientName, modelConfigured() ? configuredModel() : undefined);
+    const votes: TwinVoteCast[] = mossConfigured()
+      ? await ctx.runAction(internal.giftTwin.memory.vote, args)
+      : await castVotes(snap.ideas, await loadMessages(ctx, args, snap.chunkIds), snap.recipientName, modelConfigured() ? configuredModel() : undefined);
     if (votes.length === 0) return;
     await ctx.runMutation(internal.giftTwin.agent.recordFindings, {
       collaboratorId: args.collaboratorId,

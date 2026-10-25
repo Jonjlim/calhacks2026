@@ -38,6 +38,8 @@ import type * as giftTwin_device from "../giftTwin/device.js";
 import type * as giftTwin_extract from "../giftTwin/extract.js";
 import type * as giftTwin_interpret from "../giftTwin/interpret.js";
 import type * as giftTwin_lib from "../giftTwin/lib.js";
+import type * as giftTwin_memory from "../giftTwin/memory.js";
+import type * as giftTwin_memoryRecall from "../giftTwin/memoryRecall.js";
 import type * as giftTwin_purge from "../giftTwin/purge.js";
 import type * as giftTwin_review from "../giftTwin/review.js";
 import type * as giftTwin_room from "../giftTwin/room.js";
@@ -133,6 +135,8 @@ declare const fullApi: ApiFromModules<{
   "giftTwin/extract": typeof giftTwin_extract;
   "giftTwin/interpret": typeof giftTwin_interpret;
   "giftTwin/lib": typeof giftTwin_lib;
+  "giftTwin/memory": typeof giftTwin_memory;
+  "giftTwin/memoryRecall": typeof giftTwin_memoryRecall;
   "giftTwin/purge": typeof giftTwin_purge;
   "giftTwin/review": typeof giftTwin_review;
   "giftTwin/room": typeof giftTwin_room;
