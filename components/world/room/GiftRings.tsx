@@ -197,7 +197,6 @@ function RingIsland({ at, kind, delay, animate, muted, arrive, shape, palette: p
 function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm"; color: string; animate: boolean }) {
   const body = useMemo(() => buildBody(shape, color), [shape, color]);
   const spin = useRef<THREE.Group>(null);
-  const puff = useMemo(() => paint("memory-puff", { color: "#fffaf0", emissive: "#f3ecff", emissiveIntensity: 0.4 }), []);
   useFrame(({ clock }) => {
     const g = spin.current;
     if (!g || !animate) return;
@@ -210,11 +209,6 @@ function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm
       <group ref={spin} position={[0, 1.0, 0]} scale={4.4}>
         <primitive object={body} />
       </group>
-      {[[0, 0, 0, 0.9], [0.7, -0.05, 0.1, 0.55], [-0.7, -0.05, -0.05, 0.6]].map(([x, y, z, r], i) => (
-        <mesh key={i} position={[x!, y!, z!]} scale={[r!, r! * 0.5, r!]} material={puff}>
-          <sphereGeometry args={[1, 10, 8]} />
-        </mesh>
-      ))}
     </group>
   );
 }

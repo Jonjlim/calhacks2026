@@ -98,7 +98,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <WorldLighting quality={quality} interior={stage.shown === "tower" && !!council} />
       <Wind animate={animate} />
 
-      <AtmosphericSky animate={animate} />
+      <AtmosphericSky animate={animate} sparse={stage.shown === "map"} />
       <DistantScenery animate={animate} islets={stage.shown !== "map"} />
 
       <FloatingIsland />
