@@ -10,7 +10,15 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [AI_AGENTS.md](AI_AGENTS.md), [COMM
 
 ### Map-first room (proposed, D19, 2026-10-24)
 
-**Status: proposed, not implemented.** Agree on these shapes at the next integration checkpoint before building MAP-007 onward ([TEAM_TASKS.md](TEAM_TASKS.md)).
+**Status (2026-10-24): partly built.** Implemented with tests (`convex/mapAi.test.ts`), differing from the sketch below as follows:
+
+- Direction signals: `mapSignals.setDirection({ roomId, targetKind: "clue" | "theme", targetId, value: 1 | -1 | 0 })` and `mapSignals.listSignals({ roomId })` → `{ targetKind, targetId, up, down, voters: { participantId, value, at }[] }[]`. Theme ids are council theme ids or the interim groups `interest | wish | moment`.
+- Themes: `agents/themes.suggestThemes({ roomId })` (model with preset fallback, needs ≥3 memories, `stale_job` if knowledge changed) and `agents/themes.listThemes({ roomId })` → `{ id, label, clueIds, source, stale }[]`. Rename, merge and dismiss are not built.
+- Sharpen: `agents/themes.sharpen({ roomId })` picks the two leading gifts from `readCatalog`, `getSharpen({ roomId })`, `answerSharpen({ sharpenId, option })` (publishes the option's clue as the answering member and bumps knowledge), `dismissSharpen({ sharpenId })`. Options carry `listingIds` instead of theme ids. Uses `AskedSlot`: no.
+- Cursors: `map.moveCursor` accepts `space: "rings"` for map-plane coordinates (x, z stored as x, y).
+- Room deletion purges all map tables, including the earlier cursor, sprout, feedback, position and idea-call tables.
+
+Still proposed: theme rename/merge/dismiss, `getMapState` consolidation, and `themeIds` on recommendations (the client derives theme placement from cited clue ids).
 
 Owners: Dev 2 (tables, projection, signals), Dev 3 (theme suggestion, sharpen), Dev 4 (theme links on recommendations). Consumers: Dev 1 and Ally (map and lobby UI).
 

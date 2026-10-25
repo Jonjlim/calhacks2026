@@ -102,6 +102,8 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const retryJob = useMutation(api.agents.buyer.retryJob);
   const importEvidence = useMutation(api.clues.importEvidence);
   const extractClues = useMutation(api.agents.extract.extractClues);
+  const genUploadUrl = useMutation(api.media.generateEvidenceUploadUrl);
+  const importMedia = useMutation(api.media.importMediaEvidence);
   const deleteEvidence = useMutation(api.clues.deleteEvidence);
   const publishClue = useMutation(api.clues.publishClue);
   const rejectClue = useMutation(api.clues.rejectProposedClue);
@@ -160,11 +162,28 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
       moveCursor: (x, z) => moveCursor({ roomId, x, y: z, space: "rings" }),
+      // Same private pipeline as the photo panel: upload, import as the member's evidence, read once, then the file is deleted.
+      importPhotos: async (items) => {
+        const files: { storageId: Id<"_storage">; marker?: { x: number; y: number } }[] = [];
+        for (const item of items) {
+          const url = await genUploadUrl({ roomId });
+          if (!url.ok) return url;
+          const res = await fetch(url.value.uploadUrl, { method: "POST", headers: { "Content-Type": item.blob.type }, body: item.blob });
+          if (!res.ok) return { ok: false as const, error: { code: "provider_timeout" as const, message: `The photo didn’t upload (${res.status}). Try again.` } };
+          const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+          files.push({ storageId, ...(item.marker ? { marker: item.marker } : {}) });
+        }
+        const imported = await importMedia({ roomId, kind: "photo", label: "Photos from the map", files });
+        if (!imported.ok) return imported;
+        const started = await extractClues({ sourceId: imported.value.source._id });
+        if (!started.ok) return started;
+        return { ok: true as const, value: { sourceId: imported.value.source._id as string } };
+      },
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor,
+      selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia,
     ],
   );
 

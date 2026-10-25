@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { reencodeImage } from "@/lib/live/image";
 import type { AvatarId } from "@/components/characters/StorybookAvatar";
 import type { RingAction, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "@/components/world/room/gift-rings.module.css";
@@ -45,7 +46,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
-  const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind } | null>(null);
+  const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean } | null>(null);
+  // Photos picked in the add box, and this browser's own thumbnails of photos it sent (never shared with the room).
+  const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
+  const [previews, setPreviews] = useState<Record<string, string[]>>({});
   const [why, setWhy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +226,25 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
         ] : [],
       };
     }
+    if (key.startsWith("photo:")) {
+      const sourceId = key.slice(6);
+      const found = data.myProposedClues.filter((c) => c.sourceId === sourceId && c.status === "proposed");
+      return {
+        caption: (
+          <span className={s.found}>
+            <b>Only you see this</b>
+            {found.length === 0 ? <span>Reading privately… what it finds appears here.</span> : found.map((c) => (
+              <span key={c.id} className={s.foundRow}>
+                <em>{c.text}{c.confidence < 0.6 ? " · maybe" : ""}</em>
+                {actions && <button type="button" onClick={() => void run(() => actions.publishClue(c.id), "Shared with the room.")}>Share</button>}
+                {actions && <button type="button" className={s.foundNo} onClick={() => void run(() => actions.rejectClue(c.id), "Discarded. Nobody else saw it.")}>✕</button>}
+              </span>
+            ))}
+          </span>
+        ),
+        actions: actions ? [{ icon: "🗑", label: "Delete these photos", disabled: !!pending, run: () => void run(() => actions.deleteEvidence(sourceId), "Deleted, along with anything not yet shared.").then((ok) => ok && setSelectedKey(null)) }] : [],
+      };
+    }
     const idea = ideas.find((c) => `idea:${c.id}` === key);
     if (idea) {
       return {
@@ -272,7 +295,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
           {([["interest", "💭 Memory"], ["explicit_wish", "🎁 Wish"]] as const).map(([kind, label]) => (
             <button key={kind} type="button" role="radio" aria-checked={composer.kind === kind} onClick={() => setComposer({ ...composer, kind })}>{label}</button>
           ))}
-          <button type="button" onClick={() => { setComposer(null); onPaste(); }} aria-label="Add a photo or screenshot privately">📷 Photo</button>
+          <button type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, photo: true })} aria-label="Add photos privately">📷 Photo</button>
         </div>
       )}
       <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
@@ -286,6 +309,86 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
     </div>
   );
+
+  // Photos: picked and marked in the add box, then read privately with the same pipeline as the photo panel.
+  const pickPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const next: typeof photoPick = [];
+    for (const file of Array.from(files).slice(0, 3)) {
+      try {
+        const blob = await reencodeImage(file);
+        next.push({ blob, preview: URL.createObjectURL(blob) });
+      } catch {
+        setError("That photo couldn’t be prepared. Try a JPEG or PNG.");
+      }
+    }
+    setPhotoPick(next);
+  };
+  const markPhoto = (index: number, e: ReactMouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const marker = { x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)) };
+    setPhotoPick((items) => items.map((it, i) => (i === index ? { ...it, marker } : it)));
+  };
+  const readPhotos = () => {
+    if (!actions || !photoPick.length) return;
+    const picked = photoPick;
+    void run(async () => {
+      const result = await actions.importPhotos(picked.map(({ blob, marker }) => ({ blob, marker })));
+      if (result.ok) {
+        const sourceId = (result.value as { sourceId: string }).sourceId;
+        setPreviews((p) => ({ ...p, [sourceId]: picked.map((x) => x.preview) }));
+      }
+      return result;
+    }, "Reading your photos privately. Only you see what it finds until you share it.", "photos").then((ok) => {
+      if (ok) {
+        setComposer(null);
+        setPhotoPick([]);
+      }
+    });
+  };
+  const photoComposer = composer?.photo && actions ? (
+    <div className={s.write} data-map-token>
+      <div className={s.kinds} role="radiogroup" aria-label="What is it?">
+        {([["interest", "💭 Memory"], ["explicit_wish", "🎁 Wish"]] as const).map(([kind, label]) => (
+          <button key={kind} type="button" role="radio" aria-checked={false} onClick={() => setComposer({ ...composer, kind, photo: false })}>{label}</button>
+        ))}
+        <button type="button" role="radio" aria-checked>📷 Photo</button>
+      </div>
+      {photoPick.length === 0 ? (
+        <label className={s.photoPick}>
+          <span aria-hidden>📷</span>Choose up to 3 photos
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(e) => { void pickPhotos(e.target.files); e.target.value = ""; }} />
+        </label>
+      ) : (
+        <div className={s.photoRow}>
+          {photoPick.map((it, i) => (
+            <button key={it.preview} type="button" className={s.polaroidPick} onClick={(e) => markPhoto(i, e)} aria-label={`Photo ${i + 1}: tap the person it’s for`}>
+              <img src={it.preview} alt="" />
+              {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+            </button>
+          ))}
+        </div>
+      )}
+      <p>{photoPick.length ? "Tap her in each photo. It’s your mark, not face recognition." : "Read once, then deleted. Only you see what it finds."}</p>
+      {photoPick.length > 0 && (
+        <button type="button" className={s.readBtn} disabled={pending === "photos"} onClick={readPhotos}>{pending === "photos" ? "Sending privately…" : `Read ${photoPick.length === 1 ? "it" : "them"} privately`}</button>
+      )}
+    </div>
+  ) : null;
+
+  // This member's own photos on the map, marked "only you": what the private read found, waiting for review.
+  const myPhotos = data.evidence
+    .filter((e) => e.kind === "photo")
+    .map((e) => ({ source: e, found: data.myProposedClues.filter((c) => c.sourceId === e.id && c.status === "proposed") }))
+    .filter(({ source, found }) => found.length > 0 || source.media?.status === "uploaded");
+  const photoNodes = myPhotos.map(({ source, found }, i) => {
+    const [x, z] = ringPoint(205 - i * 24, RING_RADII.input + 1.2);
+    return { key: `photo:${source.id}`, sourceId: source.id, images: previews[source.id] ?? [], found: found.length, reading: source.media?.status === "uploaded" && !found.length, x, z };
+  });
+  const thumbFor = (clue: { proposedClueId?: string }) => {
+    const proposed = clue.proposedClueId ? data.myProposedClues.find((c) => c.id === clue.proposedClueId) : undefined;
+    return proposed ? previews[proposed.sourceId]?.[0] : undefined;
+  };
 
   // The shared yes at the present.
   const live = revision && revision.status !== "infeasible" && revision.status !== "superseded" && revision.payableTotalMinor > 0;
@@ -362,7 +465,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   const rings: RingsWorld = {
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
-      return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z };
+      return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue) };
     }),
     ideas: ideas.map((idea, i) => {
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
@@ -388,7 +491,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
     boxLabel: selection ? `${priceOf(selection.listingId)} · ${approved}/${participants.length} yes` : "Our gift box",
     selectedKey,
     highlight,
-    composer: composer && composerNode ? { x: composer.x, z: composer.z, node: composerNode } : null,
+    composer: composer && (photoComposer ?? composerNode) ? { x: composer.x, z: composer.z, node: photoComposer ?? composerNode } : null,
+    photos: photoNodes,
     onSelect: (key) => {
       setComposer(null);
       setSelectedKey(key);

@@ -37,7 +37,9 @@ export interface RingAction {
 }
 
 export interface RingsWorld {
-  clues: { key: string; text: string; author: string; avatar: AvatarId; theme: string; tint: string; x: number; z: number }[];
+  clues: { key: string; text: string; author: string; avatar: AvatarId; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
+  /** This viewer's own photos, read privately: shown only to them until they share what was found. */
+  photos?: { key: string; sourceId: string; images: string[]; found: number; reading: boolean; x: number; z: number }[];
   /** Council themes, or the three clue groups until the council has grouped them. */
   themes: { key: string; theme: string; label: string; count: number; x: number; z: number; tint: string; jar: RingTheme }[];
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
@@ -415,7 +417,7 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
                 <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
               </Suspense>
               <Token k={c.key} rings={rings} from={[c.x, c.z]} drag={drag} dim={dim(c.key)} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory`}
-                face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}><img src={portraitUrl(c.avatar)} alt="" /><q>{c.text}</q></span>} />
+                face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q>{c.fromPhoto && <i className={s.photoBadge} title="From a photo, read privately">📷</i>}</span>} />
             </RingIsland>
           </group>
         );
@@ -448,6 +450,13 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           </group>
         );
       })}
+
+      {(rings.photos ?? []).map((ph, i) => (
+        <RingIsland key={ph.key} at={world(ph.x, ph.z)} kind="clue" delay={0.2 + i * 0.1} animate={animate}>
+          <Token k={ph.key} rings={rings} from={[ph.x, ph.z]} drag={{ ...drag, begin: () => undefined }} dim={false} offset={[0, -0.4, 2.4]} label="Your photos, read privately"
+            face={<span className={s.polaroidStack}>{ph.images.length ? ph.images.slice(0, 3).map((src, j) => <img key={src} src={src} alt="" style={{ ["--j" as string]: j }} />) : <i aria-hidden>📷</i>}<em>{ph.reading ? "reading…" : `${ph.found} to review`}</em><b>only you</b></span>} />
+        </RingIsland>
+      ))}
 
       {rings.ideas.map((idea, i) => (
         <RingIsland key={idea.key} at={world(idea.x, idea.z)} kind="gift" delay={0.4 + i * 0.1} animate={animate} muted={dim(idea.key)}>

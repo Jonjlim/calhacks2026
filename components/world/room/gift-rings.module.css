@@ -170,3 +170,27 @@
 .tool { border: 0; border-radius: 999px; padding: 8px 14px; font: 600 13.5px var(--font-sans); color: var(--color-dusk); background: linear-gradient(180deg, #fffaf0, #f6e7c8); box-shadow: 0 6px 16px -8px rgb(40 24 44 / .5), 0 0 0 1px rgb(217 182 111 / .5); cursor: pointer; }
 .tool:hover { transform: translateY(-1px); }
 .tool:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+/* Photos: picked and marked in the add box, shown to their owner as polaroids */
+.photoPick { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--color-ivory); border: 2px dashed var(--color-gold); border-radius: 16px; padding: 14px 18px; font: 700 13px var(--font-sans); color: var(--color-dusk); box-shadow: 0 10px 22px -8px rgb(40 24 44 / .55); }
+.photoPick span { font-size: 20px; }
+.photoRow { display: flex; gap: 8px; }
+.polaroidPick { position: relative; padding: 5px 5px 14px; background: #fffdf8; border: 0; border-radius: 3px; box-shadow: 0 10px 20px -8px rgb(40 24 44 / .6); cursor: crosshair; transform: rotate(-2deg); }
+.polaroidPick:nth-child(2) { transform: rotate(2deg); }
+.polaroidPick img { display: block; width: 92px; height: 72px; object-fit: cover; }
+.polaroidPick i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral); }
+.readBtn { border: 0; border-radius: 14px; padding: 9px 16px; font: 700 13px var(--font-sans); color: #3b2a16; background: linear-gradient(180deg, #ffe3a0, #e9c46a); cursor: pointer; box-shadow: 0 8px 18px -8px rgb(160 122 44 / .9); }
+.readBtn:disabled { opacity: .6; }
+.polaroidStack { position: relative; display: block; width: 104px; height: 96px; }
+.polaroidStack img, .polaroidStack > i { position: absolute; left: 6px; top: 4px; width: 88px; height: 70px; object-fit: cover; background: #fffdf8; padding: 4px 4px 12px; border-radius: 3px; box-shadow: 0 8px 18px -8px rgb(40 24 44 / .7); transform: rotate(calc(var(--j, 0) * 5deg - 4deg)) translate(calc(var(--j, 0) * 4px), calc(var(--j, 0) * -2px)); font-style: normal; font-size: 30px; display: grid; place-items: center; }
+.polaroidStack em { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); white-space: nowrap; font: 15px var(--font-hand); color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / .7); }
+.polaroidStack b { position: absolute; top: -8px; right: -10px; background: var(--color-dusk); color: var(--color-ivory); font: 700 9px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 9px; }
+.found { display: flex; flex-direction: column; gap: 5px; align-items: stretch; text-align: left; background: rgb(47 39 55 / .82); padding: 9px 10px; border-radius: 14px; text-shadow: none; }
+.found > b { font: 700 9.5px var(--font-sans); letter-spacing: .1em; text-transform: uppercase; color: #ffd98a; }
+.foundRow { display: flex; align-items: center; gap: 6px; }
+.foundRow em { flex: 1; font-style: normal; font-size: 12px; color: #fff; }
+.foundRow button { border: 0; border-radius: 10px; padding: 4px 9px; font: 700 11px var(--font-sans); background: #86b766; color: #fff; cursor: pointer; }
+.foundRow .foundNo { background: rgb(255 255 255 / .18); }
+.bubblePhoto { border-radius: 6px !important; width: 34px !important; height: 34px !important; object-position: center !important; }
+.photoBadge { position: absolute; bottom: -7px; right: -6px; font-style: normal; font-size: 12px; background: var(--color-ivory); border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; box-shadow: 0 2px 6px rgb(0 0 0 / .25); }
+.bubble { position: relative; }

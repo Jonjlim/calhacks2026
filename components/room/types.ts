@@ -82,6 +82,8 @@ export interface RoomActions {
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
   dismissSharpen: Run<[sharpenId: string]>;
+  /** Uploads 1–3 photos privately (each with the uploader's tap on the recipient), then starts the private read. */
+  importPhotos: Run<[items: { blob: Blob; marker?: { x: number; y: number } }[]]>;
   /** Shares this viewer's pointer on the map plane; fire and forget. */
   moveCursor: Run<[x: number, z: number]>;
 }
