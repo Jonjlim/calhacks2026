@@ -27,6 +27,7 @@ import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
 import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
+import { useRoomGuide } from "./useRoomGuide";
 import { useGiftRings } from "./useGiftRings";
 import { MapCursor } from "./MapCursor";
 import type { RoomActions, RoomData } from "./types";
@@ -181,6 +182,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
   ringsRef.current = map.rings;
+  const guide = useRoomGuide({ data, map, enabled: stage === "map" && !preview && !!actions, paused: engaged || !!drawer });
 
   // --- What the 3D world needs (display data only), plus clicks back from it.
   const onPick = useCallback((t: PickTarget) => {
@@ -278,11 +280,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
       {/* On the map, room controls fold into an invite button and one menu; the council's tools live at the present. */}
       {stage === "map" && (
-        <div inert={engaged || undefined} className={`absolute top-5 right-5 flex items-start gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+        <div inert={engaged || guide.cinematic || undefined} className={`absolute top-5 right-5 flex items-start gap-2 transition-opacity duration-500 ${engaged || guide.cinematic ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
           {data.invitePath && <InviteCard path={data.invitePath} compact />}
           <MapMenu items={[
             { label: soundEnabled ? "Sound on" : "Sound off", hint: "Room sounds and music", run: toggleSound },
             { label: time === "day" ? "Daytime" : "Night sky", hint: "Switch the light", run: () => setTimeOfDay(time === "day" ? "night" : "day") },
+            ...(!preview && actions ? [{ label: "Explore with Moss", hint: "Learn with your real memories", run: guide.restart }] : []),
             { label: "Recenter the map", hint: "Or press 0 · hold and drag the sky to turn, right-drag to move", run: () => mapView.reset() },
             { label: "Back to the present", hint: "Zoom in on the island", run: () => setStage("garden") },
             ...(!preview && actions ? [{ label: "Backstage", hint: "Pasted chats, notes and agent tools", run: () => setDrawer({ kind: "notes" }) }] : []),
@@ -304,8 +307,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
       )}
 
-      {/* On the map: a quiet status line. Actions happen on the map itself. */}
-      {stage === "map" && (
+      {guide.panel}
+      {/* Guidance replaces the status line; it never stacks another popup above it. */}
+      {stage === "map" && !guide.visible && (
         <div inert={engaged || undefined} className={`absolute bottom-5 left-1/2 flex max-w-[min(720px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full bg-[#fbf7f0]/88 py-2 pr-2 pl-4 shadow-[0_14px_30px_-18px_rgba(65,52,76,0.6)] backdrop-blur-sm transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
           <span className="flex gap-1" aria-hidden>
             {COUNCIL_ACTORS.map((a) => (

@@ -32,10 +32,25 @@ class MapView {
   dragging = false;
   /** The gift reveal owns the camera: nothing moves the map meanwhile. */
   locked = false;
+  private guiding = false;
+  framing = { lift: 0, shiftX: 0 };
+  private framingTarget = { lift: 0, shiftX: 0 };
+  /** Changes on user navigation, so an authored arrival can yield instead of resuming over a gesture. */
+  interaction = 0;
+
+  /** Authored room guidance uses this same camera owner. A gesture immediately takes over. */
+  focus(x: number, z: number, zoom = 0.6, yaw = 0.15, shot?: { tilt?: number; lift?: number; shiftX?: number }) {
+    if (this.locked || this.dragging) return;
+    this.guiding = true;
+    this.target = { x, z, zoom: clamp(zoom, shot ? 0.18 : 0.35, 1.6), yaw, tilt: shot?.tilt ?? -0.12 };
+    this.framingTarget = { lift: shot?.lift ?? 0, shiftX: shot?.shiftX ?? 0 };
+  }
 
   /** Moves the view by screen-relative amounts: right and toward the viewer, turned with the camera. */
   pan(dx: number, dz: number) {
     if (this.locked) return;
+    this.guiding = false;
+    this.interaction++;
     const c = Math.cos(this.target.yaw);
     const s = Math.sin(this.target.yaw);
     this.target.x = clamp(this.target.x + dx * c + dz * s, -PAN_X, PAN_X);
@@ -45,28 +60,36 @@ class MapView {
   /** Turns the camera around the present and tilts it, within limits. */
   orbit(dYaw: number, dTilt: number) {
     if (this.locked) return;
+    this.guiding = false;
+    this.interaction++;
     this.target.yaw += dYaw;
     this.target.tilt = clamp(this.target.tilt + dTilt, -TILT_DOWN, TILT_UP);
   }
 
   zoomBy(factor: number) {
     if (this.locked) return;
+    this.guiding = false;
+    this.interaction++;
     this.target.zoom = clamp(this.target.zoom * factor, ZOOM_MIN, ZOOM_MAX);
   }
 
   /** Back to the default framing. `instant` also snaps the eased value. */
   reset(instant = false) {
+    this.guiding = false;
     // Turn back the short way round.
     const turns = Math.round(this.current.yaw / (Math.PI * 2));
     this.current.yaw -= turns * Math.PI * 2;
     this.target = { x: 0, z: 0, zoom: 1, yaw: 0, tilt: 0 };
-    if (instant) this.current = { ...this.target };
+    this.framingTarget = { lift: 0, shiftX: 0 };
+    if (instant) { this.current = { ...this.target }; this.framing = { ...this.framingTarget }; }
   }
 
   /** Eases the current view toward the target; returns it. */
   step(dt: number, reducedMotion: boolean): MapViewState {
-    const k = reducedMotion ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 9);
+    const k = reducedMotion ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * (this.guiding ? 2.8 : 9));
     const pan = this.dragging ? 1 : k;
+    this.framing.lift += (this.framingTarget.lift - this.framing.lift) * k;
+    this.framing.shiftX += (this.framingTarget.shiftX - this.framing.shiftX) * k;
     this.current.x += (this.target.x - this.current.x) * pan;
     this.current.z += (this.target.z - this.current.z) * pan;
     this.current.zoom += (this.target.zoom - this.current.zoom) * k;

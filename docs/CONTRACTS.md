@@ -1731,3 +1731,35 @@ reselect the remaining valid items. Simulation follows the combined revision and
 therefore resets with it; a real charge/order is never created. Each item keeps
 its own source link. Dev 1 must render `revision.items` for approval and
 `selection.items` for the current box, with the one-item fallback for old rows.
+
+### Room guidance (Dev 1 presentation contract)
+
+The room guide observes existing `PublishedClue`, council themes, map signals and
+listing votes. Its first contribution uses `RoomActions.addManualClue` or the
+existing photo/import review flow; there is no tutorial room, tutorial memory,
+or checklist after it. After the first memory is confirmed the guide steps
+aside (`live`) and pauses the room once (`connect`) when another member's
+published memory first lands, explaining how connected memories form themes
+that lead to more gifts. The pause holds for a fixed time or until dismissed,
+auto-publication or reset. Local completion is scoped to room + participant.
+Skipping/replaying guidance never changes memories, votes, selection or approvals.
+Only a council theme containing both published clues may be described as a
+connection. The connection pause waits behind an active composer, drawer or
+reveal; it never takes over someone's draft.
+
+The client emits `unwrap:room-guide` as a `CustomEvent` for the optional Moss
+narrator. Detail is `{ roomId, step, peerId, title, text, active }`; `step` is
+`arrival | welcome | help | compose | saved | live | connect | null`.
+`peerId` is a published clue ID or null. `active: false` cancels narration when
+the guide is hidden, paused or unmounted. This event is presentation only and
+never authorizes a room action or external data access. Narrator consumers must
+not publish, vote, select gifts or approve shares in response. Existing Convex
+contracts and the private import consent flow remain authoritative.
+
+The cinematic presentation adds a local `RingGuideScene` (Moss position, pose,
+seed-island visibility and viewer avatar) to `RingsWorld`. This is never stored
+as a clue. The guide may move the existing composer into its side panel, but
+only one editor is mounted. Help questions and topic choices are local prompts,
+not inferred recipient preferences: no suggested answer is automatically saved.
+Draft-length feedback stays local and raw drafts are never included in narrator
+events. Authored camera framing yields to user gestures and reveal ownership.

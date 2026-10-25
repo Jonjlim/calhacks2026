@@ -4,7 +4,7 @@ import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEff
 import { createPortal } from "react-dom";
 import { reencodeImage } from "@/lib/live/image";
 import type { AvatarId } from "@/components/characters/StorybookAvatar";
-import type { RingAction, RingDetail, RingResearch, RingsWorld } from "@/components/world/room/GiftRings";
+import type { RingAction, RingDetail, RingGuideScene, RingResearch, RingsWorld } from "@/components/world/room/GiftRings";
 import s from "@/components/world/room/gift-rings.module.css";
 import { MapIcon } from "@/components/world/room/MapIcon";
 import type { PledgeWorld } from "@/components/world/room/PledgeRing";
@@ -52,15 +52,19 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   /** The Great Gift Convergence: the cinematic reveal (`instant: false`), or the finished reveal without it. */
   onReveal?(instant: boolean): void;
   revealSeen?: boolean;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void; beginMemory(mode: "text" | "photo", prompt?: string): void; showConnection(themeId: string): void; setGuideScene(scene: RingGuideScene | null): void; draftLength: number } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
-  const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean } | null>(null);
+  const [composer, setComposer] = useState<{ x: number; z: number; zone: "memory" | "gift"; kind: ClueKind; photo?: boolean; prompt?: string } | null>(null);
+  const [guideScene, setGuideScene] = useState<RingGuideScene | null>(null);
+  const draft = useRef("");
+  const [draftLength, setDraftLength] = useState(0);
   // Photos picked in the add box before they're sent.
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
   // “Why?” on one gift: its memories, themes and the gift light up together.
   const [whyListing, setWhyListing] = useState<string | null>(null);
+  const [guideTheme, setGuideTheme] = useState<string | null>(null);
   // The theme whose memories are fanned out to read; the rest rest as face dots.
   const [openTheme, setOpenTheme] = useState<string | null>(null);
   const [allGifts, setAllGifts] = useState(false);
@@ -158,8 +162,20 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const passByKey = useMemo(() => new Map((data.trends?.passes ?? []).map((p) => [trendKey(p.trendJobId, p.query), p])), [data.trends?.passes]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
-  const openBox = () => setSelectedKey("box");
-  if (!active) return { rings: null, notice, error, openBox };
+  const openBox = () => { setGuideTheme(null); setSelectedKey("box"); };
+  const showConnection = (themeId: string) => setGuideTheme(themeId);
+  const beginMemory = (mode: "text" | "photo", prompt?: string) => {
+    if (!actions || lock.current) return;
+    if (composer) { setComposer({ ...composer, prompt: prompt ?? composer.prompt }); return; }
+    draft.current = "";
+    setDraftLength(0);
+    setSelectedKey(null);
+    setOpenTheme(null);
+    setWhyListing(null);
+    setGuideTheme(null);
+    setComposer({ x: 12, z: 11, zone: "memory", kind: "interest", photo: mode === "photo", prompt });
+  };
+  if (!active) return { rings: null, notice, error, openBox, beginMemory, showConnection, setGuideScene, draftLength };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const avatarOf = (id: string) => avatarFor(participants, id);
@@ -194,6 +210,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
 
   // “Why?”: a gift, its themes, and the memories its recommendation cites. Everything else dims.
   let highlight: Set<string> | null = null;
+  const guidedTheme = councilThemes.find((t) => t.id === guideTheme);
+  if (guidedTheme) {
+    const cited = guidedTheme.clueIds.filter((id) => themeOfClue.get(id) === guidedTheme.id);
+    if (cited.length > 1) highlight = new Set([`theme:${guidedTheme.id}`, ...cited.map((id) => `clue:${id}`)]);
+  }
   const whyRec = whyListing ? recs.find((r) => r.listingId === whyListing) : undefined;
   if (whyRec) {
     const cited = whyRec.publishedClueIds.filter((id) => themeOfClue.has(id));
@@ -377,7 +398,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     void run(() => actions.addManualClue(composer.kind, text), `Shared with the room, in ${RING_THEMES[themeForKind(composer.kind)].label}.`).then(done);
   };
   const composerNode = composer && actions && (
-    <div className={s.write} data-map-token>
+    <form className={s.write} data-map-token onSubmit={(e) => {
+      e.preventDefault();
+      const input = e.currentTarget.querySelector("textarea");
+      if (input) add(input.value);
+    }}>
       {composer.zone === "memory" && (
         <div className={s.kinds} role="radiogroup" aria-label="What is it?">
           {([["interest", "memory", "Memory"], ["explicit_wish", "wish", "Wish"]] as const).map(([kind, icon, label]) => (
@@ -387,9 +412,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
         </div>
       )}
       <span className={`${s.cloud} ${s.writeCloud} ${composer.zone === "gift" ? s.ideaCloud : ""}`}>
-      <textarea autoFocus defaultValue="" maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
+      <textarea autoFocus defaultValue={draft.current} maxLength={8000} aria-label={composer.zone === "gift" ? "A gift idea" : composer.kind === "explicit_wish" ? "A wish" : "A memory"}
         className={composer.zone === "gift" ? s.ideaInput : undefined}
-        placeholder={composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat"}
+        onChange={(e) => { draft.current = e.currentTarget.value; setDraftLength(e.currentTarget.value.trim().length); }}
+        placeholder={composer.prompt ?? (composer.zone === "gift" ? "A gift idea… a wheel-throwing class" : composer.kind === "explicit_wish" ? "Something she wished for…" : "Something you remember… or paste a whole chat")}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); add(e.currentTarget.value); }
@@ -398,7 +424,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       <i className={s.trail} aria-hidden />
       </span>
       <p>{composer.zone === "gift" ? "Enter shares the idea · research finds real listings" : "Enter shares it · long pastes are read privately first · Esc cancels"}</p>
-    </div>
+      <div className={s.kinds}>
+        <button type="submit" disabled={!!pending}>{pending ? "Saving…" : "Share with room"}</button>
+        <button type="button" disabled={!!pending} onClick={() => setComposer(null)}>Cancel</button>
+      </div>
+    </form>
   );
 
   // Photos: picked and marked in the add box, then read privately with the same pipeline as the photo panel.
@@ -592,6 +622,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     .map((c) => ({ key: c.participantId, name: c.displayName, color: colorOf(c.participantId), x: c.x, z: c.y }));
 
   const rings: RingsWorld = {
+    guideScene,
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
       return { key: `clue:${c.id}`, text: clue.text, author: name(clue.publisherId), avatar: avatarOf(clue.publisherId), color: colorOf(clue.publisherId), theme: c.theme, tint: themeTint.get(c.theme) ?? OTHER_TINT, x: c.x, z: c.z, fromPhoto: clue.sourceKind === "photo", photo: thumbFor(clue.id) };
@@ -638,9 +669,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     boxLabel: selection ? `${priceOf(selection.listingId)} · ${approved}/${participants.length} yes` : "Our gift box",
     selectedKey,
     highlight,
-    composer: composer && (photoComposer ?? composerNode) ? { x: composer.x, z: composer.z, node: photoComposer ?? composerNode } : null,
+    composer: composer && (photoComposer ?? composerNode) ? { x: composer.x, z: composer.z, node: photoComposer ?? composerNode, photo: composer.photo } : null,
     photos: photoNodes,
     onSelect: (key) => {
+      setGuideTheme(null);
       setComposer(null);
       setSelectedKey(key);
       // A theme fans out its memories; a memory keeps its theme open around it.
@@ -652,9 +684,11 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (key !== "box" && key !== `gift:${whyListing}`) setWhyListing(null);
     },
     onEmpty: (point, zone?: RingZone) => {
+      setGuideTheme(null);
       setSelectedKey(null);
       setWhyListing(null);
       setOpenTheme(null);
+      if (point) { draft.current = ""; setDraftLength(0); }
       setComposer(point && actions ? { x: point[0], z: point[1], zone: zone === "gift" ? "gift" : "memory", kind: "interest" } : null);
     },
     onDrag: (key: string, result: RingDragResult) => {
@@ -686,5 +720,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const trendFailed = trendAsked !== null && trendJob && trendJob.createdAt >= trendAsked - 5000 && (trendJob.status === "failed" || trendJob.status === "stale")
     ? `The trend lookup stopped${trendJob.lastError ? `: ${trendJob.lastError}` : "."} Memories and gifts are unchanged.`
     : null;
-  return { rings, notice, error: error ?? trendFailed, openBox };
+  return { rings, notice, error: error ?? trendFailed, openBox, beginMemory, showConnection, setGuideScene, draftLength };
 }

@@ -20,6 +20,7 @@ import { smooth, span } from "@/lib/convergence/timeline";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
 import { PledgeRing, type PledgeWorld } from "./PledgeRing";
+import { StylizedTree } from "../props/Flora";
 import { platformTop } from "../props/Stonework";
 import s from "./gift-rings.module.css";
 
@@ -51,7 +52,13 @@ export interface RingDetail {
 
 export type RingResearch = "running" | "failed" | null;
 
+export interface RingGuideScene {
+  x: number; z: number; seed: boolean; avatar: AvatarId;
+  mode: "welcome" | "thinking" | "writing" | "celebrate" | "exploring";
+}
+
 export interface RingsWorld {
+  guideScene?: RingGuideScene | null;
   clues: { key: string; text: string; author: string; avatar: AvatarId; color: string; theme: string; tint: string; x: number; z: number; fromPhoto?: boolean; photo?: string }[];
   /** Photos members added, shared with the whole room (D20). The uploader also sees what the private read found. */
   photos?: { key: string; images: string[]; author: string; mine: boolean; found: number; reading: boolean; x: number; z: number }[];
@@ -88,7 +95,7 @@ export interface RingsWorld {
   selectedKey: string | null;
   /** “Why this?”: keys on the path to the chosen gift. Everything else dims. */
   highlight?: ReadonlySet<string> | null;
-  composer?: { x: number; z: number; node: ReactNode } | null;
+  composer?: { x: number; z: number; node: ReactNode; photo?: boolean } | null;
   onSelect(key: string | null): void;
   /** A click on empty sky, as an offset from the present, and the zone it landed in; null closes whatever is open. */
   onEmpty(point: [number, number] | null, zone?: RingZone): void;
@@ -209,6 +216,24 @@ function RingIsland({ at, kind, delay, animate, muted, size = 1, arrive, childre
       {children}
     </group>
   );
+}
+
+/** Moss is a character in the same room, travelling to the island being explained. */
+function MossCompanion({ scene, animate, center }: { scene: RingGuideScene; animate: boolean; center: THREE.Vector3 }) {
+  const group = useRef<THREE.Group>(null);
+  const at = useMemo(() => new THREE.Vector3(), []);
+  const [waved, setWaved] = useState(false);
+  useEffect(() => { if (scene.mode === "welcome") setWaved(false); }, [scene.mode]);
+  useFrame((_, dt) => {
+    if (!group.current) return;
+    at.set(center.x + scene.x - 0.9, (scene.x === 0 && scene.z === 0 && !scene.seed ? platformTop() + 0.25 : center.y + (scene.seed ? 0.5 : 0.35)), center.z + scene.z + 0.6);
+    group.current.position.lerp(at, animate ? 1 - Math.exp(-dt * 3.5) : 1);
+  });
+  // Moss stays grounded; only a one-time wave and sitting while you think.
+  const clip = scene.mode === "welcome" && !waved ? "Wave" : scene.mode === "thinking" ? "Sit" : "Idle";
+  return <group ref={group} position={[center.x + scene.x - 0.9, center.y + 0.5, center.z + scene.z + 0.6]}>
+    <Suspense fallback={null}><StorybookAvatar avatar="calm" clip={animate ? clip : "Idle"} onClipFinished={() => setWaved(true)} scale={0.85} rotation={[0, 0.35, 0]} /></Suspense>
+  </group>;
 }
 
 /**
@@ -521,7 +546,7 @@ const FAN_OUT = 2.2;
  * beyond the theme when it is above or below the present, a column when it
  * is to the side. Wide, short bubbles read best laid out this way.
  */
-function fanOut(theme: { x: number; z: number }, keys: string[]): Map<string, [number, number]> {
+export function fanOut(theme: { x: number; z: number }, keys: string[]): Map<string, [number, number]> {
   const out = new Map<string, [number, number]>();
   const angle = Math.atan2(theme.z, theme.x / RING_STRETCH);
   const [ox, oz] = [Math.cos(angle) * (RING_RADII.input + FAN_OUT) * RING_STRETCH, Math.sin(angle) * (RING_RADII.input + FAN_OUT)];
@@ -740,10 +765,20 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
       )}
       {(rings.cursors ?? []).map((c) => <RemoteCursor key={c.key} at={world(c.x, c.z, 0.6)} name={c.name} color={c.color} animate={animate} />)}
 
-      {rings.composer && (
-        <Html position={world(rings.composer.x, rings.composer.z, 1)} center zIndexRange={[70, 60]}>
-          <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>{rings.composer.node}</div>
-        </Html>
+      {rings.guideScene && <MossCompanion scene={rings.guideScene} animate={animate} center={center} />}
+      {rings.guideScene?.seed && (
+        <RingIsland at={world(rings.guideScene.x, rings.guideScene.z)} kind="clue" delay={0} animate={animate} size={1.7}>
+          <StylizedTree x={-0.65} z={-0.5} y={0.15} scale={0.8} seed={707} />
+          <Suspense fallback={null}><StorybookAvatar avatar={rings.guideScene.avatar} position={[0.5, 0.2, 0]} scale={0.7} rotation={[0, -0.35, 0]} /></Suspense>
+        </RingIsland>
+      )}
+      {rings.composer && !rings.guideScene?.seed && (
+        <group>
+          <RingIsland at={world(rings.composer.x, rings.composer.z)} kind="clue" delay={0} animate={animate} muted={false} />
+          <Html position={world(rings.composer.x, rings.composer.z, 1)} center zIndexRange={[70, 60]}>
+            <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>{rings.composer.node}</div>
+          </Html>
+        </group>
       )}
       {drag.preview && (
         <Html position={world(0, 0, 2)} center zIndexRange={[80, 70]}>

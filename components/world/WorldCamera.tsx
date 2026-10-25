@@ -149,8 +149,9 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
         const ring = Math.sin(polar) * dist;
         return {
           ...base,
-          position: [tx + view.x + Math.sin(heading) * ring, ty + Math.cos(polar) * dist, tz + view.z + Math.cos(heading) * ring],
-          target: [tx + view.x, ty, tz + view.z],
+          shiftX: mapView.framing.shiftX,
+          position: [tx + view.x + Math.sin(heading) * ring, ty + mapView.framing.lift + Math.cos(polar) * dist, tz + view.z + Math.cos(heading) * ring],
+          target: [tx + view.x, ty + mapView.framing.lift, tz + view.z],
         };
       };
       const scenePose = poseOf(shown);
