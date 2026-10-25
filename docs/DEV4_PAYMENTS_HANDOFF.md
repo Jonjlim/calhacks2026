@@ -102,3 +102,44 @@ still the smallest first live integration; per-contributor orchestration follows
 The checkout port contract is appended to CONTRACTS.md. Shared changes are
 additive types only; there are no payment schema/state-machine changes. No deploy,
 environment change or paid request is included.
+
+## Demo scope selected — shared contribution simulation
+
+Alex explicitly chose a labelled simulation and stopped further refund/partial-
+capture work. New code on `dev4/phase2-payments`:
+
+- `convex/payments/simulation.ts` provides `getState`, `simulateContribution`,
+  `wrapGift`. Membership, current revision, all current approvals, own positive
+  share and organizer-only wrapping are enforced in Convex. Concurrent/repeated
+  clicks do not duplicate or lose marks. Changed revisions/approval fingerprints
+  reset displayed progress. Zero shares need no simulation.
+- `simulationSchema.ts` owns a separate `paymentSimulations` table. The shared
+  schema adds its fragment; room purge adds one indexed cleanup phase. Real
+  payment attempts, provider events, proposal statuses and merchant orders are
+  untouched. No Stripe key or flag is needed for simulation.
+- `components/payments/ContributionSimulation.tsx` is the reusable ring-box UI;
+  `ConnectedContributionSimulation.tsx` subscribes to the new member endpoints.
+  Dev 1 can mount `<ConnectedContributionSimulation roomId={roomId}
+  giftTitle={selectedTitle} />` in the new map's box after the backend is reviewed
+  and deployed. Do not add it to the retired tower/drawer path.
+- `/demo/contributions` is an isolated, clearly labelled **local fixture preview**
+  of that same UI. It lets one person play both sample roles; this is not two-user
+  browser acceptance of the connected backend. No backend/provider writes occur.
+
+Start the preview in this worktree with `npm run dev -- --webpack --port 4183`,
+then open `http://localhost:4183/demo/contributions`. No production environment or
+secret changes were made. Font fetching is unavailable on this host, so the
+browser preview uses existing font fallbacks; no typography source was changed.
+
+Validation: **633 tests passed, 3 live skipped**, frontend and Convex typechecks
+passed. Browser-tested fixture contributions 0→1→2, disabled wrapping for Sam,
+organizer wrapping, changed-share reset and fresh approvals; phone width 390px
+has no horizontal overflow. Backend tests cover auth, stale revision, approval
+withdrawal, exact own-share view, zero shares, concurrent clicks and room purge.
+No live deployment, real-room two-browser simulation or live Stripe test occurred.
+
+Before integration, Dev 2 reviews the additive schema/purge changes and deploys
+with the team's normal backend workflow. Then Dev 1 mounts the connected box
+component and the team repeats the same flow with two actual room members.
+Existing Stripe orchestration code remains dormant; no new refund/recovery
+feature or enabled real payment action was added.

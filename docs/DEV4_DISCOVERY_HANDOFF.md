@@ -149,3 +149,18 @@ Validation on this branch: full offline suite **617 passed / 3 live skipped**;
 `npm run typecheck` passed for frontend and Convex. Discovery selection is tested
 against persisted fixture jobs; no new live Apify run was made. This validates
 the backend seam, not the unbuilt agent/map interactions or a shared deployment.
+
+### MAP-011 helper prepared against the proposed theme contract
+
+`convex/research/themeLinks.ts` exports `recommendationThemeIds`. It derives a
+stable unique list of theme IDs by intersecting a recommendation's active
+same-room published-clue citations with each current theme's clue IDs. Dismissed,
+stale, foreign and withdrawn-source themes do not produce paths. Theme label
+similarity is never used as product evidence. Eight offline cases pass.
+
+This helper does not implement or deploy the theme schema or map projection.
+Dev 2 calls it from the membership-scoped ring projection once the shared proposed
+shape is agreed; Dev 1 can then draw paths using the returned IDs. Alan still owns
+creating themes/agent suggestions. Existing trend/style selection already accepts
+`discoveryQuery` for a chosen returned suggestion. Source windows and provenance
+stay visible; group dismissal remains the agreed signal/theme operation.

@@ -719,3 +719,31 @@ export interface StripePaymentReadInput {
   paymentIntentId?: string;
   refundIds?: string[];
 }
+
+
+/** Explicit demo-only progress; never actual payment or merchant-order state. */
+export interface ContributionSimulationView {
+  mode: "simulation";
+  revisionId: string | null;
+  status: "no_proposal" | "waiting_for_approvals" | "ready" | "collecting" | "complete" | "wrapped" | "unavailable";
+  payerCount: number;
+  completedCount: number;
+  myShareMinor: number;
+  myCompleted: boolean;
+  canSimulate: boolean;
+  canWrap: boolean;
+}
+
+
+/** MAP-011 consumes the proposed ring contract; theme persistence remains Dev 2/3. */
+export interface MapTheme {
+  id: string;
+  roomId: string;
+  label: string;
+  clueIds: string[];
+  status: "suggested" | "accepted" | "dismissed";
+  source: "agent" | "member";
+  createdBy?: string;
+  knowledgeRevision: number;
+  updatedAt: number;
+}

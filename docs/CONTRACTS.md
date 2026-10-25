@@ -1569,3 +1569,58 @@ This records a search direction, not a new recipient clue or popularity score.
 Show source context as “found while researching [query]”, never as proof that
 an individual returned product is trending. Dismissing an idea on the map must
 use Dev 2's agreed theme/signal semantics; this endpoint does not persist passes.
+
+
+### Shared contribution simulation (Dev 4, demo only)
+
+Alex selected a visibly labelled simulation instead of expanding live payment
+orchestration. Convex owns shared demo state in `paymentSimulations`, separate
+from Stripe attempts and proposal status. No payment/provider API is called.
+
+```ts
+interface ContributionSimulationView {
+  mode: "simulation";
+  revisionId: string | null;
+  status: "no_proposal" | "waiting_for_approvals" | "ready" | "collecting" | "complete" | "wrapped" | "unavailable";
+  payerCount: number;
+  completedCount: number;
+  myShareMinor: number;
+  myCompleted: boolean;
+  canSimulate: boolean;
+  canWrap: boolean;
+}
+```
+
+`payments.simulation.getState({roomId})` is a member query. `simulateContribution`
+and `wrapGift` take `{roomId, revisionId}` and return `Result<ContributionSimulationView>`.
+A contributor can simulate only their own positive share on the current fully
+approved pledged revision; only the organizer can wrap, after every payer has
+simulated. Duplicate clicks are idempotent. Revision changes or changed approval
+fingerprints hide prior progress. Zero shares require no simulated payment.
+The view shows only group counts and the caller's own share, never private caps.
+
+Additive table: `paymentSimulations {roomId, revisionId, approvalFingerprint,
+completedParticipantIds, wrappedAt?, createdAt}` with room/revision indexes.
+The fingerprint binds current approval IDs, participant IDs, statuses and update
+times. Room purge deletes this table. It contains no card/provider objects,
+Checkout URLs or real payment statuses. Wrapping affects only this demo row,
+never `proposalRevisions`, `paymentAttempts`, `giftWorlds` or merchant orders.
+Amounts remain the current proposal estimate; unresolved tax/shipping must stay
+visible. UI always says simulation and no money/order. No live-payment action,
+refund/recovery expansion, deployment or environment change is part of this work.
+
+Owners/consumers: Dev 4 backend + reusable payment component; Dev 1 mounts it in
+the new ring map's box. Small shared edits: table fragment import/spread and purge
+entry only. This does not add features to the retired tower/drawer paths.
+
+
+### MAP-011 pure projection seam (Dev 4)
+
+`recommendationThemeIds({roomId, knowledgeRevision, recommendation, themes, clues})`
+consumes the proposed `MapTheme` shape above against mocks, returning sorted unique
+IDs. It links only current same-room suggested/accepted themes, whose clue IDs
+are all still active, through the recommendation's own active published-clue
+citations. Dismissed/stale/foreign themes and withdrawn/foreign citations do not
+link. No label matching or model-provided theme references are trusted. No theme
+schema, signal mutation, ranking change or new map query is implemented here.
+Dev 2 can use the helper in MAP-007 once the proposed contract is accepted.

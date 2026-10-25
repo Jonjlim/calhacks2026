@@ -172,6 +172,9 @@ const giftDecorations: Purger = async (ctx, roomId, limit) =>
 const giftWorlds: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("giftWorlds").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
+const paymentSimulations: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("paymentSimulations").withIndex("by_room", q => q.eq("roomId", roomId)).take(limit));
+
 const participants: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
@@ -194,6 +197,7 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["askedSlots", askedSlots],
   ["votes", votes],
   ["recommendations", recommendations],
+  ["paymentSimulations", paymentSimulations],
   ["proposalRevisions", proposalRevisions],
   ["giftSelections", giftSelections],
   ["productListings", productListings],

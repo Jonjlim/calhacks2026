@@ -47,3 +47,12 @@ rehearsal, not a browser payment flow or live sandbox acceptance.
 organizer runner. Both require Dev 2's durable claim/settle implementation before
 an application action can call them. RC-012 signature helpers exist; the durable
 webhook receipt route and reconciliation fence remain joint integration work.
+
+## Chosen demo ending
+
+The new `simulation.ts` endpoints store explicitly simulated contributions in
+`paymentSimulations`. They never call Stripe or change real payment/proposal
+statuses. Current approvals and own-share checks remain deterministic. The
+reusable box UI and labelled `/demo/contributions` fixture preview are documented
+in DEV4_PAYMENTS_HANDOFF.md. This replaces further live orchestration expansion
+for the current demo scope; existing sandbox primitives remain dormant.

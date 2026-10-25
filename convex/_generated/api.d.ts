@@ -83,7 +83,14 @@ import type {
   FunctionReference,
 } from "convex/server";
 
+import type * as payments_simulation from "../payments/simulation.js";
+import type * as payments_simulationSchema from "../payments/simulationSchema.js";
+import type * as research_themeLinks from "../research/themeLinks.js";
+
 declare const fullApi: ApiFromModules<{
+  "payments/simulation": typeof payments_simulation;
+  "payments/simulationSchema": typeof payments_simulationSchema;
+  "research/themeLinks": typeof research_themeLinks;
   "agents/buyer": typeof agents_buyer;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;

@@ -433,3 +433,19 @@ reliability or platform-wide trends. No new product
 source, AI provider or database is added. The fixed Stripe adapter additionally
 supports canceling a zero-capture manual hold, per current official API docs;
 actual hosted-Checkout hold cancellation remains **unverified live**.
+
+
+### D20 — Explicit contribution simulation for the demo (2026-10-24)
+
+Alex chose a small simulated payment ending rather than further live refunds,
+partial captures or recovery work. Convex stores revision-bound simulation marks
+in a separate `paymentSimulations` table. Current membership, exact own shares
+and full proposal approvals are checked deterministically. Only the organizer
+can mark the demo wrapped after every simulated contribution. A revision or
+approval change invalidates displayed progress. Neither simulation nor animation
+changes Stripe attempts, real funding, proposal approvals or merchant orders.
+The UI displays “Payment simulation” and “No money charged or gift purchased.”
+No external service or secret is added. Existing sandbox primitives remain dormant.
+The reusable box component is integrated by Dev 1 into the new map, with a
+separate labelled local fixture preview for browser review. Actual shared runtime
+acceptance remains pending deployment of the additive schema/functions.
