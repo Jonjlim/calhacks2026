@@ -1,11 +1,60 @@
 # Architecture
 
-Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): a Next.js client and a Convex backend. External providers are called from Convex actions. There is no second database, no dedicated queue service, and no Python worker in the planned architecture.
+Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): a Next.js client and a Convex backend. External providers are called from Convex actions. There is no second database and no dedicated queue service. The one Python process is the Fetch.ai council coordinator in `fetch-agent/`, recorded in “Decision: Fetch.ai AI Council coordinator” below; Convex stays authoritative for everything it touches.
 
-[PLAN.md](../PLAN.md) suggested an optional Node worker and a possible Python optimizer. Both are rejected for this weekend unless a spike proves Convex actions cannot call the chosen provider.
+[PLAN.md](../PLAN.md) suggested an optional Node worker and a possible Python optimizer. Both remain rejected unless a spike proves Convex actions cannot call the chosen provider.
 
 ## Decisions
 
+### D25 — Scrapewise replacement shopping actor (conditional go, 2026-10-25)
+
+Dev 4 is replacing the missing-link automation-lab source with `scrapewise/google-shopping`, pinned build `0.1.46`. Same Apify service and token; no extra service or database. Request one US/English query, at most 20 items from one page, budget filter, and a $0.40 run charge cap. Offers, direct-store resolution, details and price history are disabled. A listing links to the observed Google product page; this is not a verified retailer checkout URL. Normalize explicit USD, numeric `price` reconciled against `priceText`, `store`, `imageUrl`, and the public `productUrl`. Missing source links still drop rows; unknown prices remain unknown. Legacy parsers stay for recorded observations. One synthetic `hiking backpack` live check succeeded: run `fLbkGQez9dtwdzEUJ`, dataset `C7spheQO46lAxF1NY`, 20 normalized listings with observed prices and images, about 14 seconds end to end. The reduced recorded response is `convex/research/fixtures/scrapewise-shopping.json`. This verifies that query and the production provider/parser path, not arbitrary searches or browser checkout.
+
+### D24 — Google Shopping actor switched to automation-lab (live no-go, 2026-10-25)
+
+The previous `johnvc` actor returned a monthly-allowance notice. Research was switched to `automation-lab/google-shopping-scraper`, using the same Apify token with `queries`, US/English localization, `maxResults: 20`, optional budget `maxPrice`, and a $0.40 run charge cap. The cap does not guarantee a result count. No successful build is pinned.
+
+**Live verification failed:** one synthetic `hiking backpack` search (run `ESUSgJwQdzf1qxyi2`, dataset `DfO8vaVlmz9XMtT1f`) ended `SUCCEEDED` at the provider but returned 16 rows with empty `productUrl` and `imageUrl` on every row. Zero met the listing contract. This actor is **not ready for live gift discovery** in the tested configuration. Do not turn titles into invented merchant links, approve a build based only on provider status, or automatically repeat paid runs. The recorded response is `convex/research/fixtures/automation-lab-missing-links.json`; the job now explains the missing-link failure. Previously verified fixtures remain useful for an explicitly labelled offline rehearsal, not a fresh live result. The old page parser remains for historical observations. The direct Python council fallback still references the historical actor; configured room research uses the Convex bridge. Google Trends uses a separate actor.
+
+### D23 — Directions between memories and gifts (trial, 2026-10-24)
+
+Trial on `dev4/directions-trial`, not yet on `refactor`. Trend sprouts per memory flooded the map with generic searches, and one search could fill the gift ring with one product type, so "Why this gift?" had nothing to say. The trial adds a middle layer: the council proposes 3–4 **directions** that each combine at least two memories (or one explicit wish), asks one question when a direction is broad, and research runs once per direction with two gifts shown from each. Trends become a few clouds people can catch into the next directions; they never search by themselves. Same stack: one new Convex table (`mapDirections`), optional fields on `researchJobs` and `mapSharpens`, two new signal kinds, the existing model adapter and Apify search. No new provider or service. Contract: "Directions flow — trial (D23)" in [CONTRACTS.md](CONTRACTS.md).
+
+### D22 — Model screen for Google Trends ideas (2026-10-24)
+
+Related Google searches include news, scores and lookups ("hiking deaths", "tennis results"). After a trend run succeeds, `convex/research/trendScreen.ts` sends up to 40 candidate phrases and the seed term to the **existing** configurable model adapter (Dev 3's `LLM_*` settings, `extractor` role, Zod-validated). The model only labels each phrase `product`, `style`, `experience` or `not_gift`. It cannot add or reword searches: only exact phrases from the scraped data are kept, and the deterministic news/lookup floor still applies on top. If the model is unset, fails or returns invalid JSON, the word filter is used instead; each stored sample records which (`screen: "model" | "words"`). `TREND_AI_SCREEN=off` disables the call. Cost: one model call per completed trend lookup. No new provider, SDK, table or service; Dev 3 owns the adapter and should review the prompt. When a check yields nothing, the map says why (`emptyTrendNote`) instead of staying silent.
+
+### D20 — Room photos are shared with the room (2026-10-24)
+
+Photos added on the gift map are visible to every room member. This changes the P0 rule that uploaded photos were owner-only and deleted after reading, for photos added on the map only. The private read is unchanged: each photo is uploaded twice, a shared copy in `roomPhotos` (`convex/photos.ts`) and a private copy that the extractor reads once and deletes. AI guesses from the photo stay private until published. Shared copies use the same upload grants, type and size checks as evidence uploads, are kept by the stale-upload sweep, cannot be claimed by the read-once pipeline, can be deleted only by their uploader, and are purged with the room. Safeguards and wording: [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Decided by the team lead on request; owners: Dev 3 (map, photos), Dev 2 (media hardening, review requested).
+
+### D19 — Map-first room (2026-10-24)
+
+The gift map becomes the room. The app opens in a lobby in front of the present (the garden view); when the organizer starts the room, the camera zooms out and the map opens around the present, which becomes the box at its center. The tower step, the Backstage drawer, the Gifts drawer, the separate `/room/[id]/map` page, and the React Flow arrange view leave the main path. Imports, photos, research, votes, selection, and approvals all happen on the map.
+
+- **Layout.** Rings: published clues outside, suggested themes in the middle, listings inside (placed between the themes their recommendation cites), the box at the center. Ring positions are computed on the client from room data and are presentation only. `moveNode` is no longer needed on the main path.
+- **Authority unchanged.** Convex owns clues, themes, signals, listings, selection, caps, and revisions. Pulls are advisory. Only the organizer selects; only people approve.
+- **Reuse.** Listing pulls map to the existing `castVote` up/down. “She has it” and “too pricey” map to `setFeedback`. Cursors reuse `moveCursor` and `listCursors`. The box uses the existing proposal, cap, and approval functions.
+- **New, proposed.** Suggested themes and direction signals on clues and themes. See “Map-first room (proposed)” in [CONTRACTS.md](CONTRACTS.md). Nothing is built yet.
+- **Privacy unchanged.** Imported text and photos stay owner-only. The map shows a contributor their own private items with an “only you” marker and shows everyone else only published clues. Sharing a photo image itself would be a new consent step and is an open decision in [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+- **Promotion.** This promotes the map from P2 to P0 (AGENTS.md requires recording it). The fallback is listings on the inner ring by score, without themes.
+
+Owners: Ally (lobby), Dev 1 (map UI), Dev 2 (projection and signals), Dev 3 (themes, sharpen, council wiring), Dev 4 (listings by theme). Plan and milestones: [EXECUTION_PLAN.md](EXECUTION_PLAN.md).
+
+### D20 — Gift Twin and agent collaborators (demo, 2026-10-24; amended same day)
+
+A recipient can pair a **Gift Twin** with a gift room from their Mac (`gift-twin/`, a Node/TypeScript CLI). With the recipient's **one-time permission**, the companion reads the most recent 1 MB of iMessage content from the local `chat.db` (read-only, macOS Full Disk Access) and uploads **only the messages the recipient sent** (text and send time; never other people's messages, handles, chat names, or attachments) to a temporary vault in Convex. A cloud twin agent acting for the recipient finds gift-feasible insights and votes up or down on the room's ideas, both existing ones and ones added while the vault is open. The vault is deleted after 24 hours, on `forget`, on disconnect, or on room purge.
+
+- **Amendment (same day).** The first version extracted on the Mac and sent one screened report; uploading raw messages was rejected. It is now adopted, because on-device extraction could not see ideas the room adds later and needed a local model for quality. The privacy promise moves from "messages never leave the Mac" to "messages are visible to no person, are read only by the twin agent acting for the recipient, and are deleted within 24 hours". The recipient sees exactly this before agreeing, and `device.startUpload` refuses without `consent: true`.
+- **Recipient page amendment (same day).** Room members create a single-use recipient link in `/room/[id]/twin`; `/twin` provides terms, explicit acceptance, local file selection with immediate upload after consent, status and deletion. SQLite WASM (`sql.js`, locally bundled, no new provider/service) reads a selected `chat.db` in browser memory using the CLI's newest-1-MiB scan and existing upload preparation; only sent text/time reaches the existing vault. No additional pre-upload content screening or review is added. Browsers cannot directly open Messages or grant themselves Full Disk Access. Raw databases never reach Next.js or Convex. The CLI remains supported. Browser tokens live in tab session storage, never the URL; invite codes use URL fragments. Browser database compatibility and real macOS file selection remain **unverified** until a live spike succeeds.
+- **Authority.** Convex stays authoritative. Agent collaborators are not participants: no share, cap, selection, or approval. Twin votes are advisory posts, separate from participant `votes`, and never enter selection or allocation. **Exception to rule 4 (AI may not publish clues), recorded here:** Unwrap's server-side gift agent publishes twin notes as clues without a human tap, because the recipient authorized the source and a manual review step made the demo feel like a form. Downvotes become exclusion/ownership clues; the friend's original clue is never edited. Guardrails are deterministic: low confidence is dropped, every agent output is re-validated with Zod before insert, vote refs must match a current room idea (the server keeps its own idea text), the gift agent's model can only veto, and clues are attributed to the inviting member (who can withdraw them).
+- **Privacy rule mapping.** AGENTS.md says raw imported messages are visible only to the uploader and the extraction action running as them. Here the uploader is the recipient's device, which cannot read the vault back, and the only reader is `internal.giftTwin.agent.*` (model role `recipient`). The buyer/gift agent receives screened sentences only. Recipient messages and contributor evidence stay separate flows (rule 5).
+- **Transport.** The companion calls public Convex functions with a bearer device token it generates locally; only the SHA-256 is stored. The watch loop uses the Convex scheduler (no cron, no new service). No new HTTP routes or providers: the existing Chat Completions adapter reads the messages when configured; without it, deterministic patterns decide.
+- **Isolation for the demo.** New files only (`convex/giftTwin/`, `lib/agentCollaborators/`, `gift-twin/`, `components/giftTwin/`, `/room/[id]/twin`), plus one-line hooks in `convex/schema.ts`, `convex/lib/roomPurge.ts`, `tsconfig.json`, and `package.json`. Gated by `GIFT_TWIN_DEMO_ENABLED=true`. P0 does not depend on it.
+- **Generalization.** The same tables and feed carry the planned trend agent (`kind: "trend_scout"`).
+- **Unverified.** Real `chat.db` reading has fixture and synthetic-database tests only; it needs a live check on a Mac with Full Disk Access. Model extraction quality and Apple's `attributedBody` format across macOS versions are unverified.
+
+Rejected: making the twin a `Participant` (would enter allocations and approvals); counting twin votes in participant `votes` (agents must not steer selection); keeping messages beyond a short TTL; uploading friends' messages (third parties never consented); a native macOS app for the demo (slower to ship, same data path); a manual "Add to room" / "Ask the twin" interface (replaced by the gift agent's review); requiring repeated mentions (too strict). Details: [GIFT_TWIN.md](GIFT_TWIN.md).
 ### D14 — Reviewed catalog evidence for missing hobby terms (2026-10-24)
 
 Some real tool titles omit their hobby, and the shopping Actor returns no category/description field. Dev 4 adds a small, reviewed manufacturer catalog (two initial model identities) for derived category matching at read time. Exact title/model identity is required; seller names, search queries and social popularity are insufficient. Ownership remains literal; explicit exclusions can use the verified category/manufacturer, with source-bearing explanations for derived positive matches. No state, provider, money authority or shared endpoint changes. This bounded catalog does not solve arbitrary product classification. See “Reviewed catalog matching” in CONTRACTS.md and [DEV4_CATALOG_MATCHING.md](DEV4_CATALOG_MATCHING.md).
@@ -420,3 +469,117 @@ reliability or platform-wide trends. No new product
 source, AI provider or database is added. The fixed Stripe adapter additionally
 supports canceling a zero-capture manual hold, per current official API docs;
 actual hosted-Checkout hold cancellation remains **unverified live**.
+
+
+### D20 — Explicit contribution simulation for the demo (2026-10-24)
+
+Alex chose a small simulated payment ending rather than further live refunds,
+partial captures or recovery work. Convex stores revision-bound simulation marks
+in a separate `paymentSimulations` table. Current membership, exact own shares
+and full proposal approvals are checked deterministically. Only the organizer
+can mark the demo wrapped after every simulated contribution. A revision or
+approval change invalidates displayed progress. Neither simulation nor animation
+changes Stripe attempts, real funding, proposal approvals or merchant orders.
+The UI displays “Payment simulation” and “No money charged or gift purchased.”
+No external service or secret is added. Existing sandbox primitives remain dormant.
+The reusable box component is integrated by Dev 1 into the new map, with a
+separate labelled local fixture preview for browser review. Actual shared runtime
+acceptance remains pending deployment of the additive schema/functions.
+
+### D21 — Evaluate Bitdeer as a replacement model provider (unverified)
+
+Alex requested testing Model Studio with GLM-5.3-Flash. Dev 4 adds only the
+standalone `scripts/bitdeer-check.mts` candidate-provider spike (documented in
+DEV4_BITDEER_SPIKE.md). It targets the official HTTPS inference endpoint, uses
+synthetic text and generated test images, and requires an explicit `--run` plus
+privately configured key for at most three paid calls with no retries. The
+existing app provider/adapter, deployment and environment files are unchanged.
+Bitdeer is an **unverified alternative**, not an added active LLM service. Dev 3
+must verify API parameters, application schemas, photo behavior and timing before
+switching the existing configurable provider. No new SDK, database or service is
+introduced. Offline fixture checks do not establish live model capability or
+prize eligibility.
+
+
+### D26 — Gift Twin local Moss memory (2026-10-25; local and Convex retrieval spikes verified)
+
+Use pinned `@moss-js/moss` in a Convex Node internal action to retrieve private
+recipient evidence for Gift Twin votes. Convex remains authoritative; Moss is an
+ephemeral derived index, rebuilt per evaluation and explicitly closed. Only local
+session add/query operations are used: never cloud create/add/push or disk save.
+Moss credentials stay server-side. The SDK authenticates/downloads its model and
+sends usage telemetry (opaque random session name, counts, timing, device ID);
+document/query text and metadata are not sent to Moss. The existing model provider
+still receives retrieved evidence in role `recipient`. The room and buyer agent
+receive only screened posts through the existing review path. No voice service,
+additional model, database or standalone service is introduced.
+
+The native SDK is externalized for Convex Node packaging. Flag-off and failures
+retain keyword recall. Each call checks upload identity and expiry through Convex;
+no private session is reused between uploads or rooms. Numeric server diagnostics
+separate setup/indexing from retrieval; cold indexing is not a sub-10ms operation.
+The authenticated local macOS spike passed paraphrase, ownership and dislike
+top-hit checks over eight synthetic messages (SDK 1.21.0): retrieval 1.3–2.0 ms,
+indexing 12.5 ms, cold setup/model loading 23.3 seconds. This establishes only the
+small local spike. Native deployment and the synthetic paraphrase probe also
+passed on dev `shiny-dotterel-658`: setup 2.25 s, indexing 27.1 ms, retrieval
+4.1 ms over three synthetic messages. `GIFT_TWIN_MOSS_ENABLED=true` is enabled
+there. Convex replaces JS `process.env` during invocation, so native `getenv`
+cannot see JS assignments. A temporary nonsecret config loaded with Node's
+`loadEnvFile` sets `MOSS_MODEL_CACHE_DIR=/tmp/unwrap-moss-models` in the native
+environment; the file is immediately removed. Only public model artifacts and
+device identity are cached; private session documents are never persisted.
+The full live room-to-model path, production deployment, larger vault performance,
+and cold-start variability remain **unverified**. Automated integration tests cover
+the room path using a mocked SDK; they do not establish live model answer quality.
+
+### D27 — Responsive twin evaluations (2026-10-25)
+
+Remove model calls from the first useful Gift Twin response. Server-pattern
+insights and explicit votes are stored and deterministically reviewed first;
+only unresolved votes need Moss/model processing. Model-only enrichment and
+votes settle independently and retain upload/expiry checks. The fast review
+receives exact inserted post IDs so concurrent unreviewed model posts cannot
+bypass their existing review. No AI permission, money, consent or data authority
+boundary changes.
+
+Room knowledge changes, new map sprouts and completed product listings schedule
+a transactional unchecked-idea claim after 200 ms. Duplicate wakeups do not create
+duplicate votes or polling loops. The existing 30-second watch is recovery only.
+Vault chunk reads run four at a time. Moss embeds a maximum of 256 distinct
+messages per evaluation, preferring gift/preference language and balancing old
+and recent evidence. Full-vault keyword checks remain; semantic-only recall
+outside the bounded working set is a documented tradeoff. No cross-action private
+cache, disk index, provider or table is added. Local synthetic indexing benchmark:
+2,048 messages, 2,196 ms before vs 309 ms after, with the historical pottery
+memory still ranked first. Live model and product-provider latency are separate.
+Deployed to dev `shiny-dotterel-658`; a live three-message synthetic room check
+passed with a published first finding at 518 ms and reviewed evaluation of a new
+message at 790 ms (client/network included). The temporary room was deleted.
+These timings cover deterministic evidence, not model-only or shopping latency.
+
+## Bounded multi-gift box — Alex-authorized integration
+
+Alex requested both single and multiple gifts in the buying flow. Keep one
+Convex selection and one versioned proposal per room; add optional item snapshots
+rather than a second cart/payment engine. One to twelve distinct products, one
+unit each; no optimization, merchant checkout, currency conversion or inferred
+shipping bundling. Allocation and approval operate on the combined estimate.
+Legacy single-gift fields remain first-item compatibility projections. Simulation
+continues to use the approved revision, never a client-calculated amount.
+Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
+rows remain valid without a data migration. No deployment accompanies this change.
+
+
+## Group polling and a multi-gift map box
+
+Alex requested live group answers rather than first-answer closure. Store
+optional attributed ballots on the existing room question; no extra service or
+database. Poll votes are advisory and never publish a recipient fact. Explicit
+product votes take precedence, question support then steers eligible candidates
+before pool limits, and existing relevance/citations remain unchanged. Source
+filters remain authoritative. Selected products are kept in the room projection
+across subsequent searches. The map calls atomic add/remove operations, retains
+all selected product links, approves one combined versioned estimate and reveals
+every item through a selectable set. Old single-gift APIs and rows remain valid.
+No payment/deployment change is part of this implementation.

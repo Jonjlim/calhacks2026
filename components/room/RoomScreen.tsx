@@ -1,6 +1,6 @@
 "use client";
 
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
@@ -22,6 +22,7 @@ import {
 import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
 import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
 import { RoomLayout } from "./RoomLayout";
+import { RevealHarness } from "./RevealHarness";
 import type { RoomActions, RoomData } from "./types";
 
 export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surface?: RoomSurface }) {
@@ -31,6 +32,7 @@ export function RoomScreen({ roomId, surface = "stage" }: { roomId: string; surf
   useEffect(() => {
     if (surface === "stage" && guessSurface() === "phone") router.replace(phonePath(roomId));
   }, [surface, roomId, router]);
+  if (process.env.NODE_ENV !== "production" && roomId === "dev-reveal") return <RevealHarness />;
   return convex ? <LiveRoomGate roomId={roomId} surface={surface} /> : <PreviewRoom roomId={roomId} />;
 }
 
@@ -95,6 +97,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const inviteRes = useQuery(api.rooms.getInvite, args);
   const activityRes = useQuery(api.agents.buyer.listActivity, args);
   const jobsRes = useQuery(api.jobs.listRoomJobs, args);
+  const trendsRes = useQuery(api.research.trendJobs.getDiscovery, args);
 
   const sendMessage = useMutation(api.messages.sendMessage);
   const requestTurn = useMutation(api.agents.buyer.requestTurn);
@@ -102,6 +105,10 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const retryJob = useMutation(api.agents.buyer.retryJob);
   const importEvidence = useMutation(api.clues.importEvidence);
   const extractClues = useMutation(api.agents.extract.extractClues);
+  const genUploadUrl = useMutation(api.media.generateEvidenceUploadUrl);
+  const importMedia = useMutation(api.media.importMediaEvidence);
+  const sharePhotos = useMutation(api.photos.sharePhotos);
+  const deletePhoto = useMutation(api.photos.deletePhoto);
   const deleteEvidence = useMutation(api.clues.deleteEvidence);
   const publishClue = useMutation(api.clues.publishClue);
   const rejectClue = useMutation(api.clues.rejectProposedClue);
@@ -111,12 +118,27 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const startResearch = useMutation(api.councilRoom.start);
   const resumeCouncil = useMutation(api.councilRoom.resume);
   const castVote = useMutation(api.votes.castVote);
+  const setFeedback = useMutation(api.map.setFeedback);
   const clearVote = useMutation(api.votes.clearVote);
   const selectGift = useMutation(api.proposals.selectGift);
+  const addGiftToBox = useMutation(api.proposals.addGiftToBox);
+  const removeGiftFromBox = useMutation(api.proposals.removeGiftFromBox);
+  const voteQuestion = useMutation(api.questionPolls.vote);
+  const finishQuestion = useMutation(api.questionPolls.finish);
   const clearSelection = useMutation(api.proposals.clearSelection);
   const setLimit = useMutation(api.proposals.setContributionLimit);
   const approve = useMutation(api.proposals.approveRevision);
   const withdrawApproval = useMutation(api.proposals.withdrawApproval);
+  const findTrends = useMutation(api.research.trendJobs.startDiscovery);
+  const researchTrend = useMutation(api.research.research.startResearch);
+  const passTrend = useMutation(api.research.trendJobs.setTrendPass);
+  const setDirection = useMutation(api.mapSignals.setDirection);
+  const suggestThemes = useAction(api.agents.themes.suggestThemes);
+  const sharpen = useAction(api.agents.themes.sharpen);
+  const answerSharpen = useMutation(api.agents.themes.answerSharpen);
+  const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
+  const proposeDirections = useAction(api.agents.directions.propose);
+  const moveCursor = useMutation(api.map.moveCursor);
 
   const actions = useMemo<RoomActions>(
     () => ({
@@ -139,18 +161,73 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       startResearch: (clueIds) =>
         startResearch({ roomId, publishedClueIds: clueIds as Id<"publishedClues">[], idempotencyKey: newRequestKey() }),
       resumeCouncil: (runId) => resumeCouncil({ roomId, runId }),
-      castVote: (listingId, vote) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote }),
+      castVote: (listingId, vote, reason) => castVote({ roomId, listingId: listingId as Id<"productListings">, value: vote, ...(reason ? { reason } : {}) }),
+      reactToGift: (listingId, kind) => setFeedback({ roomId, listingId: listingId as Id<"productListings">, kind }),
       clearVote: (listingId) => clearVote({ roomId, listingId: listingId as Id<"productListings"> }),
       selectGift: (listingId) => selectGift({ roomId, listingId: listingId as Id<"productListings"> }),
+      addGiftToBox: (listingId) => addGiftToBox({ roomId, listingId: listingId as Id<"productListings"> }),
+      removeGiftFromBox: (listingId) => removeGiftFromBox({ roomId, listingId: listingId as Id<"productListings"> }),
+      voteQuestion: (questionId, option) => voteQuestion({ questionId: questionId as Id<"mapSharpens">, option }),
+      finishQuestion: (questionId) => finishQuestion({ questionId: questionId as Id<"mapSharpens"> }),
       clearSelection: () => clearSelection({ roomId }),
       setLimit: (amountMinor) => setLimit({ roomId, amountMinor }),
       approve: (revisionId) => approve({ revisionId: revisionId as Id<"proposalRevisions"> }),
       withdrawApproval: (revisionId) => withdrawApproval({ revisionId: revisionId as Id<"proposalRevisions"> }),
+      findTrends: (clueId) => findTrends({ roomId, publishedClueId: clueId as Id<"publishedClues">, idempotencyKey: newRequestKey() }),
+      researchTrend: (trendJobId, query, clueIds) => researchTrend({
+        roomId, publishedClueIds: clueIds as Id<"publishedClues">[], trendJobId: trendJobId as Id<"trendJobs">,
+        discoveryQuery: query, idempotencyKey: newRequestKey(),
+      }),
+      passTrend: (trendJobId, query, passed) => passTrend({ roomId, trendJobId: trendJobId as Id<"trendJobs">, query, passed }),
+      setDirection: (targetKind, targetId, value, reason) => setDirection({ roomId, targetKind, targetId, value, ...(reason ? { reason } : {}) }),
+      suggestThemes: () => suggestThemes({ roomId }),
+      sharpen: () => sharpen({ roomId }),
+      answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
+      dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
+      proposeDirections: () => proposeDirections({ roomId }),
+      researchDirection: (directionId, clueIds) => researchTrend({
+        roomId, publishedClueIds: clueIds as Id<"publishedClues">[], directionId: directionId as Id<"mapDirections">, idempotencyKey: newRequestKey(),
+      }),
+      moveCursor: (x, z) => moveCursor({ roomId, x, y: z, space: "rings" }),
+      // Two uploads per photo (D20): one shared with the room, one private copy that the extractor reads once and deletes.
+      importPhotos: async (items) => {
+        const send = async (blob: Blob) => {
+          const url = await genUploadUrl({ roomId });
+          if (!url.ok) return url;
+          const res = await fetch(url.value.uploadUrl, { method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+          if (!res.ok) return { ok: false as const, error: { code: "provider_timeout" as const, message: `The photo didn’t upload (${res.status}). Try again.` } };
+          const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+          return { ok: true as const, value: storageId };
+        };
+        // Order matters: each claim binds to the caller's oldest unused upload grant, so the private
+        // copies are uploaded and imported before the shared copies are uploaded and shared.
+        const privateFiles: { storageId: Id<"_storage">; marker?: { x: number; y: number } }[] = [];
+        for (const item of items) {
+          const reading = await send(item.blob);
+          if (!reading.ok) return reading;
+          privateFiles.push({ storageId: reading.value, ...(item.marker ? { marker: item.marker } : {}) });
+        }
+        const imported = await importMedia({ roomId, kind: "photo", label: "Photos from the map", files: privateFiles });
+        if (!imported.ok) return imported;
+        const sharedFiles: { storageId: Id<"_storage"> }[] = [];
+        for (const item of items) {
+          const shared = await send(item.blob);
+          if (!shared.ok) return shared;
+          sharedFiles.push({ storageId: shared.value });
+        }
+        const posted = await sharePhotos({ roomId, files: sharedFiles, sourceId: imported.value.source._id });
+        if (!posted.ok) return posted;
+        const started = await extractClues({ sourceId: imported.value.source._id });
+        if (!started.ok) return started;
+        return { ok: true as const, value: { sourceId: imported.value.source._id as string } };
+      },
+      deletePhoto: (photoId) => deletePhoto({ photoId: photoId as Id<"roomPhotos"> }),
     }),
     [
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
-      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, clearVote,
-      selectGift, clearSelection, setLimit, approve, withdrawApproval,
+      publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
+      selectGift, addGiftToBox, removeGiftFromBox, voteQuestion, finishQuestion, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
+      proposeDirections,
     ],
   );
 
@@ -168,6 +245,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     publishedClues: value(publishedRes, []).map(withId),
     recommendations: recs.recommendations,
     listings: recs.listings,
+    searchPools: recs.searchPools,
     proposal: value(proposalRes, { revision: null, shares: [], approvals: [], feasible: false }),
     votes: Object.fromEntries(value(votesRes, []).map((row) => [row.listingId, { tally: row.tally, myVote: row.myVote }])),
     selection: selection ? withId(selection) : null,
@@ -175,6 +253,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     invitePath: inviteRes?.ok ? inviteRes.value.joinPath : undefined,
     activity: activityRes?.ok ? activityRes.value : undefined,
     latestResearch: jobsRes?.ok ? (jobsRes.value.researchJobs[0] ?? null) : undefined,
+    trends: trendsRes?.ok ? trendsRes.value : undefined,
   };
   const unavailable = <RoomSurfaceView surface={surface} data={{ ...data, councilUnavailable: true }} actions={actions} />;
   return (
@@ -187,7 +266,49 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
 /** An optional council query must not turn a valid gift room into “not found”. */
 function RoomWithCouncil({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
   const result = useQuery(api.councilRoom.state, { roomId });
-  return <RoomSurfaceView surface={surface} data={{ ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok }} actions={actions} />;
+  const withCouncil = { ...data, council: result?.ok ? result.value : undefined, councilUnavailable: result !== undefined && !result.ok };
+  return (
+    <ErrorBoundary fallback={<RoomSurfaceView surface={surface} data={withCouncil} actions={actions} />}>
+      <RoomWithMap roomId={roomId} data={withCouncil} actions={actions} surface={surface} />
+    </ErrorBoundary>
+  );
+}
+
+/** Gift map extras: votes on memories and themes, council themes, the sharpen round, and live cursors. Optional by design. */
+function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; data: RoomData; actions: RoomActions; surface: RoomSurface }) {
+  const args = { roomId };
+  const signals = useQuery(api.mapSignals.listSignals, args);
+  const themes = useQuery(api.agents.themes.listThemes, args);
+  const sharpen = useQuery(api.agents.themes.getSharpen, args);
+  const cursors = useQuery(api.map.listCursors, args);
+  const photos = useQuery(api.photos.listRoomPhotos, args);
+  const collaborators = useQuery(api.giftTwin.room.getFeed, args);
+  const directions = useQuery(api.agents.directions.list, args);
+  const trail = useQuery(api.trail.list, args);
+  const extras: RoomData = {
+    ...data,
+    directions: directions?.ok ? directions.value : undefined,
+    trail: trail?.ok ? trail.value : undefined,
+    mapSignals: signals?.ok ? signals.value : undefined,
+    mapThemes: themes?.ok ? themes.value : undefined,
+    sharpen: sharpen?.ok ? sharpen.value : undefined,
+    cursors: cursors?.ok ? cursors.value : undefined,
+    roomPhotos: photos?.ok ? photos.value : undefined,
+    agentCollaborators: collaborators?.ok ? collaborators.value : undefined,
+  };
+  const legacyActions = { ...actions, addGiftToBox: undefined, removeGiftFromBox: undefined, voteQuestion: undefined, finishQuestion: undefined };
+  return <ErrorBoundary fallback={<RoomSurfaceView surface={surface} data={extras} actions={legacyActions} />}>
+    <RoomWithQuestionPoll roomId={roomId} data={extras} actions={actions} legacyActions={legacyActions} surface={surface} />
+  </ErrorBoundary>;
+}
+
+/** A missing optional poll endpoint must never hide directions, photos or the rest of the map. */
+function RoomWithQuestionPoll({ roomId, data, actions, legacyActions, surface }: {
+  roomId: Id<"rooms">; data: RoomData; actions: RoomActions; legacyActions: RoomActions; surface: RoomSurface;
+}) {
+  const poll = useQuery(api.questionPolls.state, { roomId });
+  return <RoomSurfaceView surface={surface} data={{ ...data, questionPoll: poll?.ok ? poll.value : undefined }}
+    actions={poll?.ok ? actions : legacyActions} />;
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {

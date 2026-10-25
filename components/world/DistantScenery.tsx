@@ -230,18 +230,53 @@ function HazeVeils() {
   );
 }
 
-export function DistantScenery({ animate }: { animate: boolean }) {
+/**
+ * The far kingdom on every side. The gift map's camera can orbit freely, so the
+ * mountain ranges and haze are repeated to the left and right, and the whole
+ * set of landmark islands (castle, windmill village, hanging gardens,
+ * watchtower) is mirrored behind the viewer's default position. Geometry is
+ * built per copy but shares its materials, and none of it is interactive.
+ */
+export function MapSurround({ animate }: { animate: boolean }) {
+  return (
+    <group>
+      {[Math.PI / 2, -Math.PI / 2].map((turn) => (
+        <group key={turn} rotation={[0, turn, 0]}>
+          <Mountains />
+          <HazeVeils />
+        </group>
+      ))}
+      <group rotation={[0, Math.PI, 0]}>
+        <Mountains />
+        <HazeVeils />
+        <group position={MAP_PUSH}>
+          <CloudCastle animate={animate} />
+          <WindmillVillage animate={animate} />
+          <HangingGardens animate={animate} />
+          <WatchtowerOutpost animate={animate} />
+        </group>
+      </group>
+    </group>
+  );
+}
+
+/** On the gift map the decoration islands drift well back and up into the haze, clear of the rings of memories and gifts. */
+const MAP_PUSH: [number, number, number] = [0, 6, -34];
+
+export function DistantScenery({ animate, islets = true }: { animate: boolean; islets?: boolean }) {
   const end = useMemo(() => bridgeEnd(), []);
   return (
     <group>
       <Mountains />
       <HazeVeils />
 
-      <CloudCastle animate={animate} />
-      <WindmillVillage animate={animate} />
-      <HangingGardens animate={animate} />
-      <WatchtowerOutpost animate={animate} />
-      <Islets animate={animate} />
+      <group position={islets ? [0, 0, 0] : MAP_PUSH}>
+        <CloudCastle animate={animate} />
+        <WindmillVillage animate={animate} />
+        <HangingGardens animate={animate} />
+        <WatchtowerOutpost animate={animate} />
+      </group>
+      {islets && <Islets animate={animate} />}
 
       {/* The islet the plank bridge reaches. */}
       <group position={[end.x + 0.9, end.y - 0.15, end.z + 0.3]} userData={{ sketch: 8 }}>

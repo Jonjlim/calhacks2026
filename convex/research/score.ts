@@ -156,7 +156,61 @@ export function rankListings(input: RankListingsInput): RankedRecommendation[] {
     || Number(handsOn.get(b.listingId)) - Number(handsOn.get(a.listingId))
     || Number(images.get(b.listingId)) - Number(images.get(a.listingId))
     || a.listingId.localeCompare(b.listingId));
-  return ranked.slice(0, Math.max(0, input.limit ?? DEFAULT_RANK_LIMIT));
+  return diversify(ranked, new Map(kept.map((listing) => [listing.id, listing])), Math.max(0, input.limit ?? DEFAULT_RANK_LIMIT));
+}
+
+/** Most listings shown from one seller before other sellers get a turn. */
+export const MAX_PER_SELLER = 3;
+
+// Words that pick one variant of a product rather than a different product.
+const VARIANT_WORDS = new Set([
+  "xxs", "xs", "sm", "md", "lg", "xl", "xxl", "xxxl", "2xl", "3xl", "4xl", "small", "medium", "large",
+  "regular", "petite", "tall", "long", "short", "plus", "size", "inseam", "waist", "length",
+  "black", "white", "blue", "navy", "red", "green", "grey", "gray", "brown", "tan", "beige", "pink",
+  "purple", "olive", "cream", "ivory", "khaki", "charcoal", "dark", "light", "wash", "heather",
+  "multi", "multicolor", "color", "colour",
+]);
+
+/**
+ * The words that name a product, without its size, colour or catalog code.
+ * Google Shopping appends variant detail after a "|", so only the head counts.
+ */
+function productWords(title: string): string[] {
+  const head = title.toLowerCase().split("|")[0] ?? "";
+  return contentTokens(head).filter((token) => !/^\d+$/.test(token) && !VARIANT_WORDS.has(token));
+}
+
+/** Same product if the names match, or one extends the other ("… Jean Women's" / "… Jean Women's Blaze"). */
+function sameProduct(a: string[], b: string[]): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (short.length === 0) return false;
+  if (short.length < 3 && short.length !== long.length) return false;
+  return short.every((word, i) => long[i] === word);
+}
+
+/**
+ * Keeps the best-ranked listing of each product and at most MAX_PER_SELLER
+ * per seller, so one search cannot fill the map with sizes of one jean.
+ * Other sellers' products go first; a seller's further distinct products only
+ * fill slots nobody else can. Scores and clue citations are unchanged.
+ */
+function diversify(ranked: RankedRecommendation[], byId: Map<string, ProductListing>, limit: number): RankedRecommendation[] {
+  const shown: string[][] = [];
+  const perSeller = new Map<string, number>();
+  const first: RankedRecommendation[] = [];
+  const later: RankedRecommendation[] = [];
+  for (const row of ranked) {
+    const listing = byId.get(row.listingId);
+    if (!listing) continue;
+    const words = productWords(listing.title);
+    if (shown.some((other) => sameProduct(words, other))) continue;
+    shown.push(words);
+    const seller = (listing.sellerName ?? "").trim().toLowerCase() || (words[0] ?? listing.id);
+    const count = perSeller.get(seller) ?? 0;
+    perSeller.set(seller, count + 1);
+    (count < MAX_PER_SELLER ? first : later).push(row);
+  }
+  return [...first, ...later].slice(0, limit);
 }
 
 function listingTokens(listing: ProductListing): string[] {

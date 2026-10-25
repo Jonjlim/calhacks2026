@@ -370,6 +370,7 @@ export const publishClue = mutation({
       publishedAt: Date.now(),
     });
     await ctx.db.patch(clue._id, { status: "published" });
+    // Trends are looked up when someone asks for directions, not per memory (D23 trial).
     await bumpKnowledgeRevision(ctx, clue.roomId);
     return ok((await ctx.db.get(publishedId))!);
   },

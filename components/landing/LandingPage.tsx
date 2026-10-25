@@ -1,30 +1,32 @@
 "use client";
 
+import { useConvex, useQuery } from "convex/react";
 import { AnimatePresence, motion, MotionConfig, useReducedMotion } from "motion/react";
-import { useIslandWorld } from "@/components/world/IslandWorldProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { introClock, useIntroPhase } from "@/components/intro/introTimeline";
 import { StorybookIntro } from "@/components/intro/StorybookIntro";
-import { UnwrapInvitation } from "@/components/unwrap/UnwrapInvitation";
+import { useSession } from "@/components/providers/ConvexClientProvider";
+import { playSfx } from "@/components/world/sounds";
+import { InvitationTag } from "@/components/unwrap/InvitationTag";
+import { lobby } from "@/components/unwrap/lobbyStore";
 import { unwrapClock, useUnwrapPhase } from "@/components/unwrap/unwrapTimeline";
-import type { CreateRoomDraft, LandingRoomEntry } from "@/lib/mocks/landing";
-import { LandingHeader } from "./LandingHeader";
-import { LandingHero } from "./LandingHero";
-import { useLandingActions } from "./useLandingActions";
+import { giftTag, useGiftTagState } from "@/components/world/giftTag/giftTagStore";
+import { useIslandWorld } from "@/components/world/IslandWorldProvider";
+import { appOrigin, inviteUrl } from "@/lib/invite";
 
-
-
-const SOUND_KEY = "unwrap:sound";
 const INTRO_KEY = "unwrap:intro-seen";
 let introDecided = false;
 
 /**
  * Whether the storybook intro should autoplay: once per browser session,
- * never with reduced motion or without WebGL. `?intro=1` forces it, `?intro=0`
- * disables it, and `?introAt=<seconds>` freezes it at a moment (QA).
+ * never with reduced motion or without WebGL, and never when coming back to
+ * an existing lobby. `?intro=1` forces it, `?intro=0` disables it, and
+ * `?introAt=<seconds>` freezes it at a moment (QA).
  */
 function shouldPlayIntro(params: URLSearchParams, reducedMotion: boolean, webgl: boolean): boolean {
-  if (!webgl || reducedMotion) return false;
+  if (!webgl || reducedMotion || params.has("lobby")) return false;
   const flag = params.get("intro");
   if (flag === "0") return false;
   if (flag === "1" || params.has("introAt")) return true;
@@ -35,18 +37,77 @@ function shouldPlayIntro(params: URLSearchParams, reducedMotion: boolean, webgl:
   }
 }
 
+/**
+ * `/?lobby=<roomId>` (written once the room exists): a refresh or revisit
+ * goes straight back to the open gift, its QR tree and the players who have
+ * joined, with no cinematic and no second room. Only members can read the
+ * room; anything else falls back to the title screen.
+ */
+function LobbyRestore({ roomId, staticPreview, onMissing }: { roomId: string; staticPreview: boolean; onMissing: () => void }) {
+  const session = useSession();
+  const res = useQuery(api.rooms.getRoom, session.status === "ready" ? { roomId: roomId as Id<"rooms"> } : "skip");
+  const done = useRef(false);
+  useEffect(() => {
+    if (!res || done.current) return;
+    done.current = true;
+    if (!res.ok) {
+      onMissing();
+      return;
+    }
+    const { room, participants } = res.value;
+    const host = participants.find((p) => p.role === "organizer");
+    // Already here when the page loaded: they stand in place instead of arriving again.
+    lobby.settled = new Set(participants.map((p) => p.id));
+    unwrapClock.restore(
+      {
+        recipientDisplayName: room.recipientDisplayName,
+        hostDisplayName: host?.displayName ?? "",
+        occasion: room.occasion,
+        roomId: room.id,
+        inviteToken: room.inviteToken,
+        inviteUrl: inviteUrl(`/join/${room.inviteToken}`, appOrigin(window.location.origin)),
+      },
+      { staticPreview },
+    );
+  }, [res, staticPreview, onMissing]);
+  useEffect(() => {
+    if (session.status === "error" || session.status === "offline") onMissing();
+  }, [session.status, onMissing]);
+  return null;
+}
+
 export function LandingPage() {
-  const landingActions = useLandingActions();
   const reducedMotion = useReducedMotion() ?? false;
   const { webgl, ready, soundEnabled, toggleSound } = useIslandWorld();
-  const [joinRequest, setJoinRequest] = useState(0);
+  const convex = useConvex();
 
   const phase = useIntroPhase();
   const introActive = phase !== "landingReady";
   const unwrapPhase = useUnwrapPhase();
   const unwrapActive = unwrapPhase !== "landing";
-  const wasUnwrapping = useRef(false);
+  const tagState = useGiftTagState();
+  const [lobbyId, setLobbyId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const staticPreview = reducedMotion || webgl === false || (webgl === true && !ready);
+  const staticRef = useRef(staticPreview);
+  staticRef.current = staticPreview;
 
+  useEffect(() => {
+    setMounted(true);
+    setLobbyId(new URLSearchParams(window.location.search).get("lobby"));
+    giftTag.setEnabled(true);
+    return () => {
+      giftTag.setEnabled(false);
+      lobby.clear();
+    };
+  }, []);
+
+  // The tag hangs still while the intro plays and comes alive once the camera has settled.
+  useEffect(() => {
+    if (!mounted || webgl === null) return;
+    if (introActive || introClock.active) giftTag.reset();
+    else giftTag.reveal();
+  }, [mounted, webgl, introActive]);
 
   useEffect(() => {
     if (webgl === null) return;
@@ -73,36 +134,31 @@ export function LandingPage() {
     if (reducedMotion && introClock.active) introClock.finish();
   }, [reducedMotion]);
 
-  // A successful create turns the island's present into the invitation, in-world.
-  const onRoomCreated = useCallback(
-    (entry: LandingRoomEntry, draft: CreateRoomDraft) => {
-      if (introClock.active) return;
-      unwrapClock.start(
-        {
-          recipientDisplayName: draft.recipientDisplayName.trim(),
-          occasion: draft.occasion.trim(),
-          hostDisplayName: draft.displayName.trim(),
-          source: entry.source,
-          roomId: entry.roomId,
-          ...(entry.inviteToken ? { inviteToken: entry.inviteToken } : {}),
-        },
-        // Reduced motion, no WebGL, or a world that never loaded: show the stationary HTML invitation.
-        { staticPreview: reducedMotion || !webgl || !ready },
-      );
-    },
-    [reducedMotion, webgl, ready],
+  // Pulling the Begin tag (in 3D or with the keyboard) starts chapter 2.
+  const lastTug = useRef(giftTag.tugCount);
+  useEffect(
+    () =>
+      giftTag.subscribe(() => {
+        if (giftTag.tugCount === lastTug.current) return;
+        lastTug.current = giftTag.tugCount;
+        playSfx("wish");
+        if (!unwrapClock.active && !introClock.active) unwrapClock.start({ staticPreview: staticRef.current });
+      }),
+    [],
   );
 
-  // Back on the island: hand focus to the room's next step.
-  useEffect(() => {
-    if (unwrapActive) {
-      wasUnwrapping.current = true;
-      return;
-    }
-    if (!wasUnwrapping.current) return;
-    wasUnwrapping.current = false;
-    window.setTimeout(() => document.querySelector<HTMLElement>("[data-entered-primary]")?.focus(), 60);
-  }, [unwrapActive]);
+  const startOver = useCallback(() => {
+    unwrapClock.reset();
+    lobby.clear();
+    setLobbyId(null);
+    window.history.replaceState(null, "", "/");
+    giftTag.reset();
+    giftTag.reveal();
+  }, []);
+  const lobbyMissing = useCallback(() => {
+    setLobbyId(null);
+    window.history.replaceState(null, "", "/");
+  }, []);
 
   const replayIntro = useCallback(() => {
     introClock.pauseAt = null;
@@ -114,36 +170,45 @@ export function LandingPage() {
       <main className="relative h-dvh min-h-[640px] w-full overflow-hidden pointer-events-none">
         <p className="sr-only">
           A hand-painted floating island in the clouds. A large cream present tied with a coral bow sits on a stone platform, watched by
-          five small hooded storybook spirits, with a tower, cottages, gardens and a bridge. Beyond it float a windmill village, a
-          cloud castle, hanging gardens and a distant watchtower above a sea of clouds and lavender mountains.
+          small hooded storybook spirits, with a tower, cottages, gardens and a bridge. Beyond it float a windmill village, a cloud
+          castle, hanging gardens and a distant watchtower above a sea of clouds and lavender mountains. A small parchment tag reading
+          &ldquo;Begin&rdquo; hangs from the present&rsquo;s ribbon.
         </p>
-
-        {/* Ivory wash keeps the editorial column legible over the world. */}
-        <div
-          className={`editorial-wash pointer-events-none absolute inset-y-0 left-0 w-[58%] transition-opacity duration-[1200ms] ease-out ${introActive || unwrapActive ? "opacity-0" : "opacity-100"}`}
-          aria-hidden
-        />
         <div className="paper-grain pointer-events-none absolute inset-0" aria-hidden />
 
-        {!introActive && (
-          <motion.div
-            // The form recedes (but stays mounted, keeping its state) while the gift transforms.
-            animate={unwrapActive ? { opacity: 0, y: 12, filter: "blur(6px)" } : { opacity: 1, y: 0, filter: "blur(0px)" }}
-            transition={{ duration: unwrapActive ? 0.4 : 0.6, delay: unwrapActive ? 0 : 0.5, ease: [0.22, 1, 0.36, 1] }}
-            inert={unwrapActive}
-            aria-hidden={unwrapActive || undefined}
-            className="pointer-events-none relative z-10 flex h-full flex-col"
+        {mounted && (
+          <button
+            type="button"
+            data-sfx="silent"
+            onClick={toggleSound}
+            aria-pressed={soundEnabled}
+            aria-label={soundEnabled ? "Sound on" : "Sound off"}
+            className="pointer-events-auto absolute top-5 right-6 z-40 rounded-full border border-dusk/10 bg-paper/75 px-3.5 py-2 text-[13.5px] font-medium text-dusk/80 shadow-sm backdrop-blur-md transition hover:text-dusk"
           >
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}>
-              <LandingHeader soundEnabled={soundEnabled} onToggleSound={toggleSound} onJoin={() => setJoinRequest((n) => n + 1)} />
-            </motion.div>
-            <div className="flex flex-1 items-center px-[clamp(40px,5vw,88px)] pb-16">
-              <LandingHero actions={landingActions} joinRequest={joinRequest} onRoomCreated={onRoomCreated} />
-            </div>
-          </motion.div>
+            {soundEnabled ? "Sound on" : "Sound off"}
+          </button>
         )}
 
-        {unwrapActive && <UnwrapInvitation />}
+        {mounted && !introActive && !unwrapActive && !lobbyId && (
+          // Mirrors the 3D tag for keyboards and screen readers (and stands in for it without WebGL).
+          <div className="absolute bottom-10 left-1/2 z-10 -translate-x-1/2">
+            <button
+              type="button"
+              data-sfx="silent"
+              aria-label="Begin Unwrap"
+              aria-disabled={tagState === "tugging" || tagState === "responding"}
+              onClick={() => giftTag.tug()}
+              onFocus={() => giftTag.setHover(true)}
+              onBlur={() => giftTag.setHover(false)}
+              className={`begin-tag pointer-events-auto ${webgl === false ? "" : "sr-only focus-visible:not-sr-only"} ${tagState === "responding" ? "is-glowing" : ""}`}
+            >
+              <span aria-hidden className="mr-2 text-[0.7em] text-coral">▶</span>Begin
+            </button>
+          </div>
+        )}
+
+        {lobbyId && convex && !unwrapActive && <LobbyRestore roomId={lobbyId} staticPreview={staticPreview} onMissing={lobbyMissing} />}
+        {unwrapActive && <InvitationTag soundEnabled={soundEnabled} onStartOver={startOver} inlineQr={webgl === false} />}
 
         <AnimatePresence>
           {introActive && (
@@ -153,7 +218,7 @@ export function LandingPage() {
           )}
         </AnimatePresence>
 
-        {!introActive && !unwrapActive && webgl && !reducedMotion && (
+        {mounted && !introActive && !unwrapActive && !lobbyId && webgl && !reducedMotion && (
           <motion.button
             type="button"
             onClick={replayIntro}

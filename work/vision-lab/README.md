@@ -1,5 +1,24 @@
 # Unwrap vision lab
 
+## Current revision: the rings view
+
+The guided prototype now uses the ring layout from the Phase 2 plan ([docs/EXECUTION_PLAN.md](../../docs/EXECUTION_PLAN.md)). Islands sit on flat rings around the present instead of floating freely:
+
+- **Outer ring:** memories, messages, photos and ideas. Click empty space to add one; it lands on the outer ring at the angle you clicked and joins the nearest theme.
+- **Middle ring:** two sample themes ("Makes things with her hands", "Slow, cozy rituals") appear when the council runs. Their memories tuck into small avatar stacks; selecting the theme (or "Show what's inside") brings them back out.
+- **Inner ring:** five sample gifts, each placed between the themes it fits. Score moves a gift closer to or farther from the box.
+- **Center:** the box. Drop a gift on it to choose it; its node shows shares, approvals and "Why this?", which lights the path back through the themes to the memories and dims everything else.
+
+Dragging is voting: release an island closer to the box to support it, farther away to pass. It then snaps back to its computed place, which moves with the votes. "Sharpen the ideas" keeps the two strongest affordable gifts, fades the rest, and asks one question (making vs. owning handmade things); the answer boosts the matching idea and gives it a more specific title. Rings are stretched into ovals to fill a wide screen.
+
+Everything is still sample data with scripted council timing, and multiplayer only syncs tabs in one browser. Free island placement, the left/right toss lanes and the layout reset are gone.
+
+## Phase 2 direction: the gift rings
+
+The team picked the ring layout for the real room (D19 in [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md)): what friends share on the outer ring, themes in the middle, gifts between the themes they fit, the box at the center. Dragging toward the box supports and dragging away passes, which replaces the left/right toss in this prototype. The animated Gift Rings walkthrough shows the full sequence. The room plan is in [docs/EXECUTION_PLAN.md](../../docs/EXECUTION_PLAN.md).
+
+What carries over from this prototype: click-anywhere add, visual nodes (bubbles, polaroids, idea sparks, gift pictures), actions that bloom under a node, named cursors, and vote pulses. What does not: free island placement, the side panel, and the corner dock.
+
 ## Current revision: shared gestures and group direction
 
 The guided prototype now has real **same-browser, same-origin tab collaboration** through `BroadcastChannel`, with localStorage snapshots and per-field logical clocks. It is not a hosted multiplayer service: another device, browser profile, or origin cannot join this transport. Demo identities are selectable names, not authenticated participants.

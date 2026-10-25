@@ -5,11 +5,15 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { introClock } from "@/components/intro/introTimeline";
 import { span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
-import { CameraTour, TOUR_START } from "./cameraPath";
+import { convergence } from "@/components/convergence/convergenceClock";
+import { boomAmount, cameraPush as pushProgress, cameraShake, CONVERGENCE_TIMES, EXIT_TIME, smoother, span as tspan } from "@/lib/convergence/timeline";
+import { boomPose, CameraTour, convergencePose, giftClosePose, TOUR_START } from "./cameraPath";
+import { giftTag } from "./giftTag/giftTagStore";
 import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./sceneConfig";
-import { type InvitationFrame, invitationFrame } from "./unwrap/invitationLayout";
+import { lobbyPose, topPose } from "./unwrap/invitationLayout";
 import { roomStage } from "@/components/room/roomStage";
-import { doorPose, gardenPose, towerPose } from "./room/stageLayout";
+import { doorPose, gardenPose, mapPose, towerPose } from "./room/stageLayout";
+import { mapView } from "./room/mapView";
 
 /** The same view, pulled back along its line of sight. */
 function pullBack(pose: CameraPose, k: number): CameraPose {
@@ -20,10 +24,12 @@ function pullBack(pose: CameraPose, k: number): CameraPose {
 
 /**
  * The only camera controller. During the intro it follows the shared intro
- * clock (storybook framing → authored tour → landing); afterwards it holds the
- * responsive landing composition with a small, damped pointer parallax. The
- * view offset shifts the projection centre right so the island sits beside
- * the editorial column without changing the perspective.
+ * clock (storybook framing → authored approach → close on the present). On the
+ * title screen it then holds that close-up perfectly still while the "Begin"
+ * tag is in play. Elsewhere (classic landing, rooms) it holds the responsive
+ * landing composition with a small, damped pointer parallax; the view offset
+ * shifts the projection centre right so the island sits beside the editorial
+ * column without changing the perspective.
  */
 export function WorldCamera({ parallax, roomActive = false, reducedMotion = false }: { parallax: boolean; roomActive?: boolean; reducedMotion?: boolean }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -31,7 +37,7 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
   const pointer = useRef({ x: 0, y: 0 });
   const smoothed = useRef({ x: 0, y: 0 });
   const rest = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3() }), []);
-  const poses = useRef<{ landing: CameraPose; story: CameraPose; tour: CameraTour; invite: InvitationFrame } | null>(null);
+  const poses = useRef<{ landing: CameraPose; close: CameraPose; story: CameraPose; tour: CameraTour; lobby: CameraPose; top: CameraPose } | null>(null);
   const live = useMemo(() => ({ position: new THREE.Vector3(), target: new THREE.Vector3(), fov: 30, shiftX: 0, shiftY: 0 }), []);
   const applied = useRef({ fov: -1, shiftX: -1, shiftY: -1, w: 0, h: 0 });
   const tmpPos = useMemo(() => new THREE.Vector3(), []);
@@ -44,7 +50,8 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       landing = { position: [cam[0]!, cam[1]!, cam[2]!], target: [cam[3]!, cam[4]!, cam[5]!], fov: cam[6]!, shiftX: 0, shiftY: 0 };
     }
     const story = storybookPose(size.width, size.height);
-    poses.current = { landing, story, tour: new CameraTour(story, landing), invite: invitationFrame(size.width, size.height) };
+    const close = giftClosePose(size.width, size.height);
+    poses.current = { landing, close, story, tour: new CameraTour(story, close), lobby: lobbyPose(size.width, size.height), top: topPose(size.width, size.height) };
     rest.position.set(...landing.position);
     rest.target.set(...landing.target);
     applied.current.fov = -1;
@@ -77,6 +84,11 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
     camera.lookAt(live.target);
   };
 
+  useEffect(() => {
+    // QA hook (dev only): inspect the live camera from the browser console.
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __camera?: THREE.PerspectiveCamera }).__camera = camera;
+  }, [camera]);
+
   useFrame((_, dt) => {
     const p = poses.current;
     if (!p) return;
@@ -96,24 +108,20 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       return;
     }
 
-    // Create-a-room: glide in to the gift, hold while it becomes the invitation, glide back.
-    if (unwrapClock.active && !unwrapClock.staticPreview) {
+    // The title screen rests on the close-up; everywhere else rests on the landing view.
+    const home = giftTag.enabled ? p.close : p.landing;
+
+    // Chapter 2: while the Begin tag flies to the right, glide back from the
+    // close-up to the lobby framing (the present in the left part of the
+    // screen); once the tree has grown, rise to look down into the box, where
+    // the canopy becomes the QR code.
+    if (unwrapClock.active) {
       smoothed.current.x = smoothed.current.y = 0;
-      const { close, top } = p.invite;
-      // landing → close on the present → rise over it to look down on the code. Closing rewinds the clock.
       const t = unwrapClock.t;
-      const a = span(t, UNWRAP_TIMES.approachingGift, UNWRAP_TIMES.giftAnticipation + 0.55);
-      const b = span(t, UNWRAP_TIMES.unfoldingPaper + 0.95, UNWRAP_TIMES.assemblingQR + 0.25);
-      const ea = a * a * (3 - 2 * a);
-      const eb = b * b * (3 - 2 * b);
-      live.position.set(...p.landing.position).lerp(tmpPos.set(...close.position), ea).lerp(tmpPos.set(...top.position), eb);
-      live.target.set(...p.landing.target).lerp(tmpPos.set(...close.target), ea).lerp(tmpPos.set(...top.target), eb);
-      const fov = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.fov, close.fov, ea), top.fov, eb);
-      const shiftX = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftX, 0, ea), top.shiftX, eb);
-      const shiftY = THREE.MathUtils.lerp(THREE.MathUtils.lerp(p.landing.shiftY, 0, ea), top.shiftY, eb);
-      project(fov, shiftX, shiftY);
-      camera.position.copy(live.position);
-      camera.lookAt(live.target);
+      const still = unwrapClock.staticPreview;
+      const up = still ? 1 : span(t, UNWRAP_TIMES.topView[0], UNWRAP_TIMES.topView[1]);
+      if (up > 0) applyPose(p.lobby, p.top, up);
+      else applyPose(home, p.lobby, span(t, UNWRAP_TIMES.reframe[0], UNWRAP_TIMES.reframe[1]));
       return;
     }
 
@@ -122,8 +130,61 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       smoothed.current.x = smoothed.current.y = 0;
       const w = size.width;
       const shown = roomStage.shown;
-      const scenePose = shown === "tower" ? towerPose(w) : shown === "garden" ? gardenPose(w) : p.landing;
-      if (!shown && roomStage.target === "tower" && roomStage.transitioning && !reducedMotion) {
+      const view = mapView.step(dt, reducedMotion);
+      const poseOf = (stage: typeof shown): CameraPose => {
+        if (stage !== "map") return stage === "tower" ? towerPose(w) : stage === "garden" ? gardenPose(w) : p.landing;
+        // The camera orbits a focus point: pan moves the point, zoom scales the distance to it, yaw swings round it and pitch tilts the view.
+        const base = mapPose(w, size.height);
+        const [px, py, pz] = base.position;
+        const [tx, ty, tz] = base.target;
+        const dx = px - tx;
+        const dy = py - ty;
+        const dz = pz - tz;
+        const dist = Math.hypot(dx, dy, dz) * view.zoom;
+        const yaw = Math.atan2(dx, dz) + view.yaw;
+        // Never lower than a scenic low angle (so the view stays above the islands' undersides) nor straight overhead.
+        const el = THREE.MathUtils.clamp(Math.asin(dy / Math.hypot(dx, dy, dz)) + view.pitch, 0.2, 1.42);
+        const fx = tx + view.x;
+        const fz = tz + view.z;
+        // On wide screens the world sits a little right of centre, leaving a clear gutter on the left for the council dock.
+        return { ...base, shiftX: w > 900 ? 0.055 : 0, position: [fx + dist * Math.cos(el) * Math.sin(yaw), ty + dist * Math.sin(el), fz + dist * Math.cos(el) * Math.cos(yaw)], target: [fx, ty, fz] };
+      };
+      const scenePose = poseOf(shown);
+      if (convergence.active) {
+        // The Great Gift Convergence owns the camera: it starts exactly where the map was, glides in to the present, and glides back when the reveal is closed.
+        const end = convergencePose(w, size.height);
+        const began = convergence.startPose;
+        if (!began) {
+          convergence.startPose = {
+            position: camera.position.toArray() as [number, number, number],
+            target: live.target.toArray() as [number, number, number],
+            fov: camera.fov,
+            shiftX: applied.current.shiftX < 0 ? scenePose.shiftX : applied.current.shiftX,
+            shiftY: applied.current.shiftY < 0 ? scenePose.shiftY : applied.current.shiftY,
+          };
+        }
+        if (convergence.instant && !convergence.leaving) applyPose(end, end, 1);
+        else if (convergence.leaving) applyPose(end, scenePose, smoother(tspan(convergence.exit, 0, EXIT_TIME)));
+        else {
+          const t = convergence.t;
+          const boom = boomAmount(t);
+          if (t < CONVERGENCE_TIMES.boom[0]) applyPose(convergence.startPose ?? scenePose, end, pushProgress(t));
+          else applyPose(end, boomPose(w, size.height), boom);
+          // The charge and the explosion shake the whole screen.
+          if (!convergence.instant && !reducedMotion && !convergence.leaving) {
+            const sh = cameraShake(t);
+            camera.translateX(sh.x);
+            camera.translateY(sh.y);
+            camera.rotateZ(sh.roll);
+          }
+        }
+        return;
+      }
+      if (roomStage.glide && !reducedMotion) {
+        // Garden ↔ map: one continuous pull-back (or push-in) in the same sky.
+        const k = roomStage.glideProgress;
+        applyPose(poseOf(roomStage.from), scenePose, k * k * k * (k * (k * 6 - 15) + 10));
+      } else if (!shown && roomStage.target === "tower" && roomStage.transitioning && !reducedMotion) {
         // Outside, gliding up to the tower door before the fade.
         const k = roomStage.approachProgress;
         applyPose(p.landing, doorPose(), k * k * (3 - 2 * k));
@@ -134,6 +195,13 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
       } else {
         applyPose(scenePose, scenePose, 1);
       }
+      return;
+    }
+
+    if (giftTag.enabled) {
+      // Title screen: locked on the close-up. No parallax, no drift.
+      smoothed.current.x = smoothed.current.y = 0;
+      applyPose(p.close, p.close, 1);
       return;
     }
 

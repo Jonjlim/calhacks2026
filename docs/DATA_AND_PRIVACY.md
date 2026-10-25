@@ -13,6 +13,34 @@ This document is the access-control spec. Contracts are in [CONTRACTS.md](CONTRA
 5. MVP demo data is synthetic or explicitly selected by the person who pastes it.
 6. Convex queries and mutations enforce every boundary below. The LLM is treated as an untrusted processor of the snapshot we chose to give it.
 
+## The gift map (Phase 2, D19)
+
+The map is a shared view, so every node on it must pass the same checks as the data behind it.
+
+| On the map | Who sees it |
+| --- | --- |
+| Published clues (memories, messages, ideas the contributor confirmed) | Room members |
+| Photos a member adds on the map | Room members (D20). The member sees a clear “everyone in the room will see these photos” notice before choosing them. |
+| Pasted conversations, imported exports, screenshots, and every proposed clue (including what the AI guesses from a photo) | Only the contributor until they publish a clue. The raw text never reaches other members. |
+| Suggested themes and their clue lists | Room members. A theme only lists published clue IDs. |
+| Direction signals and listing votes | Room members, attributed |
+| Listings and recommendation explanations | Room members |
+| The box: selected gift, revision, approval state, the caller’s own share | Room members. Other members’ caps stay private; others see feasibility and their own share. |
+| Cursors | Room members, expiring after a few seconds |
+
+- The map projection (`getMapState`) is membership-scoped and returns private items only to their owner. A client never filters out another member’s private data; the server never sends it.
+- Click-to-add messages and ideas are published clues and need an explicit confirm, as they do today.
+- **Room photos (D20, 2026-10-24).** A photo added on the gift map is shared with everyone in the room. Adding it is the consent: the add box says so before a file is chosen. Safeguards:
+  - Two separate uploads per photo: the shared copy (`roomPhotos`) and a private copy that the extractor reads once and deletes, as before. The shared copy can never enter the read-once pipeline, and the stale-upload sweep keeps it.
+  - Location data (EXIF/GPS) is removed by re-encoding in the browser before upload. The server checks type (JPEG, PNG, WebP) and size (under 2 MB) and claims files only against the uploader's own upload grants.
+  - Only room members can list photos or get their URLs. Storage URLs are unguessable but work for anyone holding one, so they are never put in agent snapshots, gift worlds, recipient-agent tools, or logs.
+  - The recipient tap stays private: it lives on the uploader's evidence source, not on the shared photo.
+  - What the AI guesses from a photo stays private to the uploader until they publish it, exactly like pasted text.
+  - Only the uploader can delete a photo, and it disappears for everyone. Room deletion purges the files.
+  - At most 60 photos per room.
+  - Photos added through the older Backstage photo panel keep the previous rule (owner-only, deleted after reading).
+- Themes and sharpen directions come from the model. They are suggestions, are validated before insert, and never become confirmed knowledge without a person acting on them.
+
 ## Data classification
 
 | Class | Examples | Default visibility |
@@ -215,3 +243,10 @@ The buyer agent may see `AgentReply.guidance`, which is already policy-filtered.
 - We will not connect Gmail, iMessage, or Instagram. If a sponsor integration tempts us, it still cannot ingest a mailbox wholesale.
 
 Do not claim Unwrap is end-to-end encrypted or HIPAA-safe. It is a hackathon app with explicit, narrow consent and server-side access control.
+
+
+## Gift Twin recipient page (D20 demo exception)
+
+D20's explicitly consented recipient vault is separate from contributor imports and from the category-granted P1-A profile. The recipient page at `/twin` explains the 24-hour server vault, configured AI provider processing, automatic screened notes/votes in the room, possible inference mistakes, and that already shared notes remain after deletion. Acceptance is unchecked by default; it precedes pairing and local file reading. Selecting the database after acceptance immediately reads and uploads it through the same sent-only preparation as the CLI; the page states this before selection. There is no additional message review or local content filtering before upload. The server removes emoji sequences before vault storage and skips messages that become empty. Both the read budget and server vault text limit are 1 MiB. Declining leaves the invitation unused.
+
+The browser reads only a recipient-selected local Messages database using bundled SQLite WASM. No database file, incoming message, handle, chat name or attachment is uploaded. Sent text can itself contain private or third-party information; warn recipients before file selection, which initiates upload. Browser tokens stay in tab session storage, and text stays in memory only during reading/upload. Delete now and disconnect use the same server-authorized CLI operations. Closing the tab does not delete the vault: the 24-hour server expiry still applies. This is a hackathon prototype, not end-to-end encryption; never promise that a browser permission prompt automatically grants iMessage access.

@@ -6,6 +6,14 @@ The member 3 backend is implemented under `convex/agents/`. See [AGENT_INTEGRATI
 
 The runtime deliberately uses no recursive model follow-ups (`needsFollowup: false`). Research settlement now queues exactly one persisted facilitator continuation, and confirmed clue changes debounce a cached re-evaluation. Automatic turns cannot launch searches or recipient queries. Agents and UI share the same dynamic catalog ranking; recommendation messages copy purchasing facts from observations and expose evidence IDs. Chat-to-clue auto-import is not implemented: contributors explicitly select evidence, review proposed clues, and publish through Dev 2's clue endpoints. Live provider compatibility and deployment remain unverified until the model spike runs. The lower sections describe the intended behavior and role boundaries; the integration guide records what is executable now.
 
+## Map-first room: new agent jobs (Phase 2, proposed)
+
+In Phase 2 the agents work on the gift map instead of a chat panel (D19 in [ARCHITECTURE.md](ARCHITECTURE.md)). Two new bounded jobs are proposed; shapes are in “Map-first room (proposed)” in [CONTRACTS.md](CONTRACTS.md).
+
+- **Suggest themes.** Input: the room’s active published clues only. Output: 3–5 themes, each with a short label and the clue IDs it covers. Every clue ID must exist in the snapshot, or the theme is dropped. Themes are suggestions; the job never publishes, merges, or deletes clues. A theme built on an older knowledge revision is rejected at commit.
+- **Sharpen.** Input: published clues, accepted themes, current listings with their votes and signals. Output: at most one question (through the existing `AskedSlot` flow, so it is never re-asked) and up to three more specific directions. Directions are labelled agent ideas until research returns sourced listings. Sharpen cannot select, approve, change caps, or trigger paid research on its own; a person starts “Find gifts.”
+- **Where agents speak.** One notes line on the map and short captions on the nodes they touched. Recommendation text keeps the existing rule: it is rendered from validated listing and clue IDs, never from model-authored product facts.
+
 Unwrap uses one tool-capable LLM and several **roles** implemented as Convex actions with different snapshots and tool allowlists. There are not two model vendors in P0.
 
 This document is the build spec for Dev 3. Product behavior is in [PRODUCT.md](PRODUCT.md). Access rules are in [DATA_AND_PRIVACY.md](DATA_AND_PRIVACY.md). Payloads are in [CONTRACTS.md](CONTRACTS.md).

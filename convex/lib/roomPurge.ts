@@ -13,6 +13,7 @@
  */
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { GIFT_TWIN_PURGE_PHASES } from "../giftTwin/purge";
 
 type Purger = (ctx: MutationCtx, roomId: Id<"rooms">, limit: number) => Promise<number>;
 
@@ -34,6 +35,9 @@ const fashionJobs: Purger = async (ctx, roomId, limit) =>
 
 const trendJobs: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("trendJobs").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+
+const trendPasses: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("trendPasses").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
 const agentJobs: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("agentJobs").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
@@ -172,12 +176,43 @@ const giftDecorations: Purger = async (ctx, roomId, limit) =>
 const giftWorlds: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("giftWorlds").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
+const paymentSimulations: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("paymentSimulations").withIndex("by_room", q => q.eq("roomId", roomId)).take(limit));
+// The gift map's own tables: shared layout, reactions, cursors, ideas, signals, themes and sharpen rounds.
+const mapFeedback: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapFeedback").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapCursors: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapCursors").withIndex("by_room_participant", (q) => q.eq("roomId", roomId)).take(limit));
+const mapPositions: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapPositions").withIndex("by_room_node", (q) => q.eq("roomId", roomId)).take(limit));
+const mapSprouts: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSprouts").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const ideaCalls: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("ideaCalls").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapSignals: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSignals").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapThemes: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapThemes").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const roomPhotos: Purger = async (ctx, roomId, limit) => {
+  const rows = await ctx.db.query("roomPhotos").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit);
+  for (const row of rows) if (await ctx.db.system.get(row.storageId)) await ctx.storage.delete(row.storageId);
+  return deleteAll(ctx, rows);
+};
+const mapSharpens: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapSharpens").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const mapDirections: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("mapDirections").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+const roomTrail: Purger = async (ctx, roomId, limit) =>
+  deleteAll(ctx, await ctx.db.query("roomTrail").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
+
 const participants: Purger = async (ctx, roomId, limit) =>
   deleteAll(ctx, await ctx.db.query("participants").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(limit));
 
 /** Order matters: jobs first (see file comment), private data next, membership last. */
 export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
+  ...GIFT_TWIN_PURGE_PHASES,
   ["fashionJobs", fashionJobs],
+  ["trendPasses", trendPasses],
   ["trendJobs", trendJobs],
   ["researchJobs", researchJobs],
   ["agentJobs", agentJobs],
@@ -194,11 +229,23 @@ export const PURGE_PHASES: ReadonlyArray<readonly [string, Purger]> = [
   ["askedSlots", askedSlots],
   ["votes", votes],
   ["recommendations", recommendations],
+  ["paymentSimulations", paymentSimulations],
   ["proposalRevisions", proposalRevisions],
   ["giftSelections", giftSelections],
   ["productListings", productListings],
   ["giftDecorations", giftDecorations],
   ["giftWorlds", giftWorlds],
+  ["mapFeedback", mapFeedback],
+  ["mapCursors", mapCursors],
+  ["mapPositions", mapPositions],
+  ["mapSprouts", mapSprouts],
+  ["ideaCalls", ideaCalls],
+  ["mapSignals", mapSignals],
+  ["mapThemes", mapThemes],
+  ["mapSharpens", mapSharpens],
+  ["mapDirections", mapDirections],
+  ["roomTrail", roomTrail],
+  ["roomPhotos", roomPhotos],
   ["participants", participants],
 ];
 

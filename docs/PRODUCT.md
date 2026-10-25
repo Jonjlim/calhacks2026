@@ -27,12 +27,14 @@ Judges and demo recipients are not product users. Use synthetic, consented conve
 
 ```mermaid
 flowchart LR
-  create[Create or join room] --> talk[Talk and contribute evidence]
-  talk --> review[Review proposed clues]
+  lobby[Create or join in the lobby] --> zoom[Zoom out to the gift map]
+  zoom --> add[Drop memories, photos, ideas]
+  add --> review[Review private items]
   review --> publish[Publish selected clues]
-  publish --> research[Research real products]
-  research --> shortlist[Shortlist on the map]
-  shortlist --> select[Select one gift]
+  publish --> themes[Council suggests themes]
+  themes --> research[Research real products]
+  research --> steer[Pull in, push out, react]
+  steer --> select[One gift in the box]
   select --> allocate[Allocate shares]
   allocate --> propose[Freeze a revision]
   propose --> approve[Approve the revision]
@@ -45,16 +47,18 @@ P0 ends at a versioned, approved proposal (pledges, not charges). P1 features ha
 
 ## Group gifting
 
-1. Organizer creates a room: recipient display name, occasion, deadline, currency `USD`, optional budget ceiling.
-2. Friends join by invite link or QR. Join grants room membership, not the right to read private imports or other people’s caps.
-3. The room chat is the collaborative surface. People talk like friends. The buyer agent participates when it has a reason — not on every message.
-4. A contributor may paste selected text or import one supported text export. They may also drop in up to three photos of the recipient or shared moments and tap to mark which person is the recipient (P0), or up to three screenshots (P1-C). Unwrap proposes typed clues with source IDs. The contributor corrects, discards, or publishes.
-5. Published clues become room knowledge: interests, wishes, exclusions, ownership, timing, uncertain inferences.
-6. Research returns a bounded set of live listings (target 6–12 visible candidates).
-7. The group compares, votes or reacts, and drops one gift into the shared box.
-8. Each person sets a private maximum. Allocation is equal-split-capped, with remainder redistributed to people who still have capacity.
-9. A proposal revision freezes product, total, and shares. Everyone approves that exact revision.
-10. If the gift, total, or any share changes, approvals reset. The group looks at the new revision.
+1. The app opens in the lobby, in front of the present. The organizer creates a room there: recipient display name, occasion, deadline, currency `USD`, optional budget ceiling.
+2. Friends join by invite link or QR and wait in the lobby. Join grants room membership, not the right to read private imports or other people’s caps.
+3. When the room is ready, the organizer starts it. The camera pulls back from the present and the gift map opens around it. **The gift map is the collaborative surface.** There is no tower step and no Backstage drawer on the main path.
+4. Anyone clicks empty sky on the map to add a memory, a message, or an idea. A contributor may also paste selected text, import one supported text export, drop in up to three photos and tap to mark the recipient (P0), or drop up to three screenshots (P1-C). Imported items stay private, shown only to their contributor with an "only you" marker. Unwrap proposes typed clues with source IDs. The contributor corrects, discards, or publishes.
+5. Published clues become room knowledge on the map's outer ring: interests, wishes, exclusions, ownership, timing, uncertain inferences.
+6. The council suggests a few themes that group the published clues. Themes are suggestions; people can rename, merge, or dismiss them.
+7. Research returns a bounded set of live listings (target 6–12 visible candidates). Each sits between the themes its recommendation cites.
+8. The group steers by dragging: toward the box supports, away passes. "She has it" and "too pricey" are reactions on the node. One sharpen round may ask a single question and refine the leading ideas.
+9. The organizer puts one or several gifts into the box at the center (up to 12 distinct products, one unit each).
+10. Each person sets a private maximum from the box. Allocation is equal-split-capped, with remainder redistributed to people who still have capacity.
+11. A proposal revision freezes every selected product, the combined estimate, and shares. Everyone approves that exact revision at the box.
+12. If any selected gift, item observation, combined total, or share changes, approvals reset. The group looks at the new revision.
 
 Two people in one room, updating live, is the minimum multiplayer bar.
 
@@ -62,7 +66,7 @@ Two people in one room, updating live, is the minimum multiplayer bar.
 
 Solo is a room with one participant and the same buyer agent.
 
-The solo buyer still reviews proposed clues before they become “confirmed” room knowledge. They still see sourced products and a shortlist. Contribution limits collapse to “I am funding this myself,” which still produces a revision so the later group path does not need a second model.
+The solo buyer still reviews proposed clues before they become “confirmed” room knowledge. They still see sourced products on the same gift map. Contribution limits collapse to “I am funding this myself,” which still produces a revision so the later group path does not need a second model.
 
 Do not build a separate solo chatbot.
 
@@ -79,7 +83,7 @@ Personalization is not a hidden embedding of the whole chat.
 
 ## Agent-assisted collaboration
 
-The buyer agent is a facilitator in the shared chat.
+The buyer agent is a facilitator on the shared map. It speaks through one notes line and through captions on the nodes it works on, not a separate chat panel. Its work shows as movement on the map: clues grouping into themes, listings growing between them, ideas fading or sharpening.
 
 It should:
 
@@ -110,11 +114,24 @@ This is a different consent flow from contributor-published clues. Publishing a 
 
 P0 can still record recipient preferences and exclusions **manually in the room** (as published clues). That is buyer-side knowledge, not recipient-agent knowledge.
 
-## Shared gift box and map
+## The gift map
 
-The box is the group’s working selection. The map is a small evidence graph: published clues, a few gift directions, and product nodes. Selecting “Why this?” lights the supporting edges.
+The gift map is the room. It is laid out as rings around the present:
 
-P0 needs an understandable shortlist **or** a lightweight map. A polished React Flow canvas with physics, pinning, and multi-select is P2. Mobile can use a list-and-button equivalent of “put it in the box.”
+| Ring | Holds |
+| --- | --- |
+| Outer | Memories, messages, photos, and ideas friends share |
+| Middle | Themes the council suggests, each covering a set of published clues |
+| Inner | Gift ideas and sourced listings, placed between the themes they satisfy |
+| Center | The box: the selected gift, shares, and approvals |
+
+- Distance from the center shows how close an item is to the answer. Position around the circle shows what it is about.
+- Dragging toward the box supports an item; dragging away passes. Every move is attributed and visible to everyone. Nothing is deleted by a pass.
+- Layout is computed from room data. People do not arrange nodes by hand.
+- Clicking a node opens a short row of actions under it. There are no popup panels or drawers.
+- “Why this?” lights the path from the gift back through its themes to the clues behind it.
+
+Mobile shows the same rings as a list with buttons for add, pull, pass, and put it in the box.
 
 Keep the visible catalog small. One gift is a complete outcome. Do not build a marketplace or a multi-item cart.
 
@@ -137,8 +154,8 @@ P0 stops at pledged approvals. P1-B may attach sandbox authorizations to the sam
 
 Must work end to end with two participants, no Stripe, and no recipient-agent network.
 
-- Create and join rooms
-- Realtime chat or equivalent live contribution updates
+- Create and join rooms in the lobby, then zoom out to the gift map
+- Live contribution updates on the map, with named cursors
 - Buyer agent interprets gift-related information and proposes structured clues
 - Source-aware clue review and selective publication
 - Photo clues: drop 1–3 photos, mark the recipient, and review uncertain activity, style, setting, and ownership guesses (gated on the Phase 0 vision spike)
@@ -146,8 +163,8 @@ Must work end to end with two participants, no Stripe, and no recipient-agent ne
 - One working external product source
 - Product candidates with source links and observed prices
 - Product photos on every card when the source provides one, with a clear placeholder when it does not
-- Shortlist or lightweight gift map
-- Shared selection, comparison, or voting
+- The gift map in rings: published clues, themes, sourced listings, and the box (promoted from P2 in D19, [ARCHITECTURE.md](ARCHITECTURE.md)). If themes slip, listings sit on the inner ring by score.
+- Steering on the map: pull in, push out, “she has it,” “too pricey,” and one sharpen round
 - Private contribution limits
 - Deterministic allocation
 - Versioned proposal and explicit approvals
@@ -173,7 +190,7 @@ P1-C depends only on the P0 clue flow and a model that accepts images. It does n
 
 ### P2 — Stretch and polish
 
-Social/trend ranking, advanced React Flow, wrapping animation, extra product APIs, custom Apify Actors, Factory Droid, voice-note clues (record a short note, transcribe it into a private message, extract clues), other richer imports, recipient reveal, deeper personalization.
+Social/trend ranking, theme rename and merge, council characters walking the map, wrapping animation, extra product APIs, custom Apify Actors, Factory Droid, voice-note clues (record a short note, transcribe it into a private message, extract clues), other richer imports, recipient reveal, deeper personalization.
 
 Sponsor integrations must do real work in the product. Stop adding them when the P0 demo is at risk.
 
@@ -192,15 +209,15 @@ Sponsor integrations must do real work in the product. Stop adding them when the
 
 A teammate who was not in the architecture discussion should be able to:
 
-1. Create a room and join it from a second browser.
-2. Paste a synthetic conversation, see proposed clues, publish two of them, and leave one unpublished.
+1. Create a room in the lobby, join it from a second browser, start it, and land both browsers on the gift map.
+2. From the map, paste a synthetic conversation, see proposed clues marked “only you,” publish two of them, and leave one unpublished.
 3. Drop in a synthetic photo, tap to mark the recipient, see uncertain activity or style guesses appear for review, and publish one of them.
-4. Watch the other participant see only the published clues and the chat — not the raw import, not any photo, and not private caps.
-5. Get at least one live (or honestly timestamped) product card with a product photo (or a visible “no photo from source” placeholder), a working source link, and an observed price.
-6. Open “Why this?” and see the published clues that justify it.
-7. Put one gift in the box, set two different caps, and see shares recompute.
+4. Watch the other participant see only the published clues and the shared memories — not the raw import, not any photo, and not private caps.
+5. Get at least one live (or honestly timestamped) listing on the map with a product photo (or a visible “no photo from source” placeholder), a working source link, and an observed price.
+6. Select the listing’s “Why this?” and see the themes and published clues that justify it.
+7. Drag one gift into the box, set two different caps, and see shares recompute.
 8. Approve a revision, change the gift or a cap, and watch the previous approvals become invalid.
-9. Complete that path with no payment provider and no recipient agent.
+9. Complete that path with no payment provider, no recipient agent, and no drawer or separate page.
 
 ## Differentiation
 
@@ -212,8 +229,15 @@ If we also land a permission-bounded recipient agent or a recoverable sandbox pa
 
 If time gets tight, keep this spine and drop everything else:
 
-**Room → chat/clues → one sourced product list → one selected gift → allocated proposal → revision-aware approvals.**
+**Lobby → map → published clues → sourced listings → one gift in the box → allocated proposal → revision-aware approvals.**
 
-Drop in this order: trend ranking, voice notes, reveal animation, React Flow polish, Factory/Droid, custom Actors, recipient agent, photo clues, screenshot clues, Stripe.
+Drop in this order: trend ranking, voice notes, reveal animation, sharpen variants, the zoom animation (swap instantly), themes (listings by score instead), Factory/Droid, custom Actors, recipient agent, photo clues, screenshot clues, Stripe.
 
 Do not drop source integrity, private caps, or approval invalidation to make room for a sponsor logo.
+
+
+The buying screen supports one or multiple gifts through the same proposal flow.
+Each product retains its observed price and source link. Unknown item prices block
+funding; unknown shipping/tax stay visibly excluded from the estimate. Demo
+contributions and wrapping are labelled simulation: no money charged or gifts
+purchased. No automatic basket optimization or cross-retailer checkout is implied.

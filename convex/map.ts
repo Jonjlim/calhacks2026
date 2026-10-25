@@ -8,6 +8,7 @@
  * clue, research and selection mutations.
  */
 import { v } from "convex/values";
+import { enqueueTwinCheck } from "./giftTwin/lib";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -16,6 +17,8 @@ import type { Result } from "../lib/contracts";
 import { requireMember } from "./lib/auth";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
+import { productCategory } from "./research/text";
+import { logTrail } from "./lib/trail";
 import { err, memberError, ok } from "./lib/result";
 import { cleanIdeas, ideasFor } from "./agents/ideas";
 
@@ -28,7 +31,7 @@ const MAX_SPROUTS_PER_SEED = 12;
 const finite = (n: number) => Number.isFinite(n) && Math.abs(n) <= COORD_LIMIT;
 
 export const moveCursor = mutation({
-  args: { roomId: v.id("rooms"), x: v.number(), y: v.number(), space: v.optional(v.union(v.literal("sky"), v.literal("diagram"))) },
+  args: { roomId: v.id("rooms"), x: v.number(), y: v.number(), space: v.optional(v.union(v.literal("sky"), v.literal("diagram"), v.literal("rings"))) },
   handler: async (ctx, { roomId, x, y, space }) => {
     if (!finite(x) || !finite(y)) return err<null>("validation_failed", "Cursor is off the map.");
     const member = await requireMember(ctx, roomId);
@@ -47,7 +50,7 @@ export const moveCursor = mutation({
 export const listCursors = query({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    type Row = { participantId: Id<"participants">; displayName: string; x: number; y: number; space: "sky" | "diagram"; updatedAt: number };
+    type Row = { participantId: Id<"participants">; displayName: string; x: number; y: number; space: "sky" | "diagram" | "rings"; updatedAt: number };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Row[]>(member.code);
     // Readers drop cursors older than CURSOR_TTL_MS themselves, so this query stays stable and reactive.
@@ -162,7 +165,9 @@ export const storeSprouts = internalMutation({
     const now = Date.now();
     for (const s of fresh.slice(0, Math.max(0, room)))
       await ctx.db.insert("mapSprouts", { roomId: args.roomId, seedClueId: args.seedClueId, grownBy: args.grownBy, source: args.source, createdAt: now, ...s });
-    return Math.max(0, Math.min(room, fresh.length));
+    const added = Math.max(0, Math.min(room, fresh.length));
+    if (added > 0) await enqueueTwinCheck(ctx, args.roomId);
+    return added;
   },
 });
 
@@ -218,6 +223,7 @@ export const plantSprout = mutation({
     });
     await ctx.db.delete(sproutId);
     // Same path as any new memory: the shortlist re-evaluates against it.
+    // Trends are looked up when someone asks for directions, not per memory (D23 trial).
     await bumpKnowledgeRevision(ctx, sprout.roomId);
     return ok<Out>((await ctx.db.get(id))!);
   },
@@ -236,10 +242,13 @@ export const setFeedback = mutation({
     if (duplicate && (!duplicate.publishedClueId || (await ctx.db.get(duplicate.publishedClueId))?.status === "active")) return ok({ feedbackId: duplicate._id });
     let publishedClueId: Id<"publishedClues"> | undefined;
     if (args.kind === "owned") {
-      const text = cleanText(`Already owns ${listing.title}`, LIMITS.clueTextMaxChars);
+      // The kind of thing, not the listing title: it filters similar gifts and keeps the memory ring readable (D23 trial).
+      const text = cleanText(`Already owns ${productCategory(listing.title)}`, LIMITS.clueTextMaxChars);
       if (!text) return err("validation_failed", "This listing title is too long to confirm as ownership.");
       publishedClueId = await ctx.db.insert("publishedClues", { roomId: args.roomId, publisherId: member.me._id, kind: "ownership", text, sourceKind: "manual", sourceMessageIds: [], status: "active", publishedAt: Date.now() });
       await bumpKnowledgeRevision(ctx, args.roomId);
+      await logTrail(ctx, args.roomId, { stage: "steering", actor: "person", participantId: member.me._id, outcome: "rejected", listingId: args.listingId, clueIds: [publishedClueId],
+        text: `${member.me.displayName || "A friend"} said she already has ${productCategory(listing.title)}, so gifts like that are filtered out.` });
     }
     const feedbackId = await ctx.db.insert("mapFeedback", { roomId: args.roomId, listingId: args.listingId, participantId: member.me._id, kind: args.kind, publishedClueId, active: true, createdAt: Date.now() });
     return ok({ feedbackId });

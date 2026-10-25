@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { paint } from "@/components/world/painterly/materials";
 import { onGiftPop } from "@/components/world/worldEvents";
+import { playSfx } from "@/components/world/sounds";
 import { SPIRIT_LOOKS, type SpiritVariant } from "./spiritVariants";
 
 const INK = "#3b2a36";
@@ -166,6 +167,7 @@ export function MiniSpirit({ variant, position, lookAt, scale = 1, behavior = "i
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    playSfx("tap");
     anim.current.hopQueued = 0;
     anim.current.waveAt = -10;
   };

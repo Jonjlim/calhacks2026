@@ -65,3 +65,22 @@ export function gardenSpots(count: number): [number, number][] {
   }
   return out;
 }
+
+/** Height of the ring islands: a little below the present so the main island stays the hero. */
+export function ringBase(): number {
+  return groundAt(GIFT_SPOT.x, GIFT_SPOT.z) - 1.4;
+}
+
+/**
+ * The gift map (D19): pulled far back and up from the present so the rings of
+ * memories, themes and gifts fit around it, still in the same sky.
+ */
+export function mapPose(width: number, height: number): CameraPose {
+  const aspect = width / Math.max(1, height);
+  const center = new THREE.Vector3(GIFT_SPOT.x, ringBase(), GIFT_SPOT.z);
+  // Narrower screens step back further so the outer ring still fits side to side.
+  const pull = aspect < 0.8 ? 1.9 : aspect < 1.4 ? 1.3 : 1;
+  const pos = center.clone().add(new THREE.Vector3(0, 45 * pull, 34 * pull));
+  const target = center.clone().add(new THREE.Vector3(0, -2, 1));
+  return { position: v(pos), target: v(target), fov: aspect < 0.8 ? 52 : 42, shiftX: 0, shiftY: 0 };
+}
