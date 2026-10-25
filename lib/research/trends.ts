@@ -69,16 +69,25 @@ const EXPERIENCE = /\b(tickets?|class(?:es)?|lessons?|workshops?|camps?|clinics?
 
 /** A related search is worth showing only if it names a product, a style, or a bookable experience, and is not news or a lookup. */
 export function isGiftShapedQuery(query: string): boolean {
-  if (NEWS_OR_INFO.test(query)) return false;
+  return !isNewsOrLookup(query) && (PRODUCT.test(query) || STYLE.test(query) || EXPERIENCE.test(query));
+}
+
+/** Hard floor that applies even when the model approved a query. */
+export function isNewsOrLookup(query: string): boolean {
   // Years usually mean news or schedules unless someone is buying a ticket.
-  if (/\b(?:19|20)\d{2}\b/.test(query) && !EXPERIENCE.test(query)) return false;
-  return PRODUCT.test(query) || STYLE.test(query) || EXPERIENCE.test(query);
+  return NEWS_OR_INFO.test(query) || (/\b(?:19|20)\d{2}\b/.test(query) && !EXPERIENCE.test(query));
+}
+
+/** The screen a stored sample went through decides which read-time filter applies. */
+export function keepsTrendSuggestion(screen: "model" | "words" | undefined, query: string): boolean {
+  return screen === "model" ? !isNewsOrLookup(query) : isGiftShapedQuery(query);
 }
 // Same known category/brand collision as production ranking; no fuzzy brand guesses.
 const withoutCategoryBrand = (text: string) => text.replace(/\bpottery\s*barn\b/gi, " ");
 
 /** Suggestions for a future shopping search, not new preference facts or ranked products. */
-export function discoverShoppingQueries(observations: TrendObservation[], limit = 8): Array<{
+export function discoverShoppingQueries(observations: TrendObservation[], limit = 8,
+  accept: (query: string) => boolean = isGiftShapedQuery): Array<{
   query: string;
   evidence: TrendObservation[];
 }> {
@@ -88,7 +97,7 @@ export function discoverShoppingQueries(observations: TrendObservation[], limit 
     const seedTokens = tokens(observation.seedTerm);
     const queryTokens = new Set(tokens(withoutCategoryBrand(observation.query)));
     if (!seedTokens.length || !seedTokens.every(token => queryTokens.has(token))
-      || key(observation.query) === key(observation.seedTerm) || !isGiftShapedQuery(observation.query)) continue;
+      || key(observation.query) === key(observation.seedTerm) || !accept(observation.query)) continue;
     const id = key(observation.query);
     const candidate = candidates.get(id) ?? { query: observation.query, evidence: [] };
     candidate.evidence.push(observation);

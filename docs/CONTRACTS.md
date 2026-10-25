@@ -1394,6 +1394,7 @@ interface TrendSuggestion { query: string; sourceUrl: string; signals: TrendSign
 interface TrendDiscoverySample {
   mode: "live_sample"; label: string; actor: string; build: string; providerRunId: string;
   context: TrendContext; publishedClueId: string; suggestions: TrendSuggestion[];
+  screen?: "model" | "words"; // model = LLM kept only product/style/experience searches; words = fallback filter
   evidenceSummary: { returnedRows: number; observations: number };
 }
 interface TrendDiscoveryView { latestJob: FashionDiscoveryJobView | null; sample: (TrendDiscoverySample & { jobId: string }) | null }

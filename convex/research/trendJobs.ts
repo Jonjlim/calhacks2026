@@ -2,7 +2,9 @@
 import { v } from "convex/values";
 import { signalLabel } from "../../lib/map/trendIdeas";
 import type { Result, TrendAgentContext, TrendDiscoveryView, TrendListingLink, TrendPassSummary, TrendSignal, TrendSuggestion } from "../../lib/contracts";
-import { discoverShoppingQueries, isGiftShapedQuery, normalizeTrendDataset } from "../../lib/research/trends";
+import { discoverShoppingQueries, isNewsOrLookup, keepsTrendSuggestion, normalizeTrendDataset } from "../../lib/research/trends";
+import { configuredModel } from "../agents/model";
+import { screenTrendQueries } from "./trendScreen";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { internalAction, internalMutation, mutation, query } from "../_generated/server";
@@ -41,7 +43,8 @@ export async function usableTrendJob(ctx: QueryCtx, roomId: Id<"rooms">, id: Id<
   if (!(job && job.roomId === roomId && job.status === "succeeded" && job.sample
     && isTrendSampleFresh(job.sample.context.retrievedAt, Date.now()) && await isTrendJobCurrent(ctx, job))) return null;
   // Samples stored before the gift-shaped filter tightened must not resurface news or lookups.
-  return { ...job, sample: { ...job.sample, suggestions: job.sample.suggestions.filter(s => isGiftShapedQuery(s.query)) } };
+  const screen = job.sample.screen;
+  return { ...job, sample: { ...job.sample, suggestions: job.sample.suggestions.filter(s => keepsTrendSuggestion(screen, s.query)) } };
 }
 
 /** The trend job id a research fingerprint was bound to (see startResearch's inputHash), if any. */
@@ -149,7 +152,7 @@ export const setTrendPass = mutation({
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room before passing on ideas.");
     const job = await ctx.db.get(args.trendJobId);
-    if (!job || job.roomId !== args.roomId || !job.sample?.suggestions.some(s => s.query === args.query && isGiftShapedQuery(s.query)))
+    if (!job || job.roomId !== args.roomId || !job.sample?.suggestions.some(s => s.query === args.query && keepsTrendSuggestion(job.sample!.screen, s.query)))
       return err("validation_failed", "Pass on one of this trend search's sourced suggestions.");
     const existing = await ctx.db.query("trendPasses")
       .withIndex("by_job_query_participant", q => q.eq("trendJobId", args.trendJobId).eq("query", args.query).eq("participantId", member.me._id)).unique();
@@ -282,13 +285,13 @@ export const checkDiscovery = internalMutation({
   handler: async (ctx, { jobId }) => {
     const job = await ctx.db.get(jobId);
     return job?.status === "running" && job.providerRunId && await guard(ctx, job)
-      ? { runId: job.providerRunId, pollUntil: job.pollUntil ?? 0 } : null;
+      ? { runId: job.providerRunId, pollUntil: job.pollUntil ?? 0, seedTerm: job.seedTerm } : null;
   },
 });
 
 export const completeDiscovery = internalMutation({
-  args: { jobId: v.id("trendJobs"), raw: v.any(), retrievedAt: v.number() },
-  handler: async (ctx, { jobId, raw, retrievedAt }) => {
+  args: { jobId: v.id("trendJobs"), raw: v.any(), retrievedAt: v.number(), giftQueries: v.optional(v.array(v.string())) },
+  handler: async (ctx, { jobId, raw, retrievedAt, giftQueries }) => {
     const job = await ctx.db.get(jobId);
     if (!job || job.status !== "running" || !job.providerRunId || !await guard(ctx, job)) return;
     if (!isTrendSampleFresh(retrievedAt, Date.now()) || retrievedAt < job.createdAt) {
@@ -299,7 +302,9 @@ export const completeDiscovery = internalMutation({
     }
     const context = { seedTerm: job.seedTerm, geo: TREND_GEO, timeRange: TREND_TIME_RANGE, retrievedAt };
     const observations = normalizeTrendDataset(raw, context);
-    const suggestions: TrendSuggestion[] = discoverShoppingQueries(observations, 5).map(row => ({
+    const approved = giftQueries ? new Set(giftQueries) : null;
+    const suggestions: TrendSuggestion[] = discoverShoppingQueries(observations, 5,
+      approved ? q => approved.has(q) && !isNewsOrLookup(q) : undefined).map(row => ({
       query: row.query, sourceUrl: row.evidence[0]!.sourceUrl,
       signals: row.evidence.map((e): TrendSignal => e.kind === "top_search" ? { kind: e.kind, popularityIndex: e.popularityIndex }
         : e.kind === "rising_search" ? { kind: e.kind, growthPercent: e.growthPercent } : { kind: e.kind }),
@@ -307,7 +312,7 @@ export const completeDiscovery = internalMutation({
     await ctx.db.patch(jobId, { status: "succeeded", lastError: undefined, sample: {
       mode: "live_sample", label: "Related Google searches in the US over the past 3 months; search interest, not sales",
       actor: TREND_ACTOR, build: TREND_BUILD, providerRunId: job.providerRunId, context,
-      publishedClueId: job.publishedClueId, suggestions,
+      publishedClueId: job.publishedClueId, suggestions, screen: approved ? "model" : "words",
       evidenceSummary: { returnedRows: raw.length, observations: observations.length },
     } });
   },
@@ -325,6 +330,16 @@ export const runDiscovery = internalAction({
   },
 });
 
+/** Model sorts the scraped searches; null means fall back to the word filter. */
+async function screenDataset(seedTerm: string, raw: unknown, retrievedAt: number): Promise<string[] | undefined> {
+  if (process.env.TREND_AI_SCREEN === "off" || !process.env.LLM_API_KEY) return undefined;
+  const observations = normalizeTrendDataset(raw, { seedTerm, geo: TREND_GEO, timeRange: TREND_TIME_RANGE, retrievedAt });
+  const candidates = discoverShoppingQueries(observations, 40, q => !isNewsOrLookup(q)).map(c => c.query);
+  if (!candidates.length) return undefined;
+  const kept = await screenTrendQueries(configuredModel(), seedTerm, candidates);
+  return kept ?? undefined;
+}
+
 export const pollDiscovery = internalAction({
   args: { jobId: v.id("trendJobs") },
   handler: async (ctx, { jobId }): Promise<null> => {
@@ -338,7 +353,11 @@ export const pollDiscovery = internalAction({
     const run = result.value;
     if (run.status === "SUCCEEDED" && run.defaultDatasetId) {
       const dataset = await provider.getDataset(run.defaultDatasetId);
-      if (dataset.kind === "ok") await ctx.runMutation(internal.research.trendJobs.completeDiscovery, { jobId, raw: dataset.value, retrievedAt: Date.now() });
+      if (dataset.kind === "ok") {
+        const retrievedAt = Date.now();
+        const giftQueries = await screenDataset(current.seedTerm, dataset.value, retrievedAt);
+        await ctx.runMutation(internal.research.trendJobs.completeDiscovery, { jobId, raw: dataset.value, retrievedAt, ...(giftQueries ? { giftQueries } : {}) });
+      }
       else await ctx.runMutation(internal.research.trendJobs.settleDiscovery, { jobId, status: dataset.kind, message: dataset.message });
     } else if (["FAILED", "ABORTED", "TIMED-OUT"].includes(run.status)) {
       await ctx.runMutation(internal.research.trendJobs.settleDiscovery, { jobId, status: "failed", message: "The trend source run failed." });

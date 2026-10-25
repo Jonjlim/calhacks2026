@@ -12,6 +12,7 @@ export const trendSample = v.object({
   mode: v.literal("live_sample"), label: v.string(), actor: v.string(), build: v.string(), providerRunId: v.string(),
   context: v.object({ seedTerm: v.string(), geo: v.literal("US"), timeRange: v.literal("today 3-m"), retrievedAt: v.number() }),
   publishedClueId: v.string(), suggestions: v.array(trendSuggestion),
+  screen: v.optional(v.union(v.literal("model"), v.literal("words"))),
   evidenceSummary: v.object({ returnedRows: v.number(), observations: v.number() }),
 });
 export const trendTables = {

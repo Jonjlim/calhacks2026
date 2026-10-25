@@ -100,6 +100,8 @@ export interface TrendDiscoverySample {
   context: TrendContext;
   publishedClueId: string;
   suggestions: TrendSuggestion[];
+  /** How suggestions were judged buyable: model classification (with news floor) or the word filter fallback. */
+  screen?: "model" | "words";
   evidenceSummary: { returnedRows: number; observations: number };
 }
 /** latestJob reuses the discovery job view shape shared with fashion discovery. */
