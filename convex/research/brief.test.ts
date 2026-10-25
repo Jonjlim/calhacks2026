@@ -47,6 +47,23 @@ describe("buildSearchBrief", () => {
     expect(brief.mustExclude).toEqual([]);
   });
 
+  it("keeps budget and occasion wording out of the search when an interest exists", () => {
+    const clues = [
+      "Budget is around $80 for her birthday gift",
+      "Loves pottery, budget $80",
+      "Anniversary gift under 100 dollars",
+      "Into hiking",
+    ].map((text, i) => ({ id: `b${i}`, kind: "interest" as const, text, status: "active" as const }));
+    const brief = buildSearchBrief({ roomId: FIXTURE_ROOM_ID, knowledgeRevision: 1, clues });
+    expect(brief.queryTerms).toEqual(["pottery", "hiking"]);
+  });
+
+  it("falls back to the original phrase when only budget wording exists", () => {
+    const clues = [{ id: "b", kind: "interest" as const, text: "Budget is around $80 for her birthday gift", status: "active" as const }];
+    expect(buildSearchBrief({ roomId: FIXTURE_ROOM_ID, knowledgeRevision: 1, clues }).queryTerms)
+      .toEqual(["budget is around $80 for her birthday gift"]);
+  });
+
   it("dedupes phrases and caps query terms at three", () => {
     const clues = ["Likes pottery", "Loves pottery", "Into hiking", "Likes jazz", "Likes tea"].map(
       (text, i) => ({ id: `c${i}`, kind: "interest" as const, text, status: "active" as const }),

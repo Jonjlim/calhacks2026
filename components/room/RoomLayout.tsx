@@ -38,6 +38,7 @@ import { useResultAction } from "@/lib/useResultAction";
 import { roomStage } from "./roomStage";
 import { MemoryQuest } from "./MemoryQuest";
 import { ShareMemory } from "./ShareMemory";
+import { useRoomGuide } from "./useRoomGuide";
 import { useGiftRings } from "./useGiftRings";
 import { MapCursor } from "./MapCursor";
 import type { RoomActions, RoomData } from "./types";
@@ -239,6 +240,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setFinaleOpen(true), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
   ringsRef.current = map.rings;
+  const guide = useRoomGuide({ data, map, enabled: stage === "map" && !preview && !!actions, paused: engaged || !!drawer, nudge: actions?.mossNudge, warm: actions?.mossWarm, sound: soundEnabled });
 
   const members = useMemo(() => {
     const current = roomCouncilMembers(data);
@@ -349,7 +351,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       </motion.div>
 
       {/* Invite + small toggles */}
-      <div className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      <div inert={guide.cinematic || undefined} className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged || guide.cinematic ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
           <button className={iconChip} data-sfx="silent" onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
           <button className={iconChip} onClick={() => setTimeOfDay(SKIES[(SKIES.findIndex((k) => k.id === time) + 1) % SKIES.length]!.id)} aria-label={`Change the sky. Now: ${SKIES.find((k) => k.id === time)?.label}`} title={`Sky: ${SKIES.find((k) => k.id === time)?.label}. Click for the next.`}><DayIcon day={!isDarkSky(time)} /></button>
@@ -387,8 +389,9 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
       )}
 
-      {/* Phase bar */}
-      <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      {guide.panel}
+      {/* Phase bar. Guidance replaces it while visible; it never stacks another popup above it. */}
+      <div inert={engaged || guide.visible || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged || guide.visible ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <span className="flex gap-1" aria-hidden>
           {COUNCIL_ACTORS.map((a) => (
             <span key={a} className={`h-2.5 w-2.5 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
@@ -432,6 +435,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
               <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} data-sfx="reveal" onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!flex [&>button]:!w-full [&>button]:items-center [&>button]:gap-2.5 [&>button]:!rounded-xl [&>button]:!bg-none [&>button]:!px-3 [&>button]:!py-2 [&>button]:!text-left [&>button]:!text-[14px] [&>button]:!font-normal [&>button]:!shadow-none [&>button:hover]:!bg-dusk/5 [&>button>svg]:shrink-0">{map.tools}</div>}
+                {stage === "map" && !preview && actions && <button role="menuitem" className={menuItem} onClick={guide.restart}>Explore with Ssom</button>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
                 {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => setFinaleOpen(true)}>Plan contributions</button>}
                 {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Notes, agents and sharing</button>}
@@ -511,7 +515,18 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
       </section>
     );
   }
-  if (drawer.kind === "agent") return <AgentDetails actor={drawer.actor} member={members[drawer.actor]} data={data} />;
+  if (drawer.kind === "agent") {
+    return (
+      <>
+        <AgentDetails actor={drawer.actor} member={members[drawer.actor]} data={data} />
+        {data.council?.run?.agentAddress && (
+          <p className="mt-3 text-[12px] text-dusk/60">
+            Agentverse address <code className="block break-all rounded-lg bg-white/60 px-2 py-1 text-[11.5px] text-dusk/80">{data.council.run.agentAddress}</code>
+          </p>
+        )}
+      </>
+    );
+  }
   // Notes and room tools: contextual text entry for the organizer, plus moderation of shared notes.
   return (
     <>

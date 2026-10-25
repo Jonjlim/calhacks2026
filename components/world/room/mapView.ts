@@ -9,6 +9,13 @@
  * the view up or down (as offsets from the default composition).
  */
 
+/**
+ * The camera moves before anything that is anchored to the screen (negative
+ * priorities run first without taking over rendering), so those objects and
+ * their DOM labels never trail the camera by a frame.
+ */
+export const CAMERA_FRAME_PRIORITY = -2;
+
 const PAN_X = 36;
 const PAN_Z = 28;
 const ZOOM_MIN = 0.22;
@@ -47,6 +54,8 @@ class MapView {
   get giftArrived(): boolean { return this.target.giftFocus === 1 && this.flight === null; }
 
   private listeners = new Set<() => void>();
+  /** Bumps on every user gesture, so authored guidance can yield instead of resuming over one. */
+  interaction = 0;
 
   subscribe(fn: () => void) {
     this.listeners.add(fn);
@@ -70,6 +79,7 @@ class MapView {
     if (this.locked) return;
     this.flight = null;
     this.gliding = false;
+    this.interaction++;
     this.target.x = clamp(this.target.x + dx, -PAN_X, PAN_X);
     this.target.z = clamp(this.target.z + dz, -PAN_Z, PAN_Z);
     this.emit();
@@ -85,6 +95,7 @@ class MapView {
     if (this.locked) return;
     this.flight = null;
     this.gliding = false;
+    this.interaction++;
     this.target.zoom = clamp(this.target.zoom * factor, ZOOM_MIN, ZOOM_MAX);
     this.emit();
   }
@@ -93,6 +104,7 @@ class MapView {
     if (this.locked) return;
     this.flight = null;
     this.gliding = false;
+    this.interaction++;
     this.target.yaw += dYaw;
     this.target.pitch = clamp(this.target.pitch + dPitch, PITCH_MIN, PITCH_MAX);
     this.emit();
@@ -102,8 +114,8 @@ class MapView {
    * Glides to look at a point on the map (an offset from the present): the
    * orbit angles are kept, so the viewer keeps their bearings.
    */
-  focus(x: number, z: number, zoom = 0.55) {
-    if (this.locked) return;
+  focus(x: number, z: number, zoom = 0.55, shot?: { yaw?: number; pitch?: number }) {
+    if (this.locked || this.dragging) return;
     this.flight = null;
     this.beforeGift = null;
     this.gliding = true;
@@ -112,6 +124,8 @@ class MapView {
     this.target.x = clamp(x, -PAN_X, PAN_X);
     this.target.z = clamp(z, -PAN_Z, PAN_Z);
     this.target.zoom = clamp(zoom, ZOOM_MIN, ZOOM_MAX);
+    if (shot?.yaw !== undefined) this.target.yaw = shot.yaw;
+    if (shot?.pitch !== undefined) this.target.pitch = clamp(shot.pitch, PITCH_MIN, PITCH_MAX);
     this.emit();
   }
 

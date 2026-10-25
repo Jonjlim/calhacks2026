@@ -1,5 +1,6 @@
 # Render blueprint for the Fetch.ai coordinator only (the Next.js site stays on Vercel).
-# One always-on web service: uAgents keeps the Agentverse mailbox connection and
+# One always-on web service running all five council uAgents in one Bureau (one port: $PORT).
+# uAgents keeps the Agentverse mailbox connections and
 # finishes council runs after acknowledging them, which a serverless function would cut off.
 services:
   - type: web
@@ -11,11 +12,14 @@ services:
     healthCheckPath: /health
     autoDeploy: false
     envVars:
-      - key: AGENT_SEED        # reuse the same seed to keep the registered agent1q… address
+      - key: AGENT_SEED        # reuse the same seed to keep the registered agent1q… addresses (Courier uses it directly)
         sync: false
       - key: ASI1_API_KEY
         sync: false
       - key: CONVEX_SITE_URL   # https://<cloud-deployment>.convex.site
+        sync: false
+      # Comma-separated .convex.site URLs allowed as per-run callbackSite (default: CONVEX_SITE_URL).
+      - key: COUNCIL_ALLOWED_SITES
         sync: false
       - key: COUNCIL_INGEST_SECRET
         sync: false
@@ -23,3 +27,14 @@ services:
         sync: false
       - key: COUNCIL_USE_LLM
         value: "1"
+      # Optional: per-agent seeds (otherwise derived from AGENT_SEED + role name).
+      - key: ARCHIVIST_SEED
+        sync: false
+      - key: MUSE_SEED
+        sync: false
+      - key: SCOUT_SEED
+        sync: false
+      - key: KEEPER_SEED
+        sync: false
+      - key: COUNCIL_MODE
+        value: agents

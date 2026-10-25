@@ -1,5 +1,6 @@
 import type { AgentCollaboratorFeed } from "@/lib/agentCollaborators/contracts";
 import type { QuestionPollView } from "@/lib/contracts";
+import type { MossNudgeView } from "@/lib/room/mossRecall";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "@/convex/_generated/api";
 import type {
@@ -135,6 +136,10 @@ export interface RoomActions {
   /** Show public TikToks for one trend cloud's search (D23 trial); reuses a recent search. */
   lookTikTok?: Run<[trendJobId: string, query: string]>;
   suggestThemes: Run;
+  /** Moss recalls a friend's related memory for the guide's "I don't know" step (MAP-024). Never saves anything. */
+  mossNudge?: (questionIndex: number) => Promise<Result<MossNudgeView | null>>;
+  /** Loads Moss's model ahead of the first nudge; touches no room text. */
+  mossWarm?: () => Promise<Result<{ warmed: boolean }>>;
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;
   voteQuestion?: Run<[questionId: string, option: number | null]>;

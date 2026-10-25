@@ -557,7 +557,7 @@ export default defineSchema({
     runId: v.string(),
     source: v.union(v.literal("web"), v.literal("asi1")),
     demoKey: v.optional(v.string()),
-    /** Set by dev3/fetch-council's real agents; mirrored here so both branches can share one deployment. */
+    /** Set by dev3/fetch-council's real agents; production already holds such a row, so the schema must accept it. */
     agentAddress: v.optional(v.string()),
     roomId: v.optional(v.id("rooms")),
     researchJobId: v.optional(v.id("researchJobs")),

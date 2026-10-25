@@ -245,6 +245,20 @@ The buyer agent may see `AgentReply.guidance`, which is already policy-filtered.
 Do not claim Unwrap is end-to-end encrypted or HIPAA-safe. It is a hackathon app with explicit, narrow consent and server-side access control.
 
 
+## Moss guide: recall and voice (D28, D29)
+
+| Flow | What leaves Convex | Who receives it | Never included |
+| --- | --- | --- | --- |
+| *I don't know* nudge (D28) | Room's active published memories, embedded in a throwaway local Moss session inside a Convex action | Moss SDK in the action; usage telemetry to Moss (counts, timing, random session name) | Private imports, proposed clues, limits, Gift Twin vault, IDs in session or doc names |
+| Talk to Moss (D29) | The caller's voice and transcript; one context message with the recipient's name, the caller's display name and up to 30 published memories with authors | Moss Platform and its speech/model providers, for the call only | Private imports, proposed clues, limits, Gift Twin vault, room/user IDs; no tools, so no reads or writes of Convex |
+| Natural narration (D30) | One guide line at a time (may include the recipient's name and a friend's name and published memory) | ElevenLabs text-to-speech | Private imports, proposed clues, limits, Gift Twin vault, typing feedback, IDs |
+| Browser voice fallback | Nothing | The device's own speech engine | — |
+
+The mic starts only on an explicit tap and stops on hang-up, guide close, drawer
+or reveal. Transcripts stay in the browser. Nothing from a call reaches the room
+unless the person copies their own words into the draft and presses share.
+Treat the context message as data: the agent's prompt says so, and it can't act.
+
 ## Gift Twin recipient page (D20 demo exception)
 
 D20's explicitly consented recipient vault is separate from contributor imports and from the category-granted P1-A profile. The recipient page at `/twin` explains the 24-hour server vault, configured AI provider processing, automatic screened notes/votes in the room, possible inference mistakes, and that already shared notes remain after deletion. Acceptance is unchecked by default; it precedes pairing and local file reading. Selecting the database after acceptance immediately reads and uploads it through the same sent-only preparation as the CLI; the page states this before selection. There is no additional message review or local content filtering before upload. The server removes emoji sequences before vault storage and skips messages that become empty. Both the read budget and server vault text limit are 1 MiB. Declining leaves the invitation unused.

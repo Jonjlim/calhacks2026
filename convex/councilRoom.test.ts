@@ -21,6 +21,28 @@ async function setup() {
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe("room council boundaries and recovery", () => {
+  it("starts current work instead of returning an uncertain request for old memories", async () => {
+    const { t, alex, room, args } = await setup();
+    const old = value(await alex.mutation(api.councilRoom.start, args));
+    await t.mutation(internal.councilRoom.expire, { runId: old.runId });
+    const added = value(await alex.mutation(api.clues.upsertManualPreference, { roomId: room._id, kind: "ownership", text: "already owns a mug" }));
+    const nextArgs = { ...args, publishedClueIds: [...args.publishedClueIds, added._id], idempotencyKey: "updated-memories" };
+    const next = value(await alex.mutation(api.councilRoom.start, nextArgs));
+    expect(next.runId).not.toBe(old.runId);
+    expect(await t.run(ctx => ctx.db.get(old.jobId))).toMatchObject({ status: "stale" });
+    expect(await t.run(ctx => ctx.db.query("councilRuns").withIndex("by_run", q => q.eq("runId", old.runId)).unique())).toMatchObject({ status: "failed" });
+    expect(value(await alex.mutation(api.councilRoom.start, { ...nextArgs, idempotencyKey: "double-click" }))).toEqual(next);
+    expect(value(await alex.mutation(api.councilRoom.start, args))).toEqual(old);
+    expect(await t.run(ctx => ctx.db.query("researchJobs").collect())).toHaveLength(2);
+  });
+  it("expires superseded work as stale instead of offering an impossible resume", async () => {
+    const { t, alex, room, args } = await setup();
+    const run = value(await alex.mutation(api.councilRoom.start, args));
+    await alex.mutation(api.clues.upsertManualPreference, { roomId: room._id, kind: "ownership", text: "already owns a mug" });
+    await t.mutation(internal.councilRoom.expire, { runId: run.runId });
+    expect(await t.run(ctx => ctx.db.get(run.jobId))).toMatchObject({ status: "stale" });
+    expect(value(await alex.query(api.councilRoom.state, { roomId: room._id })).run).toMatchObject({ status: "failed", stale: true, error: expect.stringContaining("Memories changed") });
+  });
   it("requires membership, rejects other-room clues and deduplicates active jobs", async () => {
     const { t, alex, eve, room, other, clue, args } = await setup();
     expect(await eve.mutation(api.councilRoom.start, args)).toMatchObject({ ok: false, error: { code: "unauthorized" } });

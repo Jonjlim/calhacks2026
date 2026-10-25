@@ -44,7 +44,7 @@ async function readJson(request: Request): Promise<unknown> {
 // --- Mutations (internal; reached only through the authenticated HTTP routes) ---
 
 export const upsertRun = internalMutation({
-  args: { runId: v.string(), source: v.union(v.literal("web"), v.literal("asi1")), demoKey: v.optional(v.string()) },
+  args: { runId: v.string(), source: v.union(v.literal("web"), v.literal("asi1")), demoKey: v.optional(v.string()), agentAddress: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const existing = await ctx.db.query("councilRuns").withIndex("by_run", (q) => q.eq("runId", args.runId)).unique();
     if (existing) return { created: false, nextSequence: existing.lastSequence + 1 };

@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     const res = await fetch(`${cfg.agentUrl}/council/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: cfg.agentSecret, runId, demoKey: parsed.demoKey, memories }),
+      body: JSON.stringify({ secret: cfg.agentSecret, runId, demoKey: parsed.demoKey, ...(/^https:\/\/[a-z0-9-]+\.convex\.site$/.test(cfg.site) && { callbackSite: cfg.site }), memories }),
       signal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
     });
     const body = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };

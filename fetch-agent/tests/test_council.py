@@ -84,3 +84,11 @@ async def test_room_budget_is_server_owned_and_results_are_separate_from_events(
     assert "kept" in sink.payload
     assert all("kept" not in e.get("result", {}) for e in sink.events)
     assert not any(v.listing.price_minor and v.listing.price_minor > 2000 for v in out.keeper.kept)
+
+
+async def test_room_run_without_room_budget_keeps_the_parsed_budget():
+    # A memory like "budget is around $80" must survive when the room sets no budget.
+    sink = EventSink("run_room000002")
+    out = await run_council([Memory(memory_id="mem_budget0002", text=MAYA)], sink, research=fake_research, room_run=True, budget_minor=None)
+    assert out.analysis.budget_minor == 8000
+    assert not any(v.listing.price_minor and v.listing.price_minor > 8000 for v in out.keeper.kept)

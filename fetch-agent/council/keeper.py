@@ -8,8 +8,10 @@ Every exclusion carries the reason, so the Courier can explain it.
 
 from __future__ import annotations
 
+import json
 import re
 
+from . import llm
 from .contracts import Analysis, Exclusion, KeeperReport, Listing, Verdict
 
 # An owned "beginner kit" also rules out starter / beginner sets of the same thing.
@@ -86,3 +88,41 @@ def check(analysis: Analysis, listings: list[Listing], limit: int = 5) -> Keeper
 
 def summary(r: KeeperReport) -> str:
     return f"{len(r.kept)} fit, {len(r.excluded)} excluded" + (f" · {r.hard_rules[0]}" if r.hard_rules else "")
+
+
+_NOTE_FORBIDDEN = re.compile(r"[\d$€£]")
+MAX_NOTES = 10
+
+
+async def explain_with_model(analysis: Analysis, report: KeeperReport) -> KeeperReport:
+    """ASI:One may add one short 'why it fits' note per kept listing.
+
+    It never keeps, excludes or reorders anything, and notes containing digits
+    or currency symbols are dropped so prices only ever come from listings.
+    """
+    if not report.kept or not llm.enabled():
+        return report
+    clues = {kind: [c.phrase for c in analysis.of(kind)] for kind in ("interest", "wish", "preference", "ownership", "dislike")}
+    items = [{"index": i, "title": v.listing.title[:120]} for i, v in enumerate(report.kept)]
+    prompt = (
+        "For each gift listing, write one short reason (under 100 characters, no prices or numbers) why it suits the recipient, "
+        "using only these clues. Reply as JSON {\"notes\":[{\"index\":0,\"why\":\"...\"}]}.\n"
+        f"Clues: {json.dumps(clues)}\nListings: {json.dumps(items)}"
+    )
+    raw = await llm.ask_json(prompt, max_tokens=400)
+    notes = raw.get("notes") if raw else None
+    if not isinstance(notes, list):
+        return report
+    why: dict[int, str] = {}
+    for n in notes:
+        if isinstance(n, dict) and isinstance(n.get("index"), int) and isinstance(n.get("why"), str):
+            text = " ".join(n["why"].split()).strip(" .")
+            if 0 <= n["index"] < len(report.kept) and 8 <= len(text) <= 120 and not _NOTE_FORBIDDEN.search(text):
+                why.setdefault(n["index"], text)
+    if not why:
+        return report
+    kept = tuple(
+        Verdict(listing=v.listing, notes=(v.notes + (f"Fit: {why[i]}",))[:MAX_NOTES]) if i in why else v
+        for i, v in enumerate(report.kept)
+    )
+    return report.model_copy(update={"kept": kept})
