@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { refreshBudgetGuidance } from "./lib/budgets";
 import { getMembership, getUserId, isLiveRoom, requireMember } from "./lib/auth";
 import { purgeParticipantPrivateData } from "./lib/evidence";
 import { cleanText, isMoney, LIMITS } from "./lib/input";
@@ -154,6 +155,7 @@ export const joinRoom = mutation({
       role: "contributor",
       joinedAt: Date.now(),
     });
+    await refreshBudgetGuidance(ctx, room._id);
     // A new participant changes the allocation inputs for any live proposal.
     await recomputeProposal(ctx, room._id);
 
@@ -372,7 +374,10 @@ export const leaveRoom = mutation({
       for (const event of events) if (event.participantId === me._id) await ctx.db.delete(event._id);
     }
 
+    const budgetRange = await ctx.db.query("budgetRanges").withIndex("by_room_participant", q => q.eq("roomId", roomId).eq("participantId", me._id)).unique();
+    if (budgetRange) await ctx.db.delete(budgetRange._id);
     await ctx.db.delete(me._id);
+    await refreshBudgetGuidance(ctx, roomId);
     await recomputeProposal(ctx, roomId);
     if (publishedChanged) await bumpKnowledgeRevision(ctx, roomId);
     return ok(null);

@@ -7,6 +7,7 @@ import { playBookOpen } from "@/components/world/sfx";
  * this, so they open and close as one object. Nothing here is room data.
  */
 type Listener = () => void;
+const SEEN_KEY = "unwrap:book-drawing-seen";
 
 /** The 3D book lifts and opens for this long before the pages take over. */
 export const BOOK_OPEN_MS = 900;
@@ -21,8 +22,11 @@ class BookStore {
   theme: string | null = null;
   /** A gift to open straight to. */
   listingId: string | null = null;
-  /** Whether the long first-time drawing has already been seen this session. */
+  /** Whether this session has already opened the book at least once. */
   seen = false;
+  /** Fixed for this opening, even after its first-time animation is claimed. */
+  drawOpening = false;
+  run = 0;
   private listeners = new Set<Listener>();
 
   subscribe = (fn: Listener) => {
@@ -38,6 +42,11 @@ class BookStore {
 
   show(opts: { theme?: string | null; listingId?: string | null } = {}) {
     if (this.open) return;
+    try { this.seen ||= sessionStorage.getItem(SEEN_KEY) === "1"; } catch { /* Use memory when storage is unavailable. */ }
+    this.drawOpening = !this.seen;
+    // Opening once counts even if the person closes the drawing early.
+    this.markSeen();
+    this.run++;
     this.open = true;
     this.openedAt = performance.now();
     this.theme = opts.theme ?? null;
@@ -55,6 +64,7 @@ class BookStore {
 
   markSeen() {
     this.seen = true;
+    try { sessionStorage.setItem(SEEN_KEY, "1"); } catch { /* The in-memory flag still prevents replays. */ }
   }
 
   /** 0 shut on its stand, 1 raised and open: the 3D book's pose. */

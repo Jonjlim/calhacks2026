@@ -132,12 +132,17 @@ export const photoObservationSchema = photoReadingSchema.extend({
 });
 export type PhotoReading = z.infer<typeof photoReadingSchema>;
 export type PhotoObservation = z.infer<typeof photoObservationSchema>;
+export const groupBudgetGuidanceSchema = z.strictObject({
+  lowerMinor: z.number().int().nonnegative(), upperMinor: z.number().int().nonnegative(), currency: z.literal("USD"),
+  responseCount: z.number().int().positive(), participantCount: z.number().int().positive(), conflicting: z.boolean(),
+});
 export const searchBriefSchema = z.strictObject({
   roomId: ref,
   knowledgeRevision: z.number().int().nonnegative(),
   queryTerms: z.array(shortText).min(1).max(6),
   mustExclude: z.array(shortText).max(100),
   budgetMinor: minorAmountSchema.optional(),
+  budgetGuidance: groupBudgetGuidanceSchema.optional(),
   occasion: z.string().max(200).optional(),
   listingLimit: z.number().int().min(1).max(12),
 });

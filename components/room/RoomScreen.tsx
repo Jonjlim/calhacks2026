@@ -21,6 +21,7 @@ import {
 } from "@/lib/mocks/queries";
 import { MobileParticipantExperience } from "@/components/participant/MobileParticipantExperience";
 import { guessSurface, phonePath, type RoomSurface } from "@/lib/room/surface";
+import { MemberBudgetRail } from "./MemberBudgetRail";
 import { RoomLayout } from "./RoomLayout";
 import { RevealHarness } from "./RevealHarness";
 import type { RoomActions, RoomData } from "./types";
@@ -316,7 +317,7 @@ function RoomWithQuestionPoll({ roomId, data, actions, legacyActions, surface }:
 }
 
 function RoomSurfaceView({ surface, data, actions }: { surface: RoomSurface; data: RoomData; actions: RoomActions }) {
-  return surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />;
+  return <>{surface === "phone" ? <MobileParticipantExperience data={data} actions={actions} /> : <RoomLayout data={data} actions={actions} />}<ErrorBoundary fallback={null}><MemberBudgetRail roomId={data.view.room.id as Id<"rooms">} /></ErrorBoundary></>;
 }
 
 function RoomAccessError({ error }: { error: AppError }) {
