@@ -16,7 +16,7 @@ import { platformTop } from "../props/Stonework";
 import { GIFT_SPOT } from "../sceneConfig";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
-import { mapView } from "./mapView";
+import { CAMERA_FRAME_PRIORITY, mapView } from "./mapView";
 import s from "./gift-rings.module.css";
 
 /**
@@ -377,7 +377,9 @@ function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet
       sc.scale.setScalar((working ? 2.0 : 1.5) * pulse);
       glowMat.opacity = working ? 0.7 : failed ? 0.55 : hover ? 0.4 : 0.45;
     }
-  });
+    // Html labels project this group's world matrix later in the frame.
+    g.updateMatrixWorld();
+  }, CAMERA_FRAME_PRIORITY + 1);
 
   const over = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();

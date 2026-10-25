@@ -13,7 +13,7 @@ import { type CameraPose, landingPose, OPENING_CAMERA, storybookPose } from "./s
 import { lobbyPose, topPose } from "./unwrap/invitationLayout";
 import { roomStage } from "@/components/room/roomStage";
 import { doorPose, gardenPose, mapPose, towerPose } from "./room/stageLayout";
-import { mapView } from "./room/mapView";
+import { CAMERA_FRAME_PRIORITY, mapView } from "./room/mapView";
 
 /** The same view, pulled back along its line of sight. */
 function pullBack(pose: CameraPose, k: number): CameraPose {
@@ -215,7 +215,10 @@ export function WorldCamera({ parallax, roomActive = false, reducedMotion = fals
     camera.position.x += smoothed.current.x * OPENING_CAMERA.parallax.x;
     camera.position.y += -smoothed.current.y * OPENING_CAMERA.parallax.y;
     camera.lookAt(rest.target);
-  });
+  }, CAMERA_FRAME_PRIORITY);
+
+  // Screen-anchored objects and their DOM labels read the camera later in the same frame.
+  useFrame(() => camera.updateMatrixWorld(), CAMERA_FRAME_PRIORITY + 0.5);
 
   return null;
 }

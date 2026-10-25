@@ -9,6 +9,13 @@
  * the view up or down (as offsets from the default composition).
  */
 
+/**
+ * The camera moves before anything that is anchored to the screen (negative
+ * priorities run first without taking over rendering), so those objects and
+ * their DOM labels never trail the camera by a frame.
+ */
+export const CAMERA_FRAME_PRIORITY = -2;
+
 const PAN_X = 36;
 const PAN_Z = 28;
 const ZOOM_MIN = 0.3;
