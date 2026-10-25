@@ -1,6 +1,7 @@
 "use client";
 
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { reencodeImage } from "@/lib/live/image";
 import type { AvatarId } from "@/components/characters/StorybookAvatar";
 import type { RingAction, RingsWorld } from "@/components/world/room/GiftRings";
@@ -51,6 +52,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
   // Photos picked in the add box before they're sent.
   const [photoPick, setPhotoPick] = useState<{ blob: Blob; preview: string; marker?: { x: number; y: number } }[]>([]);
   const [why, setWhy] = useState(false);
+  /** Index of the photo open in the large tap-the-person view, if any. */
+  const [marking, setMarking] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -366,7 +369,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       }
     }
     setPhotoPick(next);
+    setMarking(next.length ? 0 : null);
   };
+  // Measured on the uncropped image, so the mark lands on the same spot the model sees.
   const markPhoto = (index: number, e: ReactMouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const marker = { x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)), y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)) };
@@ -381,6 +386,29 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
         setPhotoPick([]);
       }
     });
+  };
+  const nextPhoto = (index: number) => setMarking(index + 1 < photoPick.length ? index + 1 : null);
+  const markViewer = (index: number) => {
+    const it = photoPick[index]!;
+    const last = index + 1 >= photoPick.length;
+    return (
+      <div className={s.markBackdrop} role="dialog" aria-modal="true" aria-label={`Photo ${index + 1} of ${photoPick.length}`} data-map-token
+        onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === "Escape") setMarking(null); }}>
+        <div className={s.markCard}>
+          <b>{photoPick.length > 1 ? `Photo ${index + 1} of ${photoPick.length} · ` : ""}Tap the person this gift is for</b>
+          <button type="button" className={s.markFrame} onClick={(e) => markPhoto(index, e)} aria-label="Tap the person this gift is for">
+            <img src={it.preview} alt="" />
+            {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+          </button>
+          <span>Your mark only tells Unwrap who to look at. It isn’t face recognition, and only you see it.</span>
+          <div className={s.markBtns}>
+            {it.marker && <button type="button" onClick={() => setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p)))}>Clear mark</button>}
+            <button type="button" onClick={() => { setPhotoPick((items) => items.map((p, i) => (i === index ? { blob: p.blob, preview: p.preview } : p))); nextPhoto(index); }}>Skip · scene only</button>
+            <button type="button" className={s.readBtn} disabled={!it.marker} onClick={() => nextPhoto(index)}>{last ? "Done" : "Next photo"}</button>
+          </div>
+        </div>
+      </div>
+    );
   };
   const photoComposer = composer?.photo && actions ? (
     <div className={s.write} data-map-token>
@@ -398,17 +426,18 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste }: {
       ) : (
         <div className={s.photoRow}>
           {photoPick.map((it, i) => (
-            <button key={it.preview} type="button" className={s.polaroidPick} onClick={(e) => markPhoto(i, e)} aria-label={`Photo ${i + 1}: tap the person it’s for`}>
+            <button key={it.preview} type="button" className={s.polaroidPick} onClick={() => setMarking(i)} aria-label={`Photo ${i + 1}: open it to tap the person it’s for`}>
               <img src={it.preview} alt="" />
-              {it.marker && <i style={{ left: `${it.marker.x * 100}%`, top: `${it.marker.y * 100}%` }} aria-hidden />}
+              <span className={s.pickState}>{it.marker ? "✓ marked" : "tap to mark"}</span>
             </button>
           ))}
         </div>
       )}
-      <p>{photoPick.length ? "Tap her in each photo. It’s your mark, not face recognition, and only you see it." : "Everyone in the room will see these photos. Location data is removed."}</p>
+      <p>{photoPick.length ? "Open each photo and tap her. It’s your mark, not face recognition, and only you see it." : "Everyone in the room will see these photos. Location data is removed."}</p>
       {photoPick.length > 0 && (
         <button type="button" className={s.readBtn} disabled={pending === "photos"} onClick={readPhotos}>{pending === "photos" ? "Sharing…" : `Share ${photoPick.length === 1 ? "it" : "them"} with the room`}</button>
       )}
+      {marking !== null && photoPick[marking] && createPortal(markViewer(marking), document.body)}
     </div>
   ) : null;
 

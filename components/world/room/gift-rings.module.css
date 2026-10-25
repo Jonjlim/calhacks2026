@@ -178,6 +178,16 @@
 .polaroidPick { position: relative; padding: 5px 5px 14px; background: #fffdf8; border: 0; border-radius: 3px; box-shadow: 0 10px 20px -8px rgb(40 24 44 / .6); cursor: crosshair; transform: rotate(-2deg); }
 .polaroidPick:nth-child(2) { transform: rotate(2deg); }
 .polaroidPick img { display: block; width: 92px; height: 72px; object-fit: cover; }
+.pickState { display: block; margin-top: 3px; font: 700 10px var(--font-sans); color: var(--color-dusk); }
+.markBackdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgb(28 20 36 / .72); }
+.markCard { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 92vw; padding: 16px; border-radius: 18px; background: #2f2737; color: #fff; font: 500 13px var(--font-sans); text-align: center; box-shadow: 0 24px 60px -20px rgb(0 0 0 / .8); }
+.markCard > b { font: 700 15px var(--font-sans); color: #ffd98a; }
+.markFrame { position: relative; display: block; padding: 0; border: 0; background: none; cursor: crosshair; line-height: 0; }
+.markFrame img { display: block; max-width: min(88vw, 900px); max-height: 68vh; width: auto; height: auto; border-radius: 6px; }
+.markFrame i { position: absolute; width: 14px; height: 14px; margin: -7px; border-radius: 50%; border: 2px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px rgb(0 0 0 / .55); pointer-events: none; }
+.markBtns { display: flex; gap: 8px; }
+.markBtns > button:not(.readBtn) { border: 1px solid rgb(255 255 255 / .35); border-radius: 14px; padding: 8px 14px; background: transparent; color: #fff; font: 700 13px var(--font-sans); cursor: pointer; }
+.readBtn:disabled { opacity: .5; cursor: default; }
 .polaroidPick i { position: absolute; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 3px solid #fff; background: var(--color-coral); box-shadow: 0 0 0 2px var(--color-coral); }
 .readBtn { border: 0; border-radius: 14px; padding: 9px 16px; font: 700 13px var(--font-sans); color: #3b2a16; background: linear-gradient(180deg, #ffe3a0, #e9c46a); cursor: pointer; box-shadow: 0 8px 18px -8px rgb(160 122 44 / .9); }
 .readBtn:disabled { opacity: .6; }
