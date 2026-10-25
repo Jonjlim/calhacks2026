@@ -7,14 +7,18 @@ import { PublishedClueRail } from "@/components/clues/PublishedClueRail";
 import { GiftMap } from "@/components/map/GiftMap";
 import { ProductShortlist } from "@/components/products/ProductShortlist";
 import { ProposalPanel } from "@/components/proposal/ProposalPanel";
+import { BookCorner } from "@/components/book/BookCorner";
+import { BookOfPossibilities } from "@/components/book/BookOfPossibilities";
+import { book, useBookOpen } from "@/components/book/bookStore";
 import { ConvergenceOverlay } from "@/components/convergence/ConvergenceOverlay";
 import { convergence, useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
-import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { sfx } from "@/components/world/sfx";
+import { hasChosenSky, setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { isDarkSky, SKIES } from "@/components/world/timeOfDay";
 import { mapView } from "@/components/world/room/mapView";
-import { MapIcon } from "@/components/world/room/MapIcon";
 import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
 import { COUNCIL_LABEL, COUNCIL_TINT, poseFor } from "@/lib/council/animation";
@@ -49,40 +53,37 @@ const JAR_KINDS: Record<"wish" | "interest" | "moment", { title: string; kinds: 
 };
 
 const chip = "paper-card rounded-full px-3.5 py-2 text-[13.5px] text-dusk shadow-sm";
-const round = "paper-card grid h-11 w-11 place-items-center rounded-full text-dusk shadow-sm hover:-translate-y-px transition-transform";
+const iconChip = "paper-card flex h-10 w-10 items-center justify-center rounded-full text-dusk shadow-sm transition hover:bg-paper";
+const menuItem = "rounded-xl px-3 py-2 text-left text-[14px] text-dusk hover:bg-dusk/5";
 
-/** One round menu for room settings on the map. */
-function MapMenu({ items }: { items: { label: string; hint: string; run(): void }[] }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    window.addEventListener("pointerdown", away);
-    window.addEventListener("keydown", esc);
-    return () => {
-      window.removeEventListener("pointerdown", away);
-      window.removeEventListener("keydown", esc);
-    };
-  }, [open]);
+/** Small line icons, drawn here so the controls stay part of the picture rather than pasted-on text. */
+const ICON = { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
+function SoundIcon({ on }: { on: boolean }) {
   return (
-    <div ref={box} className="relative">
-      <button className={round} aria-label="Room menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className="text-[18px] leading-none tracking-[0.12em]" aria-hidden>···</span>
-      </button>
-      {open && (
-        <div role="menu" className="paper-card absolute top-[calc(100%+6px)] right-0 z-20 flex w-[240px] flex-col gap-0.5 rounded-[16px] p-1.5 shadow-[0_20px_40px_-16px_rgba(40,24,44,0.7)]">
-          {items.map((it) => (
-            <button key={it.label} role="menuitem" className="flex flex-col items-start rounded-[11px] px-3 py-2 text-left hover:bg-dusk/5" onClick={() => { setOpen(false); it.run(); }}>
-              <span className="text-[13px] font-semibold">{it.label}</span>
-              <span className="text-[11px] text-dusk/55">{it.hint}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <svg {...ICON}>
+      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" />
+      {on ? <><path d="M15.5 9a4 4 0 0 1 0 6" /><path d="M18 6.5a7.5 7.5 0 0 1 0 11" /></> : <path d="M16 9.5l5 5M21 9.5l-5 5" />}
+    </svg>
   );
+}
+function DayIcon({ day }: { day: boolean }) {
+  return day ? (
+    <svg {...ICON}><circle cx="12" cy="12" r="4" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" /></svg>
+  ) : (
+    <svg {...ICON}><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" /></svg>
+  );
+}
+function CompassIcon() {
+  return <svg {...ICON}><circle cx="12" cy="12" r="9" /><path d="M15.5 8.5l-2 5-5 2 2-5 5-2z" /></svg>;
+}
+function MoreIcon() {
+  return <svg {...ICON}><circle cx="5.5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="18.5" cy="12" r="1.2" /></svg>;
+}
+function CheckIcon() {
+  return <svg {...ICON} width={18} height={18}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+}
+function EnvelopeIcon() {
+  return <svg {...ICON}><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="M4 7l8 6 8-6" /></svg>;
 }
 
 export function RoomLayout({ data, actions, preview = false }: { data: RoomData; actions?: RoomActions; preview?: boolean }) {
@@ -92,6 +93,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const time = useTimeOfDay();
   const reducedMotion = useReducedMotion() ?? false;
   const [drawer, setDrawer] = useState<Drawer>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => sfx.setEnabled(soundEnabled), [soundEnabled]);
+  // The room opens under a warm rose-gold sunrise unless the person has picked a sky of their own.
+  useEffect(() => {
+    if (!hasChosenSky()) setTimeOfDay("sunrise", { remember: false });
+  }, []);
 
   // --- Stage: the gift map first (D19); tower and garden stay reachable. Kept in the URL for refresh / deep links.
   // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
@@ -144,14 +151,15 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       const sel = data.selection?.status === "active" ? data.selection : null;
       const rings = ringsRef.current;
       if (!sel || !rings || convergence.active) return;
-      const rec = data.recommendations.find((r) => r.listingId === sel.listingId);
-      const cited = new Set(rec?.publishedClueIds ?? []);
+      // Every gift in the box (one or several) joins the reveal, and every memory any of them cites.
+      const selectedIds = new Set(sel.items?.map((item) => item.listingId) ?? [sel.listingId]);
+      const cited = new Set(data.recommendations.filter((r) => selectedIds.has(r.listingId)).flatMap((r) => r.publishedClueIds));
       const kindOf = new Map(data.publishedClues.map((c) => [c.id, c.kind]));
       const inputs: ArtifactInput[] = [
         ...rings.clues.map((c): ArtifactInput => ({ key: c.key, source: kindOf.get(c.key.slice(5)) === "explicit_wish" ? "wish" : "memory", text: c.text, x: c.x, z: c.z, supports: cited.has(c.key.slice(5)) })),
         ...rings.ideas.map((i): ArtifactInput => ({ key: i.key, source: "idea", text: i.text, x: i.x, z: i.z })),
         // The other real gifts the room considered; the chosen one is the reveal itself.
-        ...rings.gifts.filter((g) => g.listingId !== sel.listingId).map((g): ArtifactInput => ({ key: g.key, source: "gift", text: g.title, x: g.x, z: g.z })),
+        ...rings.gifts.filter((g) => !selectedIds.has(g.listingId)).map((g): ArtifactInput => ({ key: g.key, source: "gift", text: g.title, x: g.x, z: g.z })),
       ];
       convergence.start({ selectionId: sel.id, inputs, total: inputs.length, instant: instant || reducedMotion });
     },
@@ -177,6 +185,39 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       delete document.documentElement.dataset.convergence;
     };
   }, [engaged]);
+
+  // --- The Book of Possibilities: choosing a gift there uses the existing authorized action, then the reveal takes over once the book is shut.
+  const bookOpen = useBookOpen();
+  const pendingReveal = useRef<string | null>(null);
+  const chooseFromBook = useCallback(
+    async (listingId: string): Promise<{ ok: true } | { ok: false; message: string }> => {
+      if (!actions) return { ok: false, message: "Choosing needs a live room." };
+      try {
+        const res = await actions.selectGift(listingId);
+        if (!res.ok) return { ok: false, message: res.error.message };
+        pendingReveal.current = listingId;
+        return { ok: true };
+      } catch {
+        return { ok: false, message: "That didn’t go through. Check the connection and try again." };
+      }
+    },
+    [actions],
+  );
+  useEffect(() => {
+    if (bookOpen || !pendingReveal.current || !selection || selection.listingId !== pendingReveal.current) return;
+    pendingReveal.current = null;
+    const t = setTimeout(() => startReveal(false), 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookOpen, selection?.id, selection?.listingId]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if ((e.key === "b" || e.key === "B") && !e.metaKey && !e.ctrlKey && !e.altKey && stage === "map" && !(el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))) book.show();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stage]);
 
   // --- The gift map (D19): rings of memories, themes and gifts around the present.
   const map = useGiftRings({ data, actions, isOrganizer, active: stage === "map", onShares: () => setDrawer({ kind: "shares" }), onPaste: () => setDrawer({ kind: "notes" }), onReveal: startReveal, revealSeen: seen });
@@ -206,7 +247,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   useEffect(() => () => setCouncil(null), [setCouncil]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDrawer(null);
+        setMenuOpen(false);
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -240,7 +286,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       <button className="btn-primary h-11 px-5" onClick={() => setDrawer({ kind: "gifts" })}>Gift ideas · {data.recommendations.length}</button>
     );
   } else if (phase === "approve" || phase === "done") {
-    primary = <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>{phase === "done" ? "All approved ✓" : "Review shares"}</button>;
+    // "All approved" is a status, not something to press: it reads as a quiet badge, and the shares stay one tap away in the present or the menu.
+    primary = phase === "done" ? (
+      <span role="status" className="flex h-11 items-center gap-2 rounded-full bg-[#dcebdc] px-4 text-[14px] font-semibold text-[#3d6b4a]"><CheckIcon /> All approved</span>
+    ) : (
+      <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>Review shares</button>
+    );
   }
 
   const status = !run
@@ -256,6 +307,8 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   return (
     <main className="island-room pointer-events-none fixed inset-0 z-10 text-dusk">
       {stage === "map" && !preview && !engaged && <MapCursor name={me.displayName || "You"} color="#e2ad6b" />}
+      {/* "How we got here" (D23 trial): portaled above the world, like the photo viewer. */}
+      {map.story}
       {data.councilUnavailable && <p role="alert" className="pointer-events-auto absolute bottom-5 left-1/2 z-30 max-w-md -translate-x-1/2 rounded-xl bg-paper/95 px-4 py-3 text-sm">The council is unavailable on this backend. Your room is still available.</p>}
       {preview && <p className="pointer-events-auto absolute top-20 left-1/2 -translate-x-1/2 rounded-xl bg-gold/30 px-3 py-2 text-sm">Preview only · sample data</p>}
 
@@ -276,54 +329,40 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </div>
       </motion.div>
 
-      {/* On the map, room controls fold into an invite button and one menu; the council's tools live at the present. */}
-      {stage === "map" && (
-        <div inert={engaged || undefined} className={`absolute top-5 right-5 flex items-start gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
-          {data.invitePath && <InviteCard path={data.invitePath} compact />}
-          <MapMenu items={[
-            { label: soundEnabled ? "Sound on" : "Sound off", hint: "Room sounds and music", run: toggleSound },
-            { label: time === "day" ? "Daytime" : "Night sky", hint: "Switch the light", run: () => setTimeOfDay(time === "day" ? "night" : "day") },
-            { label: "Recenter the map", hint: "Or press 0 · hold and drag the sky to turn, right-drag to move", run: () => mapView.reset() },
-            { label: "Back to the present", hint: "Zoom in on the island", run: () => setStage("garden") },
-            ...(!preview && actions ? [{ label: "Backstage", hint: "Pasted chats, notes and agent tools", run: () => setDrawer({ kind: "notes" }) }] : []),
-          ]} />
-        </div>
-      )}
-
       {/* Invite + small toggles */}
-      {stage !== "map" && <div className={`absolute top-5 right-5 flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      <div className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
-          <button className={chip} onClick={toggleSound} aria-pressed={soundEnabled}>{soundEnabled ? "Sound on" : "Sound off"}</button>
-          <button className={chip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")}>{time === "day" ? "Day" : "Night"}</button>
+          <button className={iconChip} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
+          <button className={iconChip} onClick={() => setTimeOfDay(SKIES[(SKIES.findIndex((k) => k.id === time) + 1) % SKIES.length]!.id)} aria-label={`Change the sky. Now: ${SKIES.find((k) => k.id === time)?.label}`} title={`Sky: ${SKIES.find((k) => k.id === time)?.label}. Click for the next.`}><DayIcon day={!isDarkSky(time)} /></button>
+          {stage === "map" && (
+            <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, 1 / 2 / 3 high, three-quarter and low views, + / - zoom, 0 returns.">
+              <CompassIcon />
+            </button>
+          )}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
-      </div>}
+      </div>
+
+      {/* The shares board (components/room/BudgetBoard) is built but switched off for now. To bring it back, render <BudgetBoard data={data} actions={actions} /> here on the map stage. */}
+
+      {/* The Book of Possibilities lives in the bottom-left corner. */}
+      {stage === "map" && !preview && !engaged && <BookCorner count={data.listings.length} />}
+
+      {/* In a branch: one way back, wherever the camera has wandered. */}
+      {stage === "map" && !engaged && !bookOpen && map.rings?.selectedKey && map.rings.selectedKey !== "box" && (
+        <button type="button" className="paper-card pointer-events-auto absolute top-5 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full px-4 py-2 text-[13.5px] font-semibold text-dusk shadow-sm" onClick={() => { map.rings?.onSelect(null); mapView.reset(); }}>
+          <svg {...ICON} width={16} height={16}><path d="M14.5 6l-6 6 6 6" /></svg>
+          Back to the overview
+        </button>
+      )}
 
       {/* The memory game floats over the tower while the room is still gathering. */}
       {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
         <MemoryQuest roomId={room.id as Id<"rooms">} recipientName={room.recipientDisplayName} clues={data.publishedClues} addMemory={actions.addManualClue} onOpenBackstage={() => setDrawer({ kind: "notes" })} />
       )}
 
-      {/* On the map: a quiet status line. Actions happen on the map itself. */}
-      {stage === "map" && (
-        <div inert={engaged || undefined} className={`absolute bottom-5 left-1/2 flex max-w-[min(720px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full bg-[#fbf7f0]/88 py-2 pr-2 pl-4 shadow-[0_14px_30px_-18px_rgba(65,52,76,0.6)] backdrop-blur-sm transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
-          <span className="flex gap-1" aria-hidden>
-            {COUNCIL_ACTORS.map((a) => (
-              <span key={a} className={`h-2 w-2 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
-            ))}
-          </span>
-          <p className="font-display text-[16px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="min-w-0 truncate text-[12.5px] text-dusk/60">{map.error ?? map.notice ?? status ?? "Click the sky to add · hold and drag to turn the view · drag a node toward the present to support"}</p>
-          {phase === "researching" && primary}
-          {/* The Great Gift Convergence (Dev 1): the organizer starts the reveal once a gift is in the box. */}
-          {selection && isOrganizer && !preview && (
-            <button className="btn-primary flex h-10 shrink-0 items-center gap-1.5 px-4 text-[13.5px]" onClick={() => startReveal(false)}><MapIcon name="spark" size={15} />{seen ? "Replay reveal" : "Reveal our gift"}</button>
-          )}
-        </div>
-      )}
-
       {/* Phase bar */}
-      {stage !== "map" && <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
+      <div inert={engaged || undefined} className={`absolute bottom-6 left-1/2 flex max-w-[min(920px,calc(100vw-40px))] -translate-x-1/2 items-center gap-3 rounded-full paper-card py-2 pr-2 pl-5 shadow-[0_18px_40px_-20px_rgba(65,52,76,0.55)] transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <span className="flex gap-1" aria-hidden>
           {COUNCIL_ACTORS.map((a) => (
             <span key={a} className={`h-2.5 w-2.5 rounded-full ${members[a].status === "started" ? "animate-pulse" : ""}`} style={{ background: COUNCIL_TINT[a], opacity: members[a].status === "idle" ? 0.3 : 1 }} />
@@ -331,23 +370,50 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
         </span>
         <div className="min-w-0">
           <p className="font-display text-[18px] leading-tight whitespace-nowrap">{PHASE_LABEL[phase]}</p>
-          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{status ?? `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`}</p>
+          <p role="status" className="max-w-[440px] truncate text-[12.5px] text-dusk/60">{(stage === "map" ? map.error ?? map.notice : null) ?? status ?? (stage === "map" ? "Add a memory, a wish or a gift idea with the buttons · drag to look around" : `${activeClues.length} ${activeClues.length === 1 ? "memory" : "memories"} in the jars`)}</p>
         </div>
         <div className="ml-2 flex items-center gap-2">
+          {stage === "map" && selection && isOrganizer && !preview && !seen && (
+            <button className="btn-primary h-11 px-5" onClick={() => startReveal(false)}>Reveal our gift</button>
+          )}
+          {stage === "map" && actions && !preview && (
+            <div className="flex items-center gap-1.5" role="group" aria-label="Add to the map">
+              {([["memory", "Memory", "Add a memory", "#a9cde6", "solid"], ["wish", "Wish", "Add a wish", "#f2d27a", "solid"], ["idea", "Gift idea", "Add a gift idea", "#e2bd6b", "dashed"]] as const).map(([what, label, title, tint, line]) => (
+                <button key={what} type="button" className="btn-secondary h-11 whitespace-nowrap px-3.5 text-[13.5px]" style={{ background: `color-mix(in srgb, ${tint} ${what === "idea" ? 28 : 62}%, #fffaf0)`, borderColor: `color-mix(in srgb, ${tint} 85%, #413450)`, borderStyle: line }} title={title} aria-label={title} onClick={() => map.startAdd(what)}>
+                  <span aria-hidden className="mr-1.5 text-[15px] leading-none">+</span>{label}
+                </button>
+              ))}
+            </div>
+          )}
           {primary}
-          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map <span aria-hidden>↗</span></button>
-          <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
-            {stage === "tower" ? "Garden" : "Tower"}
-          </button>
+          {stage !== "map" && (
+            <>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage("map")}>Open the gift map</button>
+              <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setStage(stage === "tower" ? "garden" : "tower")}>
+                {stage === "tower" ? "Garden" : "Tower"}
+              </button>
+            </>
+          )}
           {(phase === "review" || phase === "approve" || phase === "done") && stage === "tower" && (
             <button className="btn-secondary h-11 px-4 text-[14px]" onClick={() => setDrawer({ kind: "gifts" })}>Gifts</button>
           )}
-          {!preview && actions && (
-            <button className="btn-secondary h-11 px-4 text-[14px]" aria-label="Backstage: notes, agents and sharing" title="Backstage: notes, agents and sharing" onClick={() => setDrawer({ kind: "notes" })}>Backstage</button>
-          )}
+          <div className="relative">
+            <button className={`${iconChip} !h-11 !w-11`} aria-haspopup="menu" aria-expanded={menuOpen} aria-label="More" title="More" onClick={() => setMenuOpen((o) => !o)}><MoreIcon /></button>
+            {menuOpen && (
+              <div role="menu" className="paper-card absolute right-0 bottom-14 flex min-w-[220px] flex-col gap-1 rounded-[18px] p-2" onClick={() => setMenuOpen(false)}>
+                {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} onClick={() => startReveal(false)}>Replay reveal</button>}
+                {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
+                {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
+                {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => map.openBox()}>Review shares</button>}
+                {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Backstage: notes, agents and sharing</button>}
+              </div>
+            )}
+          </div>
         </div>
-      </div>}
+      </div>
       {(ask.error || resume.error) && <p role="alert" className="pointer-events-auto absolute bottom-24 left-1/2 -translate-x-1/2 rounded-xl bg-paper px-3 py-2 text-sm text-[#8c3b2c] shadow">{(ask.error ?? resume.error)?.message}</p>}
+
+      {stage === "map" && !preview && !engaged && <BookOfPossibilities data={data} actions={actions} isOrganizer={isOrganizer} onChoose={chooseFromBook} />}
 
       {selection && (
         <ConvergenceOverlay
@@ -420,6 +486,7 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
         <h2 className="font-display text-[28px] leading-tight">{COUNCIL_LABEL[drawer.actor]}</h2>
         <p className="mt-1 text-[14.5px] text-dusk/75">{poseFor(m).caption}</p>
         {m.summary && <p className="mt-3 rounded-xl bg-white/60 px-3 py-2 text-[14px] leading-snug">{m.summary}</p>}
+        <CouncilLog actor={drawer.actor} events={data.council?.events ?? []} />
         <p className="mt-3 text-[12px] text-dusk/50">Status comes from the agent’s real task events{m.status === "idle" ? "; nothing has run yet" : ""}.</p>
       </section>
     );
@@ -434,26 +501,39 @@ function DrawerBody({ drawer, data, actions, isOrganizer, members }: { drawer: N
   );
 }
 
+/** Everything one council member did in the latest run, from the stored task events. */
+function CouncilLog({ actor, events }: { actor: (typeof COUNCIL_ACTORS)[number]; events: NonNullable<RoomData["council"]>["events"] }) {
+  const mine = events.filter((e) => e.actor === actor).sort((a, b) => a.sequence - b.sequence);
+  if (!mine.length) return null;
+  const mark = { started: "…", completed: "✓", failed: "✕" } as const;
+  return (
+    <ol className="mt-3 flex flex-col gap-1.5" aria-label={`${COUNCIL_LABEL[actor]} log`}>
+      {mine.map((e) => (
+        <li key={e.eventId} className="flex gap-2 rounded-xl bg-white/50 px-3 py-1.5 text-[13px] leading-snug">
+          <span aria-hidden className="w-4 shrink-0 text-center font-semibold" style={{ color: e.status === "failed" ? "#d95b4a" : COUNCIL_TINT[actor] }}>{mark[e.status]}</span>
+          <span className="min-w-0 flex-1">
+            {e.status === "started" ? poseFor({ actor, status: "started" }).caption : e.result?.summary ?? e.result?.error ?? poseFor({ actor, status: e.status }).caption}
+          </span>
+          <time className="shrink-0 text-[11.5px] text-dusk/45">{new Date(e.timestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}</time>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Real, scannable invite QR plus copyable link. Collapses to a pill once friends have joined. */
-function InviteCard({ path, compact = false }: { path: string; compact?: boolean }) {
+function InviteCard({ path }: { path: string }) {
   const [origin, setOrigin] = useState<string | null>(null);
-  // On the map the QR waits behind a round button, so it never covers the rings.
-  const [open, setOpen] = useState(!compact);
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => setOrigin(window.location.origin), []);
   const url = origin ? inviteUrl(path, appOrigin(origin)) : null;
   const modules = useMemo(() => (url ? inviteQrModules(url) : null), [url]);
   if (!url || !modules) return null;
   const code = path.split("/").pop() ?? "";
-  if (!open) {
-    return compact ? (
-      <button className={round} onClick={() => setOpen(true)} aria-label="Invite friends" title="Invite friends">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden><circle cx="9" cy="8" r="4" /><path d="M2 21c0-4 3-6 7-6s7 2 7 6M19 8v6M16 11h6" /></svg>
-      </button>
-    ) : <button className={chip} onClick={() => setOpen(true)}>Invite friends · QR</button>;
-  }
+  if (!open) return <button className={`${chip} flex items-center gap-2`} onClick={() => setOpen(true)} aria-label="Invite friends: show the QR code"><EnvelopeIcon /><span>Invite</span></button>;
   return (
-    <div className={`paper-card w-[220px] rounded-[20px] p-3.5 text-center ${compact ? "absolute top-0 right-14 z-20" : ""}`} data-invite-url={url}>
+    <div className="paper-card w-[220px] rounded-[20px] p-3.5 text-center" data-invite-url={url}>
       <div className="flex items-baseline justify-between">
         <p className="font-display text-[19px]">Join on your phone</p>
         <button className="text-[12px] text-dusk/55 hover:text-dusk" onClick={() => setOpen(false)} aria-label="Hide invite">Hide</button>

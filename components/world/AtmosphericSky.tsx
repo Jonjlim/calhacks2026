@@ -177,8 +177,8 @@ function useKeepClear() {
   };
 }
 
-function CloudLayer({ animate, tint }: { animate: boolean; tint: string }) {
-  const specs = useMemo(buildClouds, []);
+function CloudLayer({ animate, tint, clearZone = true, sparse = false }: { animate: boolean; tint: string; clearZone?: boolean; /** The gift map: a few faint low banks, nothing drifting among the islands. */ sparse?: boolean }) {
+  const specs = useMemo(() => (sparse ? buildClouds().filter((c, i) => c.y < -8 && i % 3 === 0).map((c) => ({ ...c, opacity: c.opacity * 0.5 })) : buildClouds()), [sparse]);
   const refs = useRef<(THREE.Sprite | null)[]>([]);
   const keepClear = useKeepClear();
   useFrame(({ camera, size }, dt) => {
@@ -191,7 +191,7 @@ function CloudLayer({ animate, tint }: { animate: boolean; tint: string }) {
         sprite.position.x += s.speed * step;
         if (sprite.position.x > 90) sprite.position.x = -90;
       }
-      (sprite.material as THREE.SpriteMaterial).opacity = s.opacity * keepClear(sprite, s.w, camera, aspect);
+      (sprite.material as THREE.SpriteMaterial).opacity = s.opacity * (clearZone ? keepClear(sprite, s.w, camera, aspect) : 1);
     });
   });
   return (
@@ -302,14 +302,25 @@ function ForegroundWisps({ animate, tint }: { animate: boolean; tint: string }) 
   );
 }
 
-export function AtmosphericSky({ animate }: { animate: boolean }) {
+/**
+ * On the gift map the camera can swing all the way round, so the cloud banks
+ * that normally sit only behind the island are repeated on the other three
+ * sides: the same layers, drifting at their own paces, so there is sky and
+ * depth in every direction.
+ */
+export function SurroundClouds(_: { animate: boolean }) {
+  // Intentionally empty: the gift map keeps a calm sky. (The far kingdom still surrounds it; see MapSurround.)
+  return null;
+}
+
+export function AtmosphericSky({ animate, sparse = false }: { animate: boolean; sparse?: boolean }) {
   const palette = useScenePalette();
   return (
     <>
       <SkyDome palette={palette} animate={animate} />
       <CloudDeck animate={animate} tint={palette.deckTint} />
-      <CloudLayer animate={animate} tint={palette.cloudTint} />
-      <ForegroundWisps animate={animate} tint={palette.cloudTint} />
+      <CloudLayer animate={animate} tint={palette.cloudTint} sparse={sparse} />
+      {!sparse && <ForegroundWisps animate={animate} tint={palette.cloudTint} />}
     </>
   );
 }

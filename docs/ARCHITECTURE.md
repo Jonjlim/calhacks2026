@@ -6,6 +6,20 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D25 — Scrapewise replacement shopping actor (conditional go, 2026-10-25)
+
+Dev 4 is replacing the missing-link automation-lab source with `scrapewise/google-shopping`, pinned build `0.1.46`. Same Apify service and token; no extra service or database. Request one US/English query, at most 20 items from one page, budget filter, and a $0.40 run charge cap. Offers, direct-store resolution, details and price history are disabled. A listing links to the observed Google product page; this is not a verified retailer checkout URL. Normalize explicit USD, numeric `price` reconciled against `priceText`, `store`, `imageUrl`, and the public `productUrl`. Missing source links still drop rows; unknown prices remain unknown. Legacy parsers stay for recorded observations. One synthetic `hiking backpack` live check succeeded: run `fLbkGQez9dtwdzEUJ`, dataset `C7spheQO46lAxF1NY`, 20 normalized listings with observed prices and images, about 14 seconds end to end. The reduced recorded response is `convex/research/fixtures/scrapewise-shopping.json`. This verifies that query and the production provider/parser path, not arbitrary searches or browser checkout.
+
+### D24 — Google Shopping actor switched to automation-lab (live no-go, 2026-10-25)
+
+The previous `johnvc` actor returned a monthly-allowance notice. Research was switched to `automation-lab/google-shopping-scraper`, using the same Apify token with `queries`, US/English localization, `maxResults: 20`, optional budget `maxPrice`, and a $0.40 run charge cap. The cap does not guarantee a result count. No successful build is pinned.
+
+**Live verification failed:** one synthetic `hiking backpack` search (run `ESUSgJwQdzf1qxyi2`, dataset `DfO8vaVlmz9XMtT1f`) ended `SUCCEEDED` at the provider but returned 16 rows with empty `productUrl` and `imageUrl` on every row. Zero met the listing contract. This actor is **not ready for live gift discovery** in the tested configuration. Do not turn titles into invented merchant links, approve a build based only on provider status, or automatically repeat paid runs. The recorded response is `convex/research/fixtures/automation-lab-missing-links.json`; the job now explains the missing-link failure. Previously verified fixtures remain useful for an explicitly labelled offline rehearsal, not a fresh live result. The old page parser remains for historical observations. The direct Python council fallback still references the historical actor; configured room research uses the Convex bridge. Google Trends uses a separate actor.
+
+### D23 — Directions between memories and gifts (trial, 2026-10-24)
+
+Trial on `dev4/directions-trial`, not yet on `refactor`. Trend sprouts per memory flooded the map with generic searches, and one search could fill the gift ring with one product type, so "Why this gift?" had nothing to say. The trial adds a middle layer: the council proposes 3–4 **directions** that each combine at least two memories (or one explicit wish), asks one question when a direction is broad, and research runs once per direction with two gifts shown from each. Trends become a few clouds people can catch into the next directions; they never search by themselves. Same stack: one new Convex table (`mapDirections`), optional fields on `researchJobs` and `mapSharpens`, two new signal kinds, the existing model adapter and Apify search. No new provider or service. Contract: "Directions flow — trial (D23)" in [CONTRACTS.md](CONTRACTS.md).
+
 ### D22 — Model screen for Google Trends ideas (2026-10-24)
 
 Related Google searches include news, scores and lookups ("hiking deaths", "tennis results"). After a trend run succeeds, `convex/research/trendScreen.ts` sends up to 40 candidate phrases and the seed term to the **existing** configurable model adapter (Dev 3's `LLM_*` settings, `extractor` role, Zod-validated). The model only labels each phrase `product`, `style`, `experience` or `not_gift`. It cannot add or reword searches: only exact phrases from the scraped data are kept, and the deterministic news/lookup floor still applies on top. If the model is unset, fails or returns invalid JSON, the word filter is used instead; each stored sample records which (`screen: "model" | "words"`). `TREND_AI_SCREEN=off` disables the call. Cost: one model call per completed trend lookup. No new provider, SDK, table or service; Dev 3 owns the adapter and should review the prompt. When a check yields nothing, the map says why (`emptyTrendNote`) instead of staying silent.
@@ -498,3 +512,17 @@ Legacy single-gift fields remain first-item compatibility projections. Simulatio
 continues to use the approved revision, never a client-calculated amount.
 Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
 rows remain valid without a data migration. No deployment accompanies this change.
+
+
+## Group polling and a multi-gift map box
+
+Alex requested live group answers rather than first-answer closure. Store
+optional attributed ballots on the existing room question; no extra service or
+database. Poll votes are advisory and never publish a recipient fact. Explicit
+product votes take precedence, question support then steers eligible candidates
+before pool limits, and existing relevance/citations remain unchanged. Source
+filters remain authoritative. Selected products are kept in the room projection
+across subsequent searches. The map calls atomic add/remove operations, retains
+all selected product links, approves one combined versioned estimate and reveals
+every item through a selectable set. Old single-gift APIs and rows remain valid.
+No payment/deployment change is part of this implementation.

@@ -9,6 +9,8 @@
  */
 
 import type * as agents_buyer from "../agents/buyer.js";
+import type * as agents_directions from "../agents/directions.js";
+import type * as agents_directionsPolicy from "../agents/directionsPolicy.js";
 import type * as agents_engine from "../agents/engine.js";
 import type * as agents_extract from "../agents/extract.js";
 import type * as agents_ideas from "../agents/ideas.js";
@@ -53,6 +55,7 @@ import type * as lib_knowledge from "../lib/knowledge.js";
 import type * as lib_proposalEngine from "../lib/proposalEngine.js";
 import type * as lib_result from "../lib/result.js";
 import type * as lib_roomPurge from "../lib/roomPurge.js";
+import type * as lib_trail from "../lib/trail.js";
 import type * as lib_views from "../lib/views.js";
 import type * as map from "../map.js";
 import type * as mapSignals from "../mapSignals.js";
@@ -70,6 +73,7 @@ import type * as payments_sync from "../payments/sync.js";
 import type * as payments_webhook from "../payments/webhook.js";
 import type * as photos from "../photos.js";
 import type * as proposals from "../proposals.js";
+import type * as questionPolls from "../questionPolls.js";
 import type * as research_apifyRun from "../research/apifyRun.js";
 import type * as research_brief from "../research/brief.js";
 import type * as research_catalog from "../research/catalog.js";
@@ -80,6 +84,7 @@ import type * as research_fashionProvider from "../research/fashionProvider.js";
 import type * as research_fashionSchema from "../research/fashionSchema.js";
 import type * as research_fixtures_maya from "../research/fixtures/maya.js";
 import type * as research_foundBy from "../research/foundBy.js";
+import type * as research_groupRanking from "../research/groupRanking.js";
 import type * as research_normalize from "../research/normalize.js";
 import type * as research_provider from "../research/provider.js";
 import type * as research_research from "../research/research.js";
@@ -92,6 +97,7 @@ import type * as research_trendProvider from "../research/trendProvider.js";
 import type * as research_trendSchema from "../research/trendSchema.js";
 import type * as research_trendScreen from "../research/trendScreen.js";
 import type * as rooms from "../rooms.js";
+import type * as trail from "../trail.js";
 import type * as validators from "../validators.js";
 import type * as votes from "../votes.js";
 import type * as worlds from "../worlds.js";
@@ -104,6 +110,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "agents/buyer": typeof agents_buyer;
+  "agents/directions": typeof agents_directions;
+  "agents/directionsPolicy": typeof agents_directionsPolicy;
   "agents/engine": typeof agents_engine;
   "agents/extract": typeof agents_extract;
   "agents/ideas": typeof agents_ideas;
@@ -148,6 +156,7 @@ declare const fullApi: ApiFromModules<{
   "lib/proposalEngine": typeof lib_proposalEngine;
   "lib/result": typeof lib_result;
   "lib/roomPurge": typeof lib_roomPurge;
+  "lib/trail": typeof lib_trail;
   "lib/views": typeof lib_views;
   map: typeof map;
   mapSignals: typeof mapSignals;
@@ -165,6 +174,7 @@ declare const fullApi: ApiFromModules<{
   "payments/webhook": typeof payments_webhook;
   photos: typeof photos;
   proposals: typeof proposals;
+  questionPolls: typeof questionPolls;
   "research/apifyRun": typeof research_apifyRun;
   "research/brief": typeof research_brief;
   "research/catalog": typeof research_catalog;
@@ -175,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   "research/fashionSchema": typeof research_fashionSchema;
   "research/fixtures/maya": typeof research_fixtures_maya;
   "research/foundBy": typeof research_foundBy;
+  "research/groupRanking": typeof research_groupRanking;
   "research/normalize": typeof research_normalize;
   "research/provider": typeof research_provider;
   "research/research": typeof research_research;
@@ -187,6 +198,7 @@ declare const fullApi: ApiFromModules<{
   "research/trendSchema": typeof research_trendSchema;
   "research/trendScreen": typeof research_trendScreen;
   rooms: typeof rooms;
+  trail: typeof trail;
   validators: typeof validators;
   votes: typeof votes;
   worlds: typeof worlds;

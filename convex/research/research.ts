@@ -13,10 +13,11 @@ import { requireMember } from "../lib/auth";
 import { insertResearchJob, isResearchJobCurrent } from "../jobs";
 import { err, ok } from "../lib/result";
 import { buildSearchBrief } from "./brief";
-import { normalizeDataset } from "./normalize";
+import { normalizeDataset, providerNotice } from "./normalize";
 import { readCatalog } from "./catalog";
 import { enqueueResearchContinuation } from "../agents/runtime";
 import { createProvider, PROVIDER_DEADLINE_MS } from "./provider";
+import { logTrail } from "../lib/trail";
 import { usableFashionJob } from "./fashion";
 import { usableTrendJob } from "./trendJobs";
 
@@ -29,8 +30,9 @@ function toClue(doc: Doc<"publishedClues">): PublishedClue {
 }
 async function isCurrent(ctx: MutationCtx, job: Doc<"researchJobs">): Promise<boolean> {
   const room = await ctx.db.get(job.roomId);
+  // Only a newer search in the same direction (or the same general lane) supersedes this one (D23 trial).
   const newest = await ctx.db.query("researchJobs")
-    .withIndex("by_room", q => q.eq("roomId", job.roomId)).order("desc").first();
+    .withIndex("by_room_direction", q => q.eq("roomId", job.roomId).eq("directionId", job.directionId)).order("desc").first();
   return !!room && isResearchJobCurrent(job, room)
     && room.knowledgeRevision === job.knowledgeRevision && newest?._id === job._id;
 }
@@ -49,6 +51,8 @@ export const startResearch = mutation({
     fashionJobId: v.optional(v.id("fashionJobs")),
     trendJobId: v.optional(v.id("trendJobs")),
     discoveryQuery: v.optional(v.string()),
+    /** Shop one council direction (D23 trial): its query is the search; its memories must be included. */
+    directionId: v.optional(v.id("mapDirections")),
   },
   handler: async (ctx, args): Promise<Result<{ jobId: Id<"researchJobs"> }>> => {
     const member = await requireMember(ctx, args.roomId);
@@ -78,6 +82,13 @@ export const startResearch = mutation({
       roomId: room._id, knowledgeRevision: room.knowledgeRevision, clues,
       ...(budgetMinor === undefined ? {} : { budgetMinor }), occasion: room.occasion,
     });
+    const direction = args.directionId ? await ctx.db.get(args.directionId) : null;
+    if (args.directionId) {
+      if (args.fashionJobId || args.trendJobId) return err("validation_failed", "Use one discovery source per search.");
+      if (!direction || direction.roomId !== room._id) return err("not_found", "That direction isn't on this map.");
+      if (!direction.clueIds.every(id => clueIds.includes(id))) return err("validation_failed", "Include the memories this direction combines.");
+      brief.queryTerms = [direction.query];
+    }
     if (!brief.queryTerms.length) return err("validation_failed", "Publish an interest or wish before searching.");
     let discoveryQueries: string[] = [];
     if (args.fashionJobId) {
@@ -100,7 +111,8 @@ export const startResearch = mutation({
     // Canonical collision-free input fingerprint. It contains no raw imports or private caps.
     const inputHash = JSON.stringify([room._id, room.knowledgeRevision, clueIds, budgetMinor ?? null,
       ...(args.fashionJobId ? [args.fashionJobId] : []), ...(args.trendJobId ? ["trend", args.trendJobId] : []),
-      ...(selectedQuery && selectedQuery !== discoveryQueries[0] ? ["discovery_query", selectedQuery] : [])]);
+      ...(selectedQuery && selectedQuery !== discoveryQueries[0] ? ["discovery_query", selectedQuery] : []),
+      ...(direction ? ["direction", direction._id, direction.query] : [])]);
     const previous = await ctx.db.query("researchJobs")
       .withIndex("by_room_idempotency", q => q.eq("roomId", room._id).eq("idempotencyKey", key)).unique();
     if (previous) return previous.inputHash === inputHash
@@ -119,7 +131,7 @@ export const startResearch = mutation({
     const { jobId, created } = await insertResearchJob(ctx, {
       roomId: room._id, knowledgeRevision: room.knowledgeRevision,
       publishedClueIds: clueIds, brief: storedBrief satisfies StoredBrief,
-      inputHash, idempotencyKey: key,
+      inputHash, idempotencyKey: key, ...(direction ? { directionId: direction._id } : {}),
     });
     if (created) {
       await ctx.db.patch(jobId, { actingParticipantId: member.me._id, latestMessageId: room.latestMessageId });
@@ -134,8 +146,8 @@ export const listRecommendations = query({
   handler: async (ctx, args): Promise<Result<RecommendationsView>> => {
     const member = await requireMember(ctx, args.roomId);
     if (!member.ok) return err(member.code, "Join this room to see gifts.");
-    const { recommendations, listings } = await readCatalog(ctx, member.room);
-    return ok({ recommendations, listings });
+    const { recommendations, listings, searchPools } = await readCatalog(ctx, member.room);
+    return ok({ recommendations, listings, searchPools });
   },
 });
 
@@ -177,10 +189,16 @@ export const settleJob = internalMutation({
     if (!job || job.status !== "running") return null;
     if (await staleUnlessCurrent(ctx, job)) return null;
     await ctx.db.patch(job._id, { status: args.status, lastError: args.message });
+    await logSearch(ctx, job, "rejected", `The search for “${job.brief?.queryTerms[0] ?? "gifts"}” ${args.status === "failed" ? "failed" : "didn’t finish"}: ${args.message}`);
     await enqueueResearchContinuation(ctx, job._id);
     return null;
   },
 });
+
+/** "How we got here": what one product search did (D23 trial). */
+async function logSearch(ctx: MutationCtx, job: Doc<"researchJobs">, outcome: "kept" | "rejected", text: string) {
+  await logTrail(ctx, job.roomId, { stage: "search", actor: "search", outcome, text, ...(job.directionId ? { directionId: job.directionId } : {}) });
+}
 
 export const completeJob = internalMutation({
   args: { jobId: v.id("researchJobs"), raw: v.any(), retrievedAt: v.number() },
@@ -189,8 +207,16 @@ export const completeJob = internalMutation({
     if (!job || job.status !== "running") return null; // duplicate callbacks cannot insert twice
     if (await staleUnlessCurrent(ctx, job)) return null;
     const listings = normalizeDataset(args.raw, args.retrievedAt);
+    const query = job.brief?.queryTerms[0] ?? "gifts";
     if (!listings.length) {
-      await ctx.db.patch(job._id, { status: "failed", lastError: "No usable product listings were returned." });
+      // A source that answers with a notice (a usage limit, a block) says so, instead of "nothing found".
+      const notice = providerNotice(args.raw);
+      await ctx.db.patch(job._id, { status: "failed", lastError: notice
+        ? `The shopping source returned no usable listings: “${notice}”`
+        : "No usable product listings were returned." });
+      await logSearch(ctx, job, "rejected", notice
+        ? `Searched Google Shopping for “${query}”, but the source returned no usable listings: “${notice}”`
+        : `Searched Google Shopping for “${query}”, but no listing had a source, a US price and a retrieval time, so none were kept.`);
       await enqueueResearchContinuation(ctx, job._id);
       return null;
     }
@@ -200,6 +226,9 @@ export const completeJob = internalMutation({
       await ctx.db.insert("productListings", { ...parsed, roomId: job.roomId, jobId: job._id, status: "active" });
     }
     await ctx.db.patch(job._id, { status: "succeeded", lastError: undefined });
+    // Earlier pages hold many products; the current source sends one product per row (D24).
+    const raw = Array.isArray(args.raw) ? args.raw.reduce((n: number, item: { shopping_results?: unknown[] }) => n + (Array.isArray(item?.shopping_results) ? item.shopping_results.length : 1), 0) : 0;
+    await logSearch(ctx, job, "kept", `Searched Google Shopping for “${query}”: ${raw || listings.length} results came back and ${Math.min(listings.length, 60)} had a source link, a US price and a retrieval time.${raw > listings.length ? ` ${raw - listings.length} were dropped as incomplete or repeated.` : ""}`);
     await enqueueResearchContinuation(ctx, job._id);
     return null;
   },

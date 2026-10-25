@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { SAMPLE_SESSION } from "@/lib/council/sampleSession";
+import type { CouncilEvent } from "@/lib/council/contracts";
 import { RoomLayout } from "@/components/room/RoomLayout";
-import type { RoomData } from "@/components/room/types";
-import type { GiftSelection, ProductListing, PublishedClue } from "@/lib/contracts";
+import type { RoomActions, RoomData } from "@/components/room/types";
+import type { GiftSelection, ProductListing, PublishedClue, Recommendation, VoteValue } from "@/lib/contracts";
 import { mockApprovals, mockListings, mockMessages, mockParticipants, mockProposedClues, mockPublishedClues, mockRecommendations, mockRevision, mockRoom } from "@/lib/mocks/fixtures";
 import { setTimeOfDay } from "@/components/world/scenePalette";
 
@@ -18,11 +20,27 @@ const PHOTO = `data:image/svg+xml;utf8,${encodeURIComponent(
  * fixture, `?photo=0` shows the missing-photo fallback. Never reachable in a
  * production build.
  */
+const BUSY_TITLES = ["Hand-thrown ceramic mug set", "Watercolor pocket field kit", "Trail-ready day pack", "Cozy wool reading blanket", "Stargazing star map print", "Pour-over coffee starter set", "Succulent terrarium kit", "Hand-bound travel sketchbook", "Linen picnic blanket", "Beginner embroidery hoop kit", "Glass tea infuser bottle", "Leather bound journal"];
+
 export function RevealHarness() {
   const [ready, setReady] = useState(false);
+  // Stand-ins for the room's voting and choosing, so the Book of Possibilities can be used without a backend.
+  const [votes, setVotes] = useState<Record<string, VoteValue | undefined>>({});
+  const [chosenId, setChosenId] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    setTimeOfDay("day");
+    // `?sky=sunrise|sunset|bluehour|day|night` previews a sky; the default is the room's own (sunrise).
+    const sky = new URLSearchParams(window.location.search).get("sky");
+    if (sky) setTimeOfDay(sky as Parameters<typeof setTimeOfDay>[0], { remember: false });
     setReady(true);
+  }, []);
+  // `?council=live` replays a recorded council run event by event, as live runs arrive.
+  const [events, setEvents] = useState<CouncilEvent[]>([]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("council") !== "live") return;
+    const t0 = Date.now();
+    const timers = SAMPLE_SESSION.map(({ at, event }) => setTimeout(() => setEvents((e) => [...e, event]), at + 3000));
+    void t0;
+    return () => timers.forEach(clearTimeout);
   }, []);
   const data = useMemo<RoomData | null>(() => {
     if (!ready) return null;
@@ -45,10 +63,17 @@ export function RevealHarness() {
           ["interest", "Gift idea: a little greenhouse kit"],
         ].map(([kind, text], i) => ({ ...mockPublishedClues[0]!, id: `x${i}`, kind: kind as PublishedClue["kind"], text: text!, publisherId: mockParticipants[i % 2]!.id }))
       : [];
-    const listings: ProductListing[] = mockListings.map((l) => (l.id === pick && photo ? { ...l, imageUrl: PHOTO } : l));
-    const chosen = listings.find((l) => l.id === pick) ?? listings[0]!;
-    const selection: GiftSelection = {
-      id: "sel_1",
+    // `?busy=1`: a busy room, with a dozen researched gifts and several that share memories.
+    const busy = params.get("busy") === "1";
+    const clueIds = [...mockPublishedClues, ...extra].map((c) => c.id);
+    const extraListings: ProductListing[] = busy
+      ? BUSY_TITLES.map((title, i) => ({ ...mockListings[i % 3]!, id: `b${i}`, title, sourceUrl: i % 4 === 0 ? "https://www.google.com/search?tbm=shop&q=sample" : `https://example.com/fixture/b${i}`, priceMinor: i % 5 === 4 ? undefined : 2400 + i * 1350, priceStatus: i % 5 === 4 ? "unknown" : "observed", imageUrl: i % 3 === 2 ? undefined : PHOTO }))
+      : [];
+    const extraRecs: Recommendation[] = extraListings.map((l, i) => ({ ...mockRecommendations[0]!, id: `br${i}`, listingId: l.id, score: 0.8 - i * 0.04, publishedClueIds: [...new Set([clueIds[i % clueIds.length]!, clueIds[(i * 3 + 1) % clueIds.length]!, ...(i % 3 === 0 ? ["c1"] : [])])], explanation: `Matches what ${["Jordan", "Alex"][i % 2]} shared about ${["pottery", "painting", "time outdoors", "cozy evenings"][i % 4]}.` }));
+    const listings: ProductListing[] = [...mockListings, ...extraListings].map((l) => (l.id === pick && photo ? { ...l, imageUrl: PHOTO } : l));
+    const chosen = chosenId === null || (chosenId === undefined && pick === "none") ? undefined : listings.find((l) => l.id === (chosenId ?? pick)) ?? listings[0]!;
+    const selection: GiftSelection | null = !chosen ? null : {
+      id: `sel_${chosen.id}`,
       roomId: "dev-reveal",
       listingId: chosen.id,
       quantity: 1,
@@ -62,13 +87,25 @@ export function RevealHarness() {
       messages: mockMessages,
       myProposedClues: mockProposedClues,
       publishedClues: [...mockPublishedClues, ...extra],
-      recommendations: mockRecommendations,
+      recommendations: [...mockRecommendations, ...extraRecs],
       listings,
       proposal: { revision: mockRevision, shares: mockRevision.shares, approvals: mockApprovals, feasible: true },
-      votes: {},
+      votes: Object.fromEntries(Object.entries(votes).filter(([, v]) => v).map(([id, v]) => [id, { tally: { up: v === "up" ? 1 : 0, down: v === "down" ? 1 : 0 }, myVote: v }])) as RoomData["votes"],
       selection,
       evidence: [],
+      council: { run: null, events, decorations: [], excluded: [] } as unknown as RoomData["council"],
     };
-  }, [ready]);
-  return data ? <RoomLayout data={data} /> : null;
+  }, [ready, events, votes, chosenId]);
+  const actions = useMemo(() => {
+    const ok = async () => ({ ok: true as const, value: {} });
+    const own = {
+      castVote: async (id: string, value: VoteValue) => { setVotes((v) => ({ ...v, [id]: value })); return ok(); },
+      clearVote: async (id: string) => { setVotes((v) => ({ ...v, [id]: undefined })); return ok(); },
+      selectGift: async (id: string) => { setChosenId(id); return ok(); },
+      clearSelection: async () => { setChosenId(null); return ok(); },
+    };
+    // Anything else (cursors, research, ...) quietly succeeds, so the page behaves like a live room.
+    return new Proxy(own, { get: (t, k) => (t as Record<string | symbol, unknown>)[k] ?? ok }) as unknown as RoomActions;
+  }, []);
+  return data ? <RoomLayout data={data} actions={actions} /> : null;
 }

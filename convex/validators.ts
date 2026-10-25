@@ -120,6 +120,9 @@ export const budgetBand = v.union(
 
 export const selectionStatus = v.union(v.literal("active"), v.literal("cleared"));
 
+/** Why a friend passed (D23 trial). Optional on a pass; the council avoids it in replacements. */
+export const passReason = v.union(v.literal("style"), v.literal("price"), v.literal("has_similar"), v.literal("vibe"));
+
 export const allocationShare = v.object({
   participantId: v.id("participants"),
   amountMinor: v.number(),

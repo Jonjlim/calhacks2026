@@ -7,7 +7,7 @@ import { CONVERGENCE_TIMES } from "./timeline";
  * same room data always produces the same artifacts, with the same timing.
  */
 
-export type ArtifactShape = "note" | "letter" | "charm" | "star" | "brush" | "tag" | "leaf";
+export type ArtifactShape = "heart" | "note" | "letter" | "charm" | "star" | "brush" | "tag" | "leaf";
 export type ArtifactSource = "memory" | "wish" | "idea" | "gift";
 
 export interface ArtifactInput {

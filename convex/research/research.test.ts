@@ -6,6 +6,8 @@ import type { Result } from "../../lib/contracts";
 import { api, internal } from "../_generated/api";
 import schema from "../schema";
 import fixture from "./fixtures/johnvc-shopping.json";
+import scrapewise from "./fixtures/scrapewise-shopping.json";
+import missingLinks from "./fixtures/automation-lab-missing-links.json";
 import catalogFixture from "../../lib/research/fixtures/trend-shopping.json";
 
 const modules = Object.fromEntries(Object.entries(
@@ -224,6 +226,28 @@ describe("research pipeline", () => {
     await t.action(research.runResearch, { jobId });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.apify.com/v2/actor-runs/run123");
+  });
+
+  it("persists the replacement actor's recorded products as a successful job", async () => {
+    const { t, alex, input } = await setup();
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    await t.mutation(research.completeJob, { jobId, raw: scrapewise.raw, retrievedAt: scrapewise.retrievedAt });
+    expect(await t.run(ctx => ctx.db.get(jobId))).toMatchObject({ status: "succeeded" });
+    const rows = await t.run(ctx => ctx.db.query("productListings").withIndex("by_job", q => q.eq("jobId", jobId)).collect());
+    expect(rows).toHaveLength(20);
+    expect(rows.every(row => row.source === "apify" && row.priceStatus === "observed" && row.imageUrl)).toBe(true);
+  });
+
+  it("records the live actor's missing links as failure without inserting fake products", async () => {
+    const { t, alex, input } = await setup();
+    const { jobId } = unwrap(await alex.mutation(api.research.research.startResearch, input));
+    await t.mutation(research.claimJob, { jobId });
+    await t.mutation(research.completeJob, { jobId, raw: missingLinks.raw, retrievedAt: missingLinks.retrievedAt });
+    expect(await t.run(ctx => ctx.db.get(jobId))).toMatchObject({
+      status: "failed", lastError: expect.stringContaining("16 products without usable product links"),
+    });
+    expect(unwrap(await alex.query(api.research.research.listRecommendations, { roomId: input.roomId })).listings).toEqual([]);
   });
 
   it("shows empty results as a failed search and expires a lost worker", async () => {

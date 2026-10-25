@@ -6,12 +6,14 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useRoomStage } from "@/components/room/roomStage";
 import type { RoomWorld } from "./IslandWorldProvider";
 import { GardenDecorating } from "./room/GardenDecorating";
+import { EnchantedBook } from "./book/EnchantedBook";
+import { CouncilFamiliars } from "./room/CouncilFamiliars";
 import { GiftRings } from "./room/GiftRings";
 import { TowerInterior } from "./room/TowerInterior";
 import type { CouncilActor } from "@/lib/council/contracts";
-import { AtmosphericSky } from "./AtmosphericSky";
+import { AtmosphericSky, SurroundClouds } from "./AtmosphericSky";
 import { Birds, Fireflies, FlowerPetals, ForegroundFoliage, MagicMotes } from "./AmbientEffects";
-import { DistantScenery } from "./DistantScenery";
+import { DistantScenery, MapSurround } from "./DistantScenery";
 import { FloatingIsland } from "./FloatingIsland";
 import { HeroGiftBox } from "./HeroGiftBox";
 import { IntroBridge } from "./intro/IntroBridge";
@@ -61,7 +63,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
   const [quality, setQuality] = useState<WorldQuality>("high");
   const [canvasReady, setCanvasReady] = useState(false);
   const palette = paletteFor(useTimeOfDay());
-  const night = palette.time === "night";
+  const night = palette.time === "night" || palette.time === "bluehour";
   const animate = !reducedMotion;
   const markReady = useCallback(() => {
     setCanvasReady(true);
@@ -96,7 +98,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <WorldLighting quality={quality} interior={stage.shown === "tower" && !!council} />
       <Wind animate={animate} />
 
-      <AtmosphericSky animate={animate} />
+      <AtmosphericSky animate={animate} sparse={stage.shown === "map"} />
       <DistantScenery animate={animate} islets={stage.shown !== "map"} />
 
       <FloatingIsland />
@@ -104,7 +106,11 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
       <IslandEnvironment animate={animate} quality={quality} showPlayers={!council && roomActive} />
       {council && onAssetStatus && stage.shown === "tower" && <TowerInterior world={council} animate={animate} onAssetStatus={onAssetStatus} />}
       {council && stage.shown === "garden" && <GardenDecorating world={council} animate={animate} arrival={stage.arrival} />}
+      {council && stage.shown === "map" && <MapSurround animate={animate} />}
+      {council && stage.shown === "map" && <SurroundClouds animate={animate} />}
+      {council && stage.shown === "map" && <EnchantedBook animate={animate} />}
       {council && stage.shown === "map" && <GiftRings animate={animate} />}
+      {council && stage.shown === "map" && <CouncilFamiliars world={council} animate={animate} />}
       <HeroGiftBox animate={animate} soundEnabled={soundEnabled} />
 
       {night ? (

@@ -21,6 +21,8 @@ import { INFEASIBLE_CAPS_MESSAGE, isEditable, recomputeProposal } from "./lib/pr
 import { err, memberError, ok } from "./lib/result";
 import { toApproval, toLimit, toRevision } from "./lib/views";
 import { boxItem, boxListingIds, MAX_GIFT_BOX_ITEMS } from "./lib/giftBox";
+import { logTrail, nameOf, shortTitle } from "./lib/trail";
+import { formatMinor } from "../lib/money";
 
 async function myLimit(ctx: QueryCtx, roomId: Id<"rooms">, participantId: Id<"participants">) {
   return await ctx.db
@@ -90,6 +92,8 @@ async function replaceGiftBox(ctx: MutationCtx, roomId: Id<"rooms">, listingIds:
       items, status: "active", selectedBy: member.me._id, selectedAt: Date.now(),
     });
     await ctx.db.patch(roomId, { currentSelectionId: selectionId });
+    await logTrail(ctx, roomId, { stage: "choice", actor: "person", participantId: member.me._id, outcome: "kept", listingId: first._id,
+      text: `${member.me.displayName || "The organizer"} put ${listings.map((l) => `“${shortTitle(l.title)}”`).join(" and ")} in the box.` });
   }
   const recomputed = await recomputeProposal(ctx, roomId);
   const selection = (await ctx.db.get(selectionId))!;
@@ -294,8 +298,14 @@ export const approveRevision = mutation({
       .query("approvals")
       .withIndex("by_revision", (q) => q.eq("revisionId", revisionId))
       .collect();
+    // Shares are room-visible on the pledge ring; private caps never enter the log.
+    const share = revision.shares.find((s) => s.participantId === approval.participantId);
+    await logTrail(ctx, revision.roomId, { stage: "money", actor: "person", participantId: approval.participantId, outcome: "kept",
+      text: `${await nameOf(ctx, approval.participantId)} approved the ${formatMinor(revision.payableTotalMinor)} version${share ? `, with a ${formatMinor(share.amountMinor)} share` : ""}.` });
     if (all.every((a) => a.status === "approved")) {
       await ctx.db.patch(revisionId, { status: "approved_pledged" });
+      await logTrail(ctx, revision.roomId, { stage: "money", actor: "person", outcome: "kept",
+        text: `Everyone approved. Contributions are simulated: no money charged, no gift purchased.` });
     }
     return ok((await ctx.db.get(approval._id))!);
   },
@@ -316,5 +326,34 @@ export const withdrawApproval = mutation({
     await ctx.db.patch(approval._id, { status: "withdrawn", updatedAt: Date.now() });
     if (revision.status === "approved_pledged") await ctx.db.patch(revisionId, { status: "awaiting_approval" });
     return ok((await ctx.db.get(approval._id))!);
+  },
+});
+
+
+/** Add one gift without replacing existing items, including under concurrent clicks. */
+export const addGiftToBox = mutation({
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
+  handler: async (ctx, { roomId, listingId }) => {
+    const member = await requireMember(ctx, roomId);
+    if (!member.ok) return memberError(member.code);
+    if (member.me.role !== "organizer") return err("unauthorized", "Only the organizer can change the gift box.");
+    const selection = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+    const ids = selection?.status === "active" ? boxListingIds(selection) : [];
+    return replaceGiftBox(ctx, roomId, ids.includes(listingId) ? ids : [...ids, listingId]);
+  },
+});
+
+/** Remove only this gift; other selected gifts and their sources remain. */
+export const removeGiftFromBox = mutation({
+  args: { roomId: v.id("rooms"), listingId: v.id("productListings") },
+  handler: async (ctx, { roomId, listingId }): Promise<Result<{ selection: Doc<"giftSelections"> | null; revision?: Doc<"proposalRevisions"> }>> => {
+    const member = await requireMember(ctx, roomId);
+    if (!member.ok) return memberError(member.code);
+    if (member.me.role !== "organizer") return err("unauthorized", "Only the organizer can change the gift box.");
+    const selection = member.room.currentSelectionId ? await ctx.db.get(member.room.currentSelectionId) : null;
+    const ids = selection?.status === "active" ? boxListingIds(selection).filter(id => id !== listingId) : [];
+    if (ids.length) return replaceGiftBox(ctx, roomId, ids);
+    const cleared = await clearGiftBox(ctx, roomId);
+    return cleared.ok ? ok({ selection: null }) : cleared;
   },
 });
