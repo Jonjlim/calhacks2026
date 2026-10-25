@@ -12,6 +12,8 @@ import { getPriceFreshness } from "@/lib/research/freshness";
 import { parchmentRect } from "@/components/unwrap/parchmentLayout";
 import { convergence, useConvergenceActive, useConvergenceLeaving, useConvergenceState } from "./convergenceClock";
 import { playRibbon } from "@/components/world/sfx";
+import { StoryCard } from "@/components/story/StoryCard";
+import type { Id } from "@/convex/_generated/dataModel";
 
 /**
  * The DOM half of the Great Gift Convergence: it drives the clock's frame loop,
@@ -43,7 +45,8 @@ const isGoogle = (url: string) => {
   }
 };
 
-export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gift: RevealGift; isOrganizer: boolean; onPlan(): void; onReplay(): void }) {
+/** `roomId` turns on the story card and gift tag (D26); the demo page leaves it off. */
+export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay, roomId }: { gift: RevealGift; isOrganizer: boolean; onPlan(): void; onReplay(): void; roomId?: Id<"rooms"> }) {
   const active = useConvergenceActive();
   const state = useConvergenceState();
   // The ribbon's sounds land on the reveal's own beats: untie, wind and tie, whip off, then the paper bursts.
@@ -217,6 +220,8 @@ export function ConvergenceOverlay({ gift, isOrganizer, onPlan, onReplay }: { gi
               {sample ? " This is clearly labelled sample data, not a live listing." : ""}
             </p>
             {gone && <p role="alert" className="rounded-xl bg-coral/12 px-3 py-2 text-[13px] text-[#8c3b2c]">This listing is marked unavailable. Check the source before you rely on it.</p>}
+
+            {roomId && <StoryCard roomId={roomId} isOrganizer={isOrganizer} />}
 
             <GiftJourney key={focusedId} listingId={focusedId} recommendation={recommendation}
               clues={gift.clues} directions={gift.directions} entries={gift.trail} />

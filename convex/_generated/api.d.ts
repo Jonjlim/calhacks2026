@@ -103,6 +103,7 @@ import type * as research_trendProvider from "../research/trendProvider.js";
 import type * as research_trendSchema from "../research/trendSchema.js";
 import type * as research_trendScreen from "../research/trendScreen.js";
 import type * as rooms from "../rooms.js";
+import type * as story from "../story.js";
 import type * as trail from "../trail.js";
 import type * as validators from "../validators.js";
 import type * as votes from "../votes.js";
@@ -210,6 +211,7 @@ declare const fullApi: ApiFromModules<{
   "research/trendSchema": typeof research_trendSchema;
   "research/trendScreen": typeof research_trendScreen;
   rooms: typeof rooms;
+  story: typeof story;
   trail: typeof trail;
   validators: typeof validators;
   votes: typeof votes;

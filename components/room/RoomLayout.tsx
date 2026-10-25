@@ -431,6 +431,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
           isOrganizer={isOrganizer}
           onPlan={() => setDrawer({ kind: "shares" })}
           onReplay={replayReveal}
+          roomId={actions && !preview ? room.id as Id<"rooms"> : undefined}
         />
       )}
 

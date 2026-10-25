@@ -494,6 +494,21 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_room_query", ["roomId", "query"]),
 
+  /**
+   * The gift tag (D26): an opt-in, revocable link the organizer gives the recipient to read how friends chose the gift.
+   * The token is the only key to the public story; it shows published memories and the gift, never prices, caps or private imports.
+   */
+  giftStories: defineTable({
+    roomId: v.id("rooms"),
+    token: v.string(),
+    createdBy: v.id("participants"),
+    includePhotos: v.boolean(),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_room", ["roomId"]),
+
   /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
   mapDirections: defineTable({
     roomId: v.id("rooms"),
