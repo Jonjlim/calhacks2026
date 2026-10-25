@@ -24,12 +24,14 @@ import { v } from "convex/values";
 import * as V from "./validators";
 import { fashionTables } from "./research/fashionSchema";
 import { trendTables } from "./research/trendSchema";
+import { giftTwinTables } from "./giftTwin/schema";
 import { simulationTables } from "./payments/simulationSchema";
 
 export default defineSchema({
   ...authTables,
   ...fashionTables,
   ...trendTables,
+  ...giftTwinTables,
   ...simulationTables,
 
   rooms: defineTable({
