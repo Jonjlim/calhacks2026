@@ -138,7 +138,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       <button className="btn-primary h-11 px-5" onClick={() => setDrawer({ kind: "gifts" })}>Gift ideas · {data.recommendations.length}</button>
     );
   } else if (phase === "approve" || phase === "done") {
-    primary = <button className="btn-primary h-11 px-5" onClick={() => setDrawer({ kind: "shares" })}>{phase === "done" ? "All approved ✓" : "Review shares"}</button>;
+    primary = <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>{phase === "done" ? "All approved ✓" : "Review shares"}</button>;
   }
 
   const status = !run

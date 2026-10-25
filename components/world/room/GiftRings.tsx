@@ -16,6 +16,8 @@ import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
 import { ringBase } from "./stageLayout";
 import { useRings } from "./ringsStore";
+import { PledgeRing, type PledgeWorld } from "./PledgeRing";
+import { platformTop } from "../props/Stonework";
 import s from "./gift-rings.module.css";
 
 /**
@@ -42,6 +44,10 @@ export interface RingsWorld {
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: RingTheme[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean }[];
   selectedListingId?: string;
   boxLabel: string;
+  /** Everyone's share of the current revision, drawn above the present. */
+  pledge?: PledgeWorld | null;
+  /** Shares, limits and approvals, opened beside the present when the box is selected. */
+  boxPanel?: ReactNode | null;
   selectedKey: string | null;
   /** “Why this?”: keys on the path to the chosen gift. Everything else dims. */
   highlight?: ReadonlySet<string> | null;
@@ -416,6 +422,13 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         <Token k="box" rings={rings} from={[0, 0]} drag={{ ...drag, begin: () => undefined }} dim={dim("box")} offset={[0, 1.2, 9]} label="Our gift box"
           face={<span className={s.box}>🎁 <b>{rings.boxLabel}</b></span>} />
       </group>
+
+      {rings.pledge && <PledgeRing pledge={rings.pledge} animate={animate} />}
+      {rings.selectedKey === "box" && rings.boxPanel && (
+        <Html position={[GIFT_SPOT.x + 4.4, platformTop() + 1.6, GIFT_SPOT.z]} zIndexRange={[75, 65]}>
+          <div className={s.boxAnchor} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>{rings.boxPanel}</div>
+        </Html>
+      )}
 
       {rings.composer && (
         <Html position={world(rings.composer.x, rings.composer.z, 1)} center zIndexRange={[70, 60]}>

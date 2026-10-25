@@ -8,6 +8,12 @@ import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, RING_RADII, RING_THEMES, rin
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import type { RoomActions, RoomData } from "./types";
+import { BoxPanel } from "./BoxPanel";
+import type { PledgeWorld } from "@/components/world/room/PledgeRing";
+import type { AvatarId } from "@/components/characters/StorybookAvatar";
+
+/** One colour per storybook friend, shared by cursors, pledge arcs and faces. */
+export const AVATAR_COLOR: Record<AvatarId, string> = { explorer: "#d0675a", kind: "#d98fb8", curious: "#e2ad6b", calm: "#79b391", dreamer: "#8d86d0" };
 
 /**
  * Builds the gift map for the 3D world from live room data (D19). Every
@@ -26,7 +32,7 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   active: boolean;
   onShares(): void;
   onPaste(): void;
-}): { rings: RingsWorld | null; notice: string | null; error: string | null } {
+}): { rings: RingsWorld | null; notice: string | null; error: string | null; openBox(): void } {
   const { participants, me } = data.view;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // One add box. Its zone decides what it makes: a memory or wish outside, a gift idea in the inner ring.
@@ -73,7 +79,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     [clues, recs, data.votes],
   );
 
-  if (!active) return { rings: null, notice, error };
+  const openBox = () => setSelectedKey("box");
+  if (!active) return { rings: null, notice, error, openBox };
 
   const name = (id: string) => (id === me.id ? "You" : participants.find((p) => p.id === id)?.displayName ?? "A friend");
   const selection = data.selection?.status === "active" ? data.selection : null;
@@ -111,17 +118,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
   };
 
   const actionsFor = (key: string): { caption: ReactNode; actions: RingAction[] } | null => {
-    if (key === "box") {
-      if (!selection) return { caption: isOrganizer ? "Drag a gift onto the present to choose it." : "The organizer puts one gift here. Vote by pulling gifts closer.", actions: [] };
-      return {
-        caption: <><b>{selection.listingSnapshot.title}</b> · {priceOf(selection.listingId)} · {approved}/{participants.length} approved</>,
-        actions: [
-          { icon: "🧾", label: "Shares & approvals", tone: "gold", run: onShares },
-          { icon: "✨", label: why ? "Hide the path" : "Why this?", on: why, run: () => setWhy((w) => !w) },
-          ...(isOrganizer && actions ? [{ icon: "↩", label: "Take it out", disabled: pending, run: () => void run(() => actions.clearSelection(), "The box is empty again. Approvals for the old version no longer count.") }] : []),
-        ],
-      };
-    }
+    // The box opens its own panel beside the present; no bloom row here.
+    if (key === "box") return null;
     if (key.startsWith("theme:")) {
       const theme = key.slice(6) as RingTheme;
       const count = layout.themes.find((t) => t.id === theme)?.count ?? 0;
@@ -210,6 +208,28 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     </div>
   );
 
+  const avatarOf = (id: string) => avatarFor(participants, id);
+  const colorOf = (id: string) => AVATAR_COLOR[avatarOf(id)];
+  const live = revision && revision.status !== "infeasible" && revision.status !== "superseded" && revision.payableTotalMinor > 0;
+  const pledge: PledgeWorld | null = live ? {
+    revisionId: revision.id,
+    allApproved: revision.status === "approved_pledged",
+    feasible: data.proposal.feasible,
+    segments: revision.shares.map((share) => ({
+      participantId: share.participantId,
+      name: name(share.participantId),
+      avatar: avatarOf(share.participantId),
+      color: colorOf(share.participantId),
+      amountLabel: formatMinor(share.amountMinor),
+      fraction: share.amountMinor / revision.payableTotalMinor,
+      status: data.proposal.approvals.find((a) => a.revisionId === revision.id && a.participantId === share.participantId)?.status ?? "pending",
+    })),
+  } : null;
+  const boxPanel = (
+    <BoxPanel proposal={data.proposal} selection={selection} listing={selection ? listingById.get(selection.listingId) : undefined} participants={participants} me={me}
+      isOrganizer={isOrganizer} actions={actions} avatarOf={avatarOf} colorOf={colorOf} why={why} onWhy={() => setWhy((w) => !w)} onClose={() => setSelectedKey(null)} />
+  );
+
   const rings: RingsWorld = {
     clues: layout.clues.map((c) => {
       const clue = clues.find((x) => x.id === c.id)!;
@@ -226,6 +246,8 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
       return { key: `gift:${g.listingId}`, listingId: g.listingId, title: l.title, price: priceOf(g.listingId), imageUrl: l.imageUrl, themes: g.themes, x: g.x, z: g.z, rank: i + 1, up: data.votes[g.listingId]?.tally.up ?? 0, down: data.votes[g.listingId]?.tally.down ?? 0, fixture: l.source === "manual_fixture" };
     }),
     selectedListingId: selection?.listingId,
+    pledge,
+    boxPanel,
     boxLabel: selection ? `${priceOf(selection.listingId)} · ${approved}/${participants.length} yes` : "Our gift box",
     selectedKey,
     highlight,
@@ -252,5 +274,5 @@ export function useGiftRings({ data, actions, isOrganizer, active, onShares, onP
     },
     actionsFor,
   };
-  return { rings, notice, error };
+  return { rings, notice, error, openBox };
 }
