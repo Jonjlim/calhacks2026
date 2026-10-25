@@ -61,7 +61,7 @@ export interface RingsWorld {
   openTheme?: string | null;
   /** Friends' typed gift ideas: shared, but not products until research finds listings for them. */
   /** Friends' gift ideas and sourced trend suggestions. `tag` replaces the "gift idea" caption; `faded` after someone passed. */
-  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean }[];
+  ideas: { key: string; text: string; author: string; avatar: AvatarId; x: number; z: number; tag?: string; faded?: boolean; trend?: boolean; direction?: boolean }[];
   gifts: { key: string; listingId: string; title: string; price: string; imageUrl?: string; themes: string[]; x: number; z: number; rank: number; up: number; down: number; fixture: boolean; finalist?: boolean; faded?: boolean; hidden?: boolean }[];
   /** Gifts past the first few rest behind a “+N more” chip. */
   moreGifts?: { count: number; open: boolean; toggle(): void } | null;
@@ -282,7 +282,7 @@ function Token({ k, rings, from, drag, face, peek, label, offset, dim, recede, l
                 ))}
               </div>
             )}
-            {info.note && <p className={`${s.note} ${s.cloud}`}><MapIcon name="thread" size={14} />{info.note}</p>}
+            {info.note && <div className={`${s.note} ${s.cloud}`}><MapIcon name="thread" size={14} />{info.note}</div>}
           </div>
         )}
       </div>
@@ -702,8 +702,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
             <Token k={idea.key} rings={rings} from={[idea.x, idea.z]} drag={{ ...drag, begin: () => undefined }} dim={quiet} recede={recede(idea.key)} offset={[0, -0.4, 2.2]} label={idea.tag ? `${idea.text}, ${idea.tag}` : `${idea.author}'s gift idea: ${idea.text}`}
               peek={shown ? undefined : <><b>{idea.text}</b><small>{caption}</small></>}
               face={shown
-                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.trend ? s.trendCloud : ""}`}>{idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
-                : <span className={`${s.ideaDot} ${idea.trend ? s.trendDot : ""}`}>{idea.trend ? <MapIcon name="trend" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
+                ? <span className={`${s.idea} ${s.cloud} ${s.ideaCloud} ${idea.trend ? s.trendCloud : ""} ${idea.direction ? s.directionCloud : ""}`}>{idea.trend ? <i className={s.trendMark} aria-hidden><MapIcon name="trend" size={16} /></i> : idea.direction ? <i className={s.directionMark} aria-hidden><MapIcon name="spark" size={16} /></i> : <img src={portraitUrl(idea.avatar)} alt="" />}<span><b>{idea.text}</b><small>{caption}</small></span></span>
+                : <span className={`${s.ideaDot} ${idea.trend ? s.trendDot : ""} ${idea.direction ? s.directionDot : ""}`}>{idea.trend ? <MapIcon name="trend" size={18} /> : idea.direction ? <MapIcon name="spark" size={18} /> : <img src={portraitUrl(idea.avatar)} alt="" />}{!idea.trend && !idea.direction && <i aria-hidden><MapIcon name="spark" size={12} /></i>}</span>} />
           </RingIsland>
         );
       })}

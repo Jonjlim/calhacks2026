@@ -400,5 +400,17 @@
 .trendDot { display: grid; place-items: center; color: #6f8f4a; border-color: #9fbf7a; background: #f3f8e8; }
 .trendCloud { --cloud: #f3f8e8; --edge: #9fbf7a; }
 .trendMark { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #6f8f4a; font-style: normal; }
+
+/* Directions (D23 trial): the council's combined idea, a lilac cloud between the themes and the gifts */
+.directionDot { display: grid; place-items: center; color: #6a5aa8; border-color: #b9aee6; background: #f1eefb; }
+.directionCloud { --cloud: #f1eefb; --edge: #b9aee6; }
+.directionMark { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border-radius: 50%; background: #fff; color: #6a5aa8; font-style: normal; }
+
+/* "Why this gift?": the path the council actually took, one step per line */
+.note:has(.chain) { max-width: 300px; }
+.chain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.chain li { display: flex; align-items: flex-start; gap: 6px; }
+.chain li svg { flex: none; margin-top: 2px; color: #a07a2c; }
+.chain b { font-weight: 700; }
 .pickState { display: inline-flex; align-items: center; gap: 3px; }
 .markPolaroid > span { display: inline-flex; align-items: center; gap: 4px; }

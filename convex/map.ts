@@ -16,7 +16,7 @@ import type { Result } from "../lib/contracts";
 import { requireMember } from "./lib/auth";
 import { cleanText, LIMITS } from "./lib/input";
 import { bumpKnowledgeRevision } from "./lib/knowledge";
-import { scheduleAutoTrend } from "./research/trendJobs";
+import { productCategory } from "./research/text";
 import { err, memberError, ok } from "./lib/result";
 import { cleanIdeas, ideasFor } from "./agents/ideas";
 
@@ -219,8 +219,8 @@ export const plantSprout = mutation({
     });
     await ctx.db.delete(sproutId);
     // Same path as any new memory: the shortlist re-evaluates against it.
+    // Trends are looked up when someone asks for directions, not per memory (D23 trial).
     await bumpKnowledgeRevision(ctx, sprout.roomId);
-    await scheduleAutoTrend(ctx, id);
     return ok<Out>((await ctx.db.get(id))!);
   },
 });
@@ -238,7 +238,8 @@ export const setFeedback = mutation({
     if (duplicate && (!duplicate.publishedClueId || (await ctx.db.get(duplicate.publishedClueId))?.status === "active")) return ok({ feedbackId: duplicate._id });
     let publishedClueId: Id<"publishedClues"> | undefined;
     if (args.kind === "owned") {
-      const text = cleanText(`Already owns ${listing.title}`, LIMITS.clueTextMaxChars);
+      // The kind of thing, not the listing title: it filters similar gifts and keeps the memory ring readable (D23 trial).
+      const text = cleanText(`Already owns ${productCategory(listing.title)}`, LIMITS.clueTextMaxChars);
       if (!text) return err("validation_failed", "This listing title is too long to confirm as ownership.");
       publishedClueId = await ctx.db.insert("publishedClues", { roomId: args.roomId, publisherId: member.me._id, kind: "ownership", text, sourceKind: "manual", sourceMessageIds: [], status: "active", publishedAt: Date.now() });
       await bumpKnowledgeRevision(ctx, args.roomId);

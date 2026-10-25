@@ -192,6 +192,30 @@ export function shoppingPhrases(text: string): string[] {
   return parts.length > 1 && parts.length <= 3 ? parts : [phrase];
 }
 
+// Words that start a listing's variant detail ("… Jean Women's Black 10 Regular") rather than name the product.
+const VARIANT_START = /^(?:men|women|mens|womens|men's|women's|kids|kid's|unisex|size|black|white|blue|navy|red|green|grey|gray|brown|tan|beige|pink|purple|olive|regular|petite|tall|long|short|small|medium|large|xs|xl|xxl)$/;
+
+/**
+ * What kind of thing a listing is, for "she already owns …": the last two
+ * naming words before its variant detail. "Merrell Moab 3 Soft Toe Hiking
+ * Boots, for Men, Size 10.5" → "hiking boots". Never the brand-and-size title.
+ */
+export function productCategory(title: string): string {
+  const head = title.split(/[|,(]|\s[-–—]\s/)[0] ?? title;
+  const words = head.toLowerCase().split(/[^a-z0-9'’]+/).map((w) => w.replace(/’/g, "'")).filter(Boolean);
+  const naming: string[] = [];
+  for (const word of words) {
+    if (/^\d/.test(word)) continue;
+    if (VARIANT_START.test(word)) {
+      // A gender or size after the name ends it; one before the name ("Men's Torrentshell …") is skipped.
+      if (naming.length >= 2) break;
+      continue;
+    }
+    naming.push(word);
+  }
+  return naming.slice(-2).join(" ") || head.trim().toLowerCase();
+}
+
 /**
  * Retail brands whose names contain hobby words. "Pottery Barn" sells home
  * decor, so its name is not evidence that a vase suits a pottery hobbyist.

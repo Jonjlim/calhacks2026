@@ -133,6 +133,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
   const sharpen = useAction(api.agents.themes.sharpen);
   const answerSharpen = useMutation(api.agents.themes.answerSharpen);
   const dismissSharpen = useMutation(api.agents.themes.dismissSharpen);
+  const proposeDirections = useAction(api.agents.directions.propose);
   const moveCursor = useMutation(api.map.moveCursor);
 
   const actions = useMemo<RoomActions>(
@@ -175,6 +176,10 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       sharpen: () => sharpen({ roomId }),
       answerSharpen: (sharpenId, option) => answerSharpen({ sharpenId: sharpenId as Id<"mapSharpens">, option }),
       dismissSharpen: (sharpenId) => dismissSharpen({ sharpenId: sharpenId as Id<"mapSharpens"> }),
+      proposeDirections: () => proposeDirections({ roomId }),
+      researchDirection: (directionId, clueIds) => researchTrend({
+        roomId, publishedClueIds: clueIds as Id<"publishedClues">[], directionId: directionId as Id<"mapDirections">, idempotencyKey: newRequestKey(),
+      }),
       moveCursor: (x, z) => moveCursor({ roomId, x, y: z, space: "rings" }),
       // Two uploads per photo (D20): one shared with the room, one private copy that the extractor reads once and deletes.
       importPhotos: async (items) => {
@@ -214,6 +219,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
       roomId, sendMessage, requestTurn, abandonQuestion, retryJob, importEvidence, extractClues, deleteEvidence,
       publishClue, rejectClue, editClue, withdrawClue, addManualClue, startResearch, resumeCouncil, castVote, setFeedback, clearVote,
       selectGift, clearSelection, setLimit, approve, withdrawApproval, setDirection, suggestThemes, sharpen, answerSharpen, dismissSharpen, moveCursor, genUploadUrl, importMedia, sharePhotos, deletePhoto, findTrends, researchTrend, passTrend,
+      proposeDirections,
     ],
   );
 
@@ -231,6 +237,7 @@ function LiveRoom({ roomId, surface }: { roomId: Id<"rooms">; surface: RoomSurfa
     publishedClues: value(publishedRes, []).map(withId),
     recommendations: recs.recommendations,
     listings: recs.listings,
+    searchPools: recs.searchPools,
     proposal: value(proposalRes, { revision: null, shares: [], approvals: [], feasible: false }),
     votes: Object.fromEntries(value(votesRes, []).map((row) => [row.listingId, { tally: row.tally, myVote: row.myVote }])),
     selection: selection ? withId(selection) : null,
@@ -267,8 +274,10 @@ function RoomWithMap({ roomId, data, actions, surface }: { roomId: Id<"rooms">; 
   const sharpen = useQuery(api.agents.themes.getSharpen, args);
   const cursors = useQuery(api.map.listCursors, args);
   const photos = useQuery(api.photos.listRoomPhotos, args);
+  const directions = useQuery(api.agents.directions.list, args);
   const extras: RoomData = {
     ...data,
+    directions: directions?.ok ? directions.value : undefined,
     mapSignals: signals?.ok ? signals.value : undefined,
     mapThemes: themes?.ok ? themes.value : undefined,
     sharpen: sharpen?.ok ? sharpen.value : undefined,

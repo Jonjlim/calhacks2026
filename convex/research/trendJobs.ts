@@ -108,6 +108,15 @@ async function requestTrend(ctx: MutationCtx, room: Doc<"rooms">, participantId:
   return ok({ jobId });
 }
 
+/**
+ * One room-level lookup when someone asks the council for directions (D23 trial).
+ * That tap is the explicit human action; caps, caching and seed checks are the usual ones.
+ */
+export async function requestRoomTrend(ctx: MutationCtx, room: Doc<"rooms">, participantId: Id<"participants">,
+  publishedClueId: Id<"publishedClues">): Promise<Result<{ jobId: Id<"trendJobs"> }>> {
+  return requestTrend(ctx, room, participantId, publishedClueId, `directions:${publishedClueId}:${room.knowledgeRevision}`);
+}
+
 export const startDiscovery = mutation({
   args: { roomId: v.id("rooms"), publishedClueId: v.id("publishedClues"), idempotencyKey: v.string() },
   handler: async (ctx, args): Promise<Result<{ jobId: Id<"trendJobs"> }>> => {

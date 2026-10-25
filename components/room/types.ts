@@ -5,6 +5,7 @@ import type {
   ClueKind,
   EvidenceSource,
   GiftSelection,
+  MapDirection,
   ProductListing,
   ProposalView,
   ProposedClue,
@@ -12,6 +13,7 @@ import type {
   Recommendation,
   Result,
   RoomView,
+  SearchPoolSummary,
   TrendDiscoveryView,
   VoteValue,
 } from "@/lib/contracts";
@@ -53,6 +55,10 @@ export interface RoomData {
   cursors?: OkValue<FunctionReturnType<typeof api.map.listCursors>>;
   /** Photos members added on the map, shared with the whole room (D20). */
   roomPhotos?: OkValue<FunctionReturnType<typeof api.photos.listRoomPhotos>>;
+  /** Council gift directions that combine memories (D23 trial). */
+  directions?: MapDirection[];
+  /** What each search that fed the map did, for "Why this gift?" (D23 trial). */
+  searchPools?: SearchPoolSummary[];
 }
 
 type Run<A extends unknown[] = []> = (...args: A) => Promise<Result<unknown>>;
@@ -87,8 +93,12 @@ export interface RoomActions {
   researchTrend?: Run<[trendJobId: string, query: string, publishedClueIds: string[]]>;
   /** Shared, attributed "doesn't fit" on a trend idea; `false` takes it back. */
   passTrend?: Run<[trendJobId: string, query: string, passed: boolean]>;
-  /** Pull a memory or theme toward the present (1), push it away (−1), or take the signal back (0). */
-  setDirection: Run<[targetKind: "clue" | "theme", targetId: string, value: 1 | -1 | 0]>;
+  /** Pull a memory, theme or direction toward the present (1), push it away (−1), or take it back (0). On a trend cloud, 1 catches it and −1 lets it drift. */
+  setDirection: Run<[targetKind: "clue" | "theme" | "direction" | "trend", targetId: string, value: 1 | -1 | 0]>;
+  /** Ask the council to combine memories into gift directions (D23 trial). */
+  proposeDirections?: Run;
+  /** Search real gifts for one direction (D23 trial). */
+  researchDirection?: Run<[directionId: string, publishedClueIds: string[]]>;
   suggestThemes: Run;
   sharpen: Run;
   answerSharpen: Run<[sharpenId: string, option: number]>;

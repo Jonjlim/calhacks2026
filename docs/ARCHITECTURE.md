@@ -6,6 +6,10 @@ Smallest coherent system that supports the product in [PRODUCT.md](PRODUCT.md): 
 
 ## Decisions
 
+### D23 — Directions between memories and gifts (trial, 2026-10-24)
+
+Trial on `dev4/directions-trial`, not yet on `refactor`. Trend sprouts per memory flooded the map with generic searches, and one search could fill the gift ring with one product type, so "Why this gift?" had nothing to say. The trial adds a middle layer: the council proposes 3–4 **directions** that each combine at least two memories (or one explicit wish), asks one question when a direction is broad, and research runs once per direction with two gifts shown from each. Trends become a few clouds people can catch into the next directions; they never search by themselves. Same stack: one new Convex table (`mapDirections`), optional fields on `researchJobs` and `mapSharpens`, two new signal kinds, the existing model adapter and Apify search. No new provider or service. Contract: "Directions flow — trial (D23)" in [CONTRACTS.md](CONTRACTS.md).
+
 ### D22 — Model screen for Google Trends ideas (2026-10-24)
 
 Related Google searches include news, scores and lookups ("hiking deaths", "tennis results"). After a trend run succeeds, `convex/research/trendScreen.ts` sends up to 40 candidate phrases and the seed term to the **existing** configurable model adapter (Dev 3's `LLM_*` settings, `extractor` role, Zod-validated). The model only labels each phrase `product`, `style`, `experience` or `not_gift`. It cannot add or reword searches: only exact phrases from the scraped data are kept, and the deterministic news/lookup floor still applies on top. If the model is unset, fails or returns invalid JSON, the word filter is used instead; each stored sample records which (`screen: "model" | "words"`). `TREND_AI_SCREEN=off` disables the call. Cost: one model call per completed trend lookup. No new provider, SDK, table or service; Dev 3 owns the adapter and should review the prompt. When a check yields nothing, the map says why (`emptyTrendNote`) instead of staying silent.

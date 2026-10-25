@@ -1753,4 +1753,35 @@ Owner: Dev 4. Consumers: Dev 1 (gift captions, "Why this?" MAP-016), Dev 3 (cata
 - **`foundBy`.** Each research pool comes from exactly one provider search (the first query term), so every recommendation in it carries that `query`. `source: "memory"` names the active published clue whose search phrase it was, or, for a query written around a memory (the buyer agent writes "hiking gifts"), the most specific clue whose every search word the query contains, ignoring generic words like "gifts" or "ideas"; `"trend"` names the chosen Google Trends suggestion and its clue; `"discovery"` is any other sourced direction, or a memory since withdrawn (no `publishedClueId` then). It says how a listing was **found**. It is never a clue citation: `publishedClueIds`, scores and exclusions are unchanged, and the buyer agent's citation rules still read only `publishedClueIds`.
 - **Explanation.** A listing that no clue matches, found by a memory search, now reads `Found by searching "hiking" from "we hiked mt hood". No published clue matches this directly`. Matched listings and trend finds keep their existing wording (the map already captions trend finds).
 - **Variety.** `rankListings` keeps the best-ranked listing of each product and at most `MAX_PER_SELLER` (3) per seller before other sellers' products. A product is its title before any `|`, without size, fit, colour, pure-number or catalog-code words; titles match when equal or when one extends the other by at least three leading words. Men's and women's versions stay separate. A seller's further distinct products fill only slots nobody else can. This changes which rows are shown and their order, never a score or citation. It applies everywhere ranking runs (room catalog, council, agents).
-- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`) drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.
+- **Search terms.** `shoppingPhrase` turns a memory told as a story about a reviewed activity verb into the activity (`we hiked mt hood` → `hiking`, `avid climber` → `climbing`, `I ran a marathon` → `running`), drops enthusiast suffixes (`matcha drinker` → `matcha`), and keeps only the object of a plain story verb after a pronoun (`we got matcha` → `matcha`, `we tried rock climbing` → `rock climbing`). A past tense counts only with a subject or a where/when/with continuation, so `baked goods`, `knitted socks`, `bowler hat` and `camper van` stay products. Repeated-letter typos in leading framing words (`lovees`, `obsesssed`, `ownns`) are repaired by comparing squashed spellings, so real words like `gloves` or `lives` are never rewritten. This feeds the search brief, ranking tokens and Google Trends seeds alike.
+
+
+### Directions flow — trial (D23, `dev4/directions-trial`)
+
+Owner: Dev 4 for the trial, touching Dev 3 (agents), Dev 2 (schema/signals) and Dev 1 (map). **Trial branch only** until the team reviews it. Every field below is additive and optional for old clients.
+
+Memories → directions → gifts. A direction is the council's suggestion of one gift direction that combines memories. It is an interpretation, never room knowledge: it publishes nothing, and it never changes budgets, caps, selection or approvals.
+
+```ts
+interface MapDirection {
+  id: string;
+  label: string;            // 2–6 words, e.g. "Vintage-pattern trail jacket"
+  query: string;            // the one shopping search for it, ≤ 60 chars
+  why: string;              // one sentence grounded in the cited memories
+  clueIds: string[];        // ≥ 2 active published clues, unless one is an explicit wish
+  trend?: { trendJobId: string; query: string }; // a caught trend cloud it weaves in
+  broad: boolean;           // rests on one broad memory → the council asks one question
+  source: "agent" | "preset";
+  stale: boolean;           // memories changed since it was proposed
+  researched: boolean;      // a research job exists for it
+}
+```
+
+- `agents.directions.propose({ roomId })` (action, any member, explicit tap). Model output is Zod-validated: cited memory numbers must exist and be active; a direction citing one memory must cite an explicit wish; no links, prices or sensitive traits. Without a model it builds presets by pairing published interest/wish phrases. It keeps researched directions, replaces unresearched ones (max 4 shown), starts **one** room-level Google Trends lookup for a memory without a recent sample, and, for a new broad direction, opens one probe question.
+- `agents.directions.list({ roomId })` → `Result<MapDirection[]>`, membership-checked.
+- **Probe questions** reuse `mapSharpens` with optional `directionId` and empty `listingIds`/`finalistIds`. Answering publishes the chosen sentence as the answering member's memory, as Sharpen does. A preset Sharpen option (no model) now has an empty `clue`; answering it casts that member's up vote on its listing instead of publishing product text as a memory.
+- **Signals.** `mapSignals.targetKind` adds `"direction"` (target: direction ID) and `"trend"` (target: `trendJobId:query` from a usable sample). On a trend, +1 = caught, −1 = let it drift. A direction or gift fades once passed and leaves the map when at least half the room has passed and nobody pulled it in. Nothing is deleted.
+- **Research per direction.** `research.startResearch` accepts optional `directionId`. The direction's `query` becomes the one search; its clues must be included. The job stores `directionId`; jobs in different directions run side by side, and only a newer job **in the same direction** makes one stale. `listRecommendations` merges the newest succeeded pool per visible direction (top 2 each, after variety) with the general pool (top 2 when directions exist, otherwise the usual 12).
+- `SearchOrigin.source` adds `"direction"` with optional `directionId`. `RecommendationsView` adds optional `searchPools: { jobId, directionId?, query, found, removedByClues, foldedDuplicates, shown }[]`, so "Why this gift?" can show what each search did.
+- **Trend clouds.** Publishing a memory no longer starts a trend lookup. At most 3 uncaught, unpassed suggestions drift through the outer sky; a trend never starts a search by itself.
+- **"She already has it"** publishes `Already owns <category>` (the product's last two naming words, e.g. "hiking boots") instead of the full listing title, so it filters similar gifts and keeps the memory ring readable.

@@ -429,8 +429,35 @@ export interface Recommendation {
  */
 export interface SearchOrigin {
   query: string;
-  source: "memory" | "trend" | "discovery";
+  source: "memory" | "trend" | "discovery" | "direction";
   publishedClueId?: string;
+  /** Set when `source` is "direction" (D23 trial). */
+  directionId?: string;
+}
+
+/** What one search did, for "Why this gift?" (D23 trial). Counts only; no listing data. */
+export interface SearchPoolSummary {
+  jobId: string;
+  directionId?: string;
+  query: string;
+  found: number;
+  removedByClues: number;
+  foldedDuplicates: number;
+  shown: number;
+}
+
+/** A council suggestion that combines memories into one gift direction (D23 trial). Never room knowledge. */
+export interface MapDirection {
+  id: string;
+  label: string;
+  query: string;
+  why: string;
+  clueIds: string[];
+  trend?: { trendJobId: string; query: string };
+  broad: boolean;
+  source: "agent" | "preset";
+  stale: boolean;
+  researched: boolean;
 }
 
 // ---------- Selection, contributions, proposals ----------
@@ -665,6 +692,8 @@ export interface RoomView {
 export interface RecommendationsView {
   recommendations: Recommendation[];
   listings: ProductListing[];
+  /** One row per search that fed the map (D23 trial). */
+  searchPools?: SearchPoolSummary[];
 }
 
 export interface ProposalView {

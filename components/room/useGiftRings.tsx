@@ -10,7 +10,8 @@ import { MapIcon } from "@/components/world/room/MapIcon";
 import type { PledgeWorld } from "@/components/world/room/PledgeRing";
 import type { ClueKind, Result } from "@/lib/contracts";
 import { GIFT_IDEA_PREFIX, isGiftIdea, layoutRings, OTHER_THEME, RING_RADII, RING_THEMES, ringPoint, type RingDragResult, type RingTheme, type RingZone, themeForKind } from "@/lib/map/rings";
-import { emptyTrendNote, isTrendKey, layoutTrendIdeas, trendKey } from "@/lib/map/trendIdeas";
+import { directionPoint, fadeOf, trendClouds } from "@/lib/map/directions";
+import { emptyTrendNote, isTrendKey, TREND_KEY_PREFIX, trendKey } from "@/lib/map/trendIdeas";
 import { formatMinor } from "@/lib/money";
 import { avatarFor } from "@/lib/room/avatars";
 import { BoxPanel } from "./BoxPanel";
@@ -123,7 +124,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const mine: Record<string, number> = {};
     for (const row of signalRows ?? []) {
       const key = `${row.targetKind}:${row.targetId}`;
-      (row.targetKind === "clue" ? clue : theme)[row.targetId] = row.up - row.down;
+      // Only memories and themes steer the ring layout; directions and trend clouds fade on their own.
+      if (row.targetKind === "clue") clue[row.targetId] = row.up - row.down;
+      else if (row.targetKind === "theme") theme[row.targetId] = row.up - row.down;
       tally[key] = { up: row.up, down: row.down };
       const own = row.voters.find((v) => v.participantId === me.id);
       if (own) mine[key] = own.value;
@@ -148,14 +151,23 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     ),
     [clues, recs, data.votes, councilThemes, signals, finalists, favored],
   );
-  // Each memory with a sourced trend sample sprouts its own ideas beside it.
-  const trendIdeas = useMemo(() => (data.trends?.samples ?? (data.trends?.sample ? [data.trends.sample] : [])).flatMap((sample) => {
-    const source = clues.find((c) => c.id === sample.publishedClueId);
-    if (!source) return [];
-    const at = layout.clues.find((c) => c.id === source.id) ?? null;
-    return layoutTrendIdeas(sample.jobId, sample.suggestions, at).map((node) => ({ ...node, source }));
-  }), [data.trends?.samples, data.trends?.sample, clues, layout.clues]);
-  const passByKey = useMemo(() => new Map((data.trends?.passes ?? []).map((p) => [trendKey(p.trendJobId, p.query), p])), [data.trends?.passes]);
+  // Council directions that combine memories (D23 trial), and the trend clouds people can catch into them.
+  const directions = useMemo(() => data.directions ?? [], [data.directions]);
+  const trendNet = useMemo(() => {
+    const net: Record<string, number> = {};
+    for (const row of signalRows ?? []) if (row.targetKind === "trend") net[`${TREND_KEY_PREFIX}${row.targetId}`] = row.up - row.down;
+    return net;
+  }, [signalRows]);
+  const usedTrends = useMemo(() => new Set(directions.flatMap((d) => (d.trend ? [trendKey(d.trend.trendJobId, d.trend.query)] : []))), [directions]);
+  // A few searches drift through the outer sky; caught ones rest by their memory. Never one sprout per memory.
+  const trendIdeas = useMemo(() => {
+    const samples = data.trends?.samples ?? (data.trends?.sample ? [data.trends.sample] : []);
+    const at = (clueId: string) => layout.clues.find((c) => c.id === clueId) ?? null;
+    return trendClouds(samples, trendNet, at, now, usedTrends).flatMap((cloud) => {
+      const source = clues.find((c) => c.id === cloud.publishedClueId);
+      return source ? [{ ...cloud, source }] : [];
+    });
+  }, [data.trends?.samples, data.trends?.sample, clues, layout.clues, trendNet, usedTrends, now]);
   const trendByListing = useMemo(() => new Map((data.trends?.listingLinks ?? []).map((l) => [l.listingId, l])), [data.trends?.listingLinks]);
 
   const openBox = () => setSelectedKey("box");
@@ -192,15 +204,35 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   const themeLabel = (id: string) => layout.themes.find((t) => t.id === id)?.label ?? "";
   const themeOfClue = new Map(layout.clues.map((c) => [c.id, c.theme]));
 
+  // Directions float between the themes and the gifts, at the memories they combine. Passing fades one; half the room passing lets it go.
+  const members = Math.max(1, participants.length);
+  const directionNodes = directions.flatMap((d, i) => {
+    const fade = fadeOf(signals.tally[`direction:${d.id}`], members);
+    if (fade === "gone") return [];
+    const at = d.clueIds.flatMap((id) => layout.clues.filter((c) => c.id === id));
+    const [x, z] = directionPoint(at, i);
+    const memories = d.clueIds.flatMap((id) => clues.filter((c) => c.id === id));
+    return [{ ...d, x, z, faded: fade === "faded", memories, key: `direction:${d.id}` }];
+  });
+  const directionOf = (directionId?: string) => (directionId ? directions.find((d) => d.id === directionId) : undefined);
+
   // “Why?”: a gift, its themes, and the memories its recommendation cites. Everything else dims.
   let highlight: Set<string> | null = null;
   const whyRec = whyListing ? recs.find((r) => r.listingId === whyListing) : undefined;
   if (whyRec) {
     const cited = whyRec.publishedClueIds.filter((id) => themeOfClue.has(id));
-    // A gift found through a trend search lights that trend idea too.
+    // A gift found through a trend search lights that trend idea too; one found by a direction lights the direction and its memories.
     const trend = trendByListing.get(whyRec.listingId);
-    highlight = new Set([`gift:${whyRec.listingId}`, ...cited.map((id) => `clue:${id}`), ...cited.map((id) => `theme:${themeOfClue.get(id)}`), ...(trend ? [trendKey(trend.trendJobId, trend.query)] : [])]);
+    const viaDirection = directionOf(whyRec.foundBy?.directionId);
+    const memories = [...new Set([...cited, ...(viaDirection?.clueIds.filter((id) => themeOfClue.has(id)) ?? [])])];
+    highlight = new Set([`gift:${whyRec.listingId}`, ...memories.map((id) => `clue:${id}`), ...memories.map((id) => `theme:${themeOfClue.get(id)}`),
+      ...(trend ? [trendKey(trend.trendJobId, trend.query)] : []), ...(viaDirection ? [`direction:${viaDirection.id}`] : [])]);
     if (selection?.listingId === whyRec.listingId) highlight.add("box");
+  } else if (selectedKey?.startsWith("direction:")) {
+    // Opening a direction lights the memories it combines and the gifts it found.
+    const d = directionOf(selectedKey.slice(10));
+    if (d) highlight = new Set([selectedKey, ...d.clueIds.map((id) => `clue:${id}`),
+      ...recs.filter((r) => r.foundBy?.directionId === d.id).map((r) => `gift:${r.listingId}`)]);
   }
 
   // Research progress shows where it was started; a search someone else started shows at the present.
@@ -218,13 +250,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       ? run(() => actions.clearVote(listingId), "Vote taken back.")
       : run(() => actions.castVote(listingId, value), value === "up" ? "You pulled it closer: it feels right." : "You pushed it away for now. Nothing was deleted."));
   };
-  const signal = (targetKind: "clue" | "theme", targetId: string, value: 1 | -1) => {
+  const signal = (targetKind: "clue" | "theme" | "direction", targetId: string, value: 1 | -1) => {
     if (!actions) return;
     const mine = signals.mine[`${targetKind}:${targetId}`];
     const next = mine === value ? 0 : value;
-    void run(() => actions.setDirection(targetKind, targetId, next), next === 0 ? "Vote taken back." : next > 0 ? "You pulled it closer. Gifts in that direction move in too." : "You pushed it away for now. Nothing was deleted.");
+    void run(() => actions.setDirection(targetKind, targetId, next), next === 0 ? "Vote taken back."
+      : next > 0 ? (targetKind === "direction" ? "You pulled this direction in. It stays on the map." : "You pulled it closer. Gifts in that direction move in too.")
+      : targetKind === "direction" ? "You passed on this direction. It fades, and leaves once half the room passes. Nothing was deleted." : "You pushed it away for now. Nothing was deleted.");
   };
-  const voteActs = (targetKind: "clue" | "theme", targetId: string): RingAction[] => {
+  const voteActs = (targetKind: "clue" | "theme" | "direction", targetId: string): RingAction[] => {
     const mine = signals.mine[`${targetKind}:${targetId}`];
     return actions ? [
       { icon: "heart", label: "Feels like her", tone: "yes", on: mine === 1, disabled: !!pending, run: () => signal(targetKind, targetId, 1) },
@@ -236,6 +270,33 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     void (isOrganizer
       ? run(() => actions.selectGift(listingId), "It’s in the box. Everyone approves this exact version.").then((ok) => ok && setSelectedKey("box"))
       : run(() => actions.castVote(listingId, "up"), "Your vote is in. The organizer puts the final gift in the box."));
+  };
+
+  // “Why this gift?” as the path it actually took: memories → direction → question → search → listing → fit.
+  // Every step is stored room data or an observed listing fact; nothing here is generated for display.
+  const whyChain = (rec: (typeof recs)[number], listing: NonNullable<ReturnType<typeof listingById.get>>): ReactNode => {
+    const origin = rec.foundBy;
+    const d = directionOf(origin?.directionId);
+    const memoryIds = d ? d.clueIds : origin?.publishedClueId ? [origin.publishedClueId] : [];
+    const memoryTexts = memoryIds.flatMap((id) => allClues.filter((c) => c.id === id).map((c) => `“${c.text}”`));
+    const pool = data.searchPools?.find((p) => p.jobId === rec.id.slice(0, rec.id.indexOf(":")));
+    const asked = d && sharpen?.status === "answered" && sharpen.directionId === d.id && sharpen.answer !== undefined ? sharpen : null;
+    const trendSearch = trendByListing.get(rec.listingId);
+    const steps: { icon: "memory" | "spark" | "scales" | "sprout" | "open" | "thread" | "trend"; text: ReactNode }[] = [];
+    if (memoryTexts.length) steps.push({ icon: "memory", text: <>Memories: {memoryTexts.join(" + ")}</> });
+    if (d) steps.push({ icon: "spark", text: <>The council combined them into <b>{d.label}</b>{d.source === "preset" ? " (simple rule, no model)" : ""}. {d.why}{d.trend && <> It builds on the caught trend “{d.trend.query}”.</>}</> });
+    if (asked) steps.push({ icon: "scales", text: <>Asked “{asked.question}”. {asked.answeredBy ? name(asked.answeredBy) : "A friend"} answered: {asked.options[asked.answer!]?.label}.</> });
+    if (trendSearch && !d) steps.push({ icon: "trend", text: <>From a related Google Trends search, “{trendSearch.query}”. The product itself isn’t claimed to be trending.</> });
+    if (origin) steps.push({ icon: "sprout", text: <>Searched “{origin.query}”{pool ? <>: {pool.found} found{pool.removedByClues ? `, ${pool.removedByClues} removed by what friends said she owns or doesn’t want` : ""}{pool.foldedDuplicates ? `, ${pool.foldedDuplicates} repeats folded` : ""}, {pool.shown} shown</> : null}.</> });
+    steps.push({ icon: "open", text: <>{listing.sellerName ?? "A seller"} · {priceOf(rec.listingId)} · price seen {new Date(listing.retrievedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</> });
+    steps.push({ icon: "thread", text: rec.publishedClueIds.length
+      ? <>Its listing names {rec.publishedClueIds.length === 1 ? "a memory" : `${rec.publishedClueIds.length} memories`} directly.</>
+      : <>No memory names this product directly; it’s here because of the search above.</> });
+    return (
+      <ol className={s.chain} aria-label="How the council got to this gift">
+        {steps.map((step, i) => <li key={i}><MapIcon name={step.icon} size={13} /><span>{step.text}</span></li>)}
+      </ol>
+    );
   };
 
   const actionsFor = (key: string): RingDetail | null => {
@@ -264,11 +325,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       if (!listing) return null;
       const mine = data.votes[listingId]?.myVote;
       const inBox = selection?.listingId === listingId;
+      const viaDirection = directionOf(rec?.foundBy?.directionId);
       return {
-        caption: <><b>{listing.title}</b><small>{priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}{trendByListing.has(listingId) ? " · via a trend" : ""}{rec?.publishedClueIds.length ? ` · fits ${rec.publishedClueIds.length} ${rec.publishedClueIds.length === 1 ? "memory" : "memories"}` : ""}</small></>,
-        note: whyListing === listingId ? (
-          <>{rec?.explanation || "No memories are cited for this one yet."}{trendByListing.has(listingId) && <> Found while researching “{trendByListing.get(listingId)!.query}”, a related Google Trends search. The product itself isn’t claimed to be trending.</>}</>
-        ) : undefined,
+        caption: <><b>{listing.title}</b><small>{priceOf(listingId)}{listing.source === "manual_fixture" ? " · sample" : ""}{viaDirection ? ` · ${viaDirection.label}` : trendByListing.has(listingId) ? " · via a trend" : ""}{rec?.publishedClueIds.length ? ` · fits ${rec.publishedClueIds.length} ${rec.publishedClueIds.length === 1 ? "memory" : "memories"}` : ""}</small></>,
+        note: whyListing === listingId && rec ? whyChain(rec, listing) : undefined,
         actions: actions ? [
           { icon: "heart", label: "Feels right", tone: "yes", on: mine === "up", disabled: !!pending, run: () => vote(listingId, "up") },
           { icon: "drift", label: "Pass", tone: "pass", on: mine === "down", disabled: !!pending, run: () => vote(listingId, "down") },
@@ -282,17 +342,38 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       };
     }
     if (isTrendKey(key)) {
+      // A trend cloud never searches by itself: catch it for the next directions, or let it drift away.
       const node = trendIdeas.find((t) => t.key === key);
       if (!node) return null;
-      const jobId = node.trendJobId;
-      const pass = passByKey.get(key);
+      const target = key.slice(TREND_KEY_PREFIX.length);
+      const mineCaught = signals.mine[`trend:${target}`] === 1;
       return {
-        caption: <><b>{node.query}</b><small>{node.signal} · a Google Trends search related to “{node.source.text}”. An idea to explore, not a fact about her.</small>{pass && pass.count > 0 && <small>{pass.passerNames.join(", ") || `${pass.count} people`} passed on it.</small>}</>,
-        actions: [
-          ...(actions?.researchTrend ? [{ icon: "sprout" as const, label: "Research this", tone: "gold" as const, disabled: !!pending, run: () => void run(() => actions.researchTrend!(jobId, node.query, allClueIds), `Looking for real gifts for “${node.query}”.`) }] : []),
+        caption: <><b>{node.query}</b><small>{node.signal} · a Google search related to “{node.source.text}”. An idea to explore, not a fact about her.</small>
+          <small>{node.caught ? "Caught. The council can weave it into the next directions." : "Drifting by. Catch it if it fits her; it won’t search on its own."}</small></>,
+        actions: actions ? [
+          { icon: "heart" as const, label: node.caught ? (mineCaught ? "Let go" : "Caught") : "Catch it", tone: "yes" as const, on: node.caught, disabled: !!pending || (node.caught && !mineCaught),
+            run: () => void run(() => actions.setDirection("trend", target, mineCaught ? 0 : 1), mineCaught ? "Let go. It drifts back into the sky." : "Caught. Ask the council for directions to weave it in.") },
+          { icon: "drift" as const, label: "Let it drift", tone: "pass" as const, disabled: !!pending,
+            run: () => void run(() => actions.setDirection("trend", target, -1), "It drifted away for the room. Her memories didn’t change.").then((ok) => ok && setSelectedKey(null)) },
           { icon: "open" as const, label: "See the source", more: true, run: () => window.open(node.sourceUrl, "_blank", "noopener,noreferrer") },
-          ...(actions?.passTrend ? [{ icon: "drift" as const, label: pass?.mine ? "Take back my pass" : "Doesn’t fit", tone: "pass" as const, on: !!pass?.mine, disabled: !!pending,
-            run: () => void run(() => actions.passTrend!(jobId, node.query, !pass?.mine), pass?.mine ? "Pass taken back." : "Passed for the room. It stays faded on the map; her memories didn’t change.") }] : []),
+        ] : [],
+      };
+    }
+    if (key.startsWith("direction:")) {
+      const d = directionNodes.find((n) => n.key === key);
+      if (!d) return null;
+      const found = recs.filter((r) => r.foundBy?.directionId === d.id).length;
+      const searching = research === "running" && researchFrom === key;
+      const asking = sharpen?.status === "open" && sharpen.directionId === d.id;
+      return {
+        caption: <><b>{d.label}</b><small>{d.why}</small>
+          <small>Joins {d.memories.map((m) => `“${m.text}”`).join(" + ")}{d.trend ? ` · with the caught trend “${d.trend.query}”` : ""}</small>
+          {asking && <small>The council asked the room one question to sharpen this.</small>}
+          {d.stale && <small>Memories changed since. Ask the council again to refresh it.</small>}</>,
+        actions: [
+          ...(isOrganizer && actions?.researchDirection ? [{ icon: "sprout" as const, label: searching ? "Searching…" : found ? "Search again" : "Find gifts for this", tone: "gold" as const, disabled: !!pending || searching,
+            run: () => void run(() => actions.researchDirection!(d.id, allClueIds), `Searching “${d.query}”. Two gifts from it will land on the map.`).then((ok) => ok && setResearchFrom(key)) }] : []),
+          ...voteActs("direction", d.id),
         ],
       };
     }
@@ -348,10 +429,10 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     const trendNote = trendSample ? emptyTrendNote(trendSample) : null;
     return {
       caption: <><b>“{clue.text}”</b><small>{name(clue.publisherId) === "You" ? "Your" : `${name(clue.publisherId)}’s`} memory · in {themeLabel(theme)}</small>{trendNote && <small>{trendNote}</small>}</>,
+      // Trends are looked up when someone asks for directions, a few at a time (D23 trial), not per memory.
       actions: [
         ...voteActs("clue", clue.id),
         ...findGiftsFrom(theme),
-        ...(actions?.findTrends && (clue.kind === "interest" || clue.kind === "explicit_wish") ? [{ icon: "trend" as const, label: "Look for trends", more: true, disabled: !!pending, run: () => { setTrendAsked(Date.now()); void run(() => actions.findTrends!(clue.id), "Checking Google Trends for related searches. Ideas will sprout here."); } }] : []),
         ...(actions && clue.publisherId === me.id ? [{ icon: "undo" as const, label: "Take it back", more: true, disabled: !!pending, run: () => void run(() => actions.withdrawClue(clue.id), "Your memory was withdrawn from the room.").then((ok) => ok && setSelectedKey(null)) }] : []),
       ],
     };
@@ -540,13 +621,15 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The sharpen round: one question between the two leading gifts.
   let overlay: ReactNode = null;
   if (sharpen && sharpen.status === "open") {
+    const about = directionOf(sharpen.directionId);
     overlay = (
       <div className={s.ask} data-map-token>
-        <small>The council asks one question{sharpen.source === "preset" ? "" : ""}</small>
+        <small>{about ? `The council asks one question to sharpen “${about.label}”` : "The council asks one question"}</small>
         <p>{sharpen.question}</p>
         <div>
           {sharpen.options.map((o, i) => (
-            <button key={i} type="button" disabled={!actions || !!pending} onClick={() => actions && void run(() => actions.answerSharpen(sharpen._id, i), `You answered: ${o.label}. It’s shared as your memory, and the gifts re-rank.`)}>{o.label}</button>
+            <button key={i} type="button" disabled={!actions || !!pending} onClick={() => actions && void run(() => actions.answerSharpen(sharpen._id, i),
+              o.clue ? `You answered: ${o.label}. It’s shared as your memory; ask for directions again to use it.` : `You voted for ${o.label}. No memory was added.`)}>{o.label}</button>
           ))}
         </div>
         {actions && <button type="button" className={s.askSkip} onClick={() => void run(() => actions.dismissSharpen(sharpen._id), "Question skipped.")}>Skip</button>}
@@ -565,7 +648,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   // The council's tools live at the present: all of them when it's clicked, and the one that fits next right under it.
   const searching = research === "running";
   const sharpenOpen = sharpen?.status === "open";
+  const thinking = pending === "directions";
+  const proposeDirections = () => {
+    if (!actions?.proposeDirections) return;
+    setTrendAsked(Date.now());
+    void run(() => actions.proposeDirections!(), "The council combined your memories into gift directions. Open one to find gifts.", "directions");
+  };
   const councilActs: RingAction[] = actions ? [
+    ...(actions.proposeDirections ? [{ icon: "spark" as const, label: thinking ? "Combining…" : directions.length ? "New directions" : "Combine into directions", disabled: !!pending || clues.length < 2, run: proposeDirections }] : []),
     { icon: "gather", label: pending === "themes" ? "Grouping…" : councilThemes.length ? "Regroup themes" : "Group into themes", disabled: !!pending || clues.length < 3, run: () => void run(() => actions.suggestThemes(), "The council grouped the memories into themes.", "themes") },
     ...(isOrganizer ? [{ icon: "sprout" as const, label: searching ? "Searching…" : recs.length ? "Find more gifts" : "Find gifts", disabled: !!pending || searching || !allClueIds.length, run: () => startSearch("box") }] : []),
     { icon: "scales", label: pending === "sharpen" ? "Thinking…" : "Help us choose", disabled: !!pending || recs.length < 2 || sharpenOpen, run: () => void run(() => actions.sharpen(), "The council has one question for you.", "sharpen") },
@@ -575,6 +665,9 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
   if (actions) {
     if (selection) nextStep = { icon: "present", label: `Review shares · ${approved}/${participants.length} yes`, run: () => setSelectedKey("box") };
     else if (!allClues.length) nextStep = { icon: "cloud", label: "Click the sky to share a memory" };
+    else if (clues.length < 2 && actions.proposeDirections) nextStep = { icon: "cloud", label: "Share one more memory, then the council can combine them" };
+    else if (!directions.length && actions.proposeDirections) nextStep = { icon: "spark", label: thinking ? "Combining…" : `Combine ${clues.length} memories into gift directions`, disabled: !!pending, run: proposeDirections };
+    else if (directions.length && !recs.length && !searching) nextStep = { icon: "sprout", label: isOrganizer ? "Open a direction and find gifts for it" : "The organizer finds gifts for a direction next" };
     else if (clues.length >= 3 && !councilThemes.length) nextStep = { ...act("Group into themes")!, label: pending === "themes" ? "Grouping…" : `Group ${clues.length} memories into themes` };
     else if (!recs.length && isOrganizer && !searching) nextStep = { ...act("Find gifts")!, label: "Find gifts from these memories" };
     else if (!recs.length && !isOrganizer && !searching) nextStep = { icon: "sprout", label: "The organizer finds gifts next" };
@@ -602,11 +695,14 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
       // Friends' ideas sit just inside the gift ring, spaced around it, until research turns them into listings.
       const [x, z] = ringPoint(235 + i * 47, RING_RADII.gift - 0.4);
       return { key: `idea:${idea.id}`, text: idea.text.slice(GIFT_IDEA_PREFIX.length), author: name(idea.publisherId), avatar: avatarOf(idea.publisherId), x, z };
-    }).concat(trendIdeas.map((t) => {
-      const passes = passByKey.get(t.key)?.count ?? 0;
-      return { key: t.key, text: t.query, author: name(t.source.publisherId), avatar: avatarOf(t.source.publisherId), x: t.x, z: t.z,
-        tag: passes ? `trend · ${passes} passed` : `trend · ${t.signal}`, faded: passes > 0, trend: true };
-    })),
+    }).concat(directionNodes.map((d) => {
+      const author = d.memories[0]?.publisherId ?? me.id;
+      return { key: d.key, text: d.label, author: name(author), avatar: avatarOf(author), x: d.x, z: d.z,
+        tag: d.faded ? "direction · passed" : `direction · joins ${d.clueIds.length} ${d.clueIds.length === 1 ? "wish" : "memories"}`, faded: d.faded, direction: true };
+    }), trendIdeas.map((t) => ({
+      key: t.key, text: t.query, author: name(t.source.publisherId), avatar: avatarOf(t.source.publisherId), x: t.x, z: t.z,
+      tag: t.caught ? "caught trend" : `drifting trend · ${t.signal}`, trend: true,
+    }))),
     themes: layout.themes.map((t) => {
       // Up to four faces of the friends who shared into this theme.
       const authors = [...new Set(layout.clues.filter((c) => c.theme === t.id).map((c) => clues.find((x) => x.id === c.id)!.publisherId))].slice(0, 4);
@@ -619,12 +715,17 @@ export function useGiftRings({ data, actions, isOrganizer, active, onPaste, onRe
     openTheme: openTheme && layout.themes.some((t) => t.id === openTheme) ? openTheme : null,
     gifts: layout.gifts.map((g, i) => {
       const l = listingById.get(g.listingId)!;
+      const up = data.votes[g.listingId]?.tally.up ?? 0;
+      const down = data.votes[g.listingId]?.tally.down ?? 0;
+      // A pass fades a gift; once half the room has passed and nobody pulled it in, it leaves the map (D23 trial).
+      const fade = fadeOf({ up, down }, members);
+      const kept = selection?.listingId === g.listingId || selectedKey === `gift:${g.listingId}` || whyListing === g.listingId;
       return {
         key: `gift:${g.listingId}`, listingId: g.listingId, title: l.title, price: priceOf(g.listingId), imageUrl: l.imageUrl, themes: g.themes, x: g.x, z: g.z, rank: i + 1,
-        up: data.votes[g.listingId]?.tally.up ?? 0, down: data.votes[g.listingId]?.tally.down ?? 0, fixture: l.source === "manual_fixture",
-        finalist: finalists.has(g.listingId), faded: finalists.size > 0 && !finalists.has(g.listingId),
+        up, down, fixture: l.source === "manual_fixture",
+        finalist: finalists.has(g.listingId), faded: (finalists.size > 0 && !finalists.has(g.listingId)) || fade === "faded",
         // Only the leading few show; the chosen gift, finalists and anything open or explained stay visible.
-        hidden: !allGifts && i >= TOP_GIFTS && selection?.listingId !== g.listingId && !finalists.has(g.listingId) && selectedKey !== `gift:${g.listingId}` && whyListing !== g.listingId,
+        hidden: (fade === "gone" && !kept) || (!allGifts && i >= TOP_GIFTS && !kept && !finalists.has(g.listingId)),
       };
     }),
     moreGifts: layout.gifts.length > TOP_GIFTS ? { count: layout.gifts.length - TOP_GIFTS, open: allGifts, toggle: () => setAllGifts((v) => !v) } : null,

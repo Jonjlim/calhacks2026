@@ -11,6 +11,9 @@ import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireMember } from "./lib/auth";
 import { err, memberError, ok } from "./lib/result";
+import { usableTrendJob } from "./research/trendJobs";
+
+type TargetKind = "clue" | "theme" | "direction" | "trend";
 
 /** The interim themes are the clue groups the map already uses; council themes are rows in `mapThemes`. */
 const BUCKET_THEMES = new Set(["interest", "wish", "moment"]);
@@ -18,13 +21,14 @@ const BUCKET_THEMES = new Set(["interest", "wish", "moment"]);
 export const setDirection = mutation({
   args: {
     roomId: v.id("rooms"),
-    targetKind: v.union(v.literal("clue"), v.literal("theme")),
+    // "direction" and "trend" are the D23 trial: pass/pull a direction; catch (+1) or let drift (−1) a trend cloud.
+    targetKind: v.union(v.literal("clue"), v.literal("theme"), v.literal("direction"), v.literal("trend")),
     targetId: v.string(),
     /** 1 pulls toward the present, −1 pushes away, 0 takes the caller's signal back. */
     value: v.union(v.literal(1), v.literal(-1), v.literal(0)),
   },
   handler: async (ctx, { roomId, targetKind, targetId, value }) => {
-    type Out = { targetKind: "clue" | "theme"; targetId: string; value: number };
+    type Out = { targetKind: TargetKind; targetId: string; value: number };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Out>(member.code);
 
@@ -33,6 +37,16 @@ export const setDirection = mutation({
       const id = ctx.db.normalizeId("publishedClues", targetId);
       const clue = id ? await ctx.db.get(id) : null;
       if (!clue || clue.roomId !== roomId || clue.status !== "active") return err<Out>("not_found", "That memory isn't on this map.");
+    } else if (targetKind === "direction") {
+      const id = ctx.db.normalizeId("mapDirections", targetId);
+      const direction = id ? await ctx.db.get(id) : null;
+      if (!direction || direction.roomId !== roomId) return err<Out>("not_found", "That direction isn't on this map.");
+    } else if (targetKind === "trend") {
+      // A trend cloud is one returned suggestion of a usable sample in this room: "trendJobId:query".
+      const at = targetId.indexOf(":");
+      const id = at > 0 ? ctx.db.normalizeId("trendJobs", targetId.slice(0, at)) : null;
+      const job = id ? await usableTrendJob(ctx, roomId, id) : null;
+      if (!job?.sample?.suggestions.some((s) => s.query === targetId.slice(at + 1))) return err<Out>("not_found", "That trend has drifted off this map.");
     } else if (!BUCKET_THEMES.has(targetId)) {
       const id = ctx.db.normalizeId("mapThemes", targetId);
       const theme = id ? await ctx.db.get(id) : null;
@@ -57,7 +71,7 @@ export const setDirection = mutation({
 export const listSignals = query({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    type Row = { targetKind: "clue" | "theme"; targetId: string; up: number; down: number; voters: { participantId: Id<"participants">; value: number; at: number }[] };
+    type Row = { targetKind: TargetKind; targetId: string; up: number; down: number; voters: { participantId: Id<"participants">; value: number; at: number }[] };
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError<Row[]>(member.code);
     const rows = await ctx.db.query("mapSignals").withIndex("by_room", (q) => q.eq("roomId", roomId)).take(2000);

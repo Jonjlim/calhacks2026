@@ -419,7 +419,8 @@ export default defineSchema({
   mapSignals: defineTable({
     roomId: v.id("rooms"),
     participantId: v.id("participants"),
-    targetKind: v.union(v.literal("clue"), v.literal("theme")),
+    // "direction" and "trend" (D23 trial): pass or pull a direction; catch (+1) or let drift (−1) a trend cloud.
+    targetKind: v.union(v.literal("clue"), v.literal("theme"), v.literal("direction"), v.literal("trend")),
     targetId: v.string(),
     value: v.number(),
     updatedAt: v.number(),
@@ -450,7 +451,23 @@ export default defineSchema({
     answeredBy: v.optional(v.id("participants")),
     knowledgeRevision: v.number(),
     createdAt: v.number(),
+    /** A probe question about one broad direction (D23 trial); its options carry no listings. */
+    directionId: v.optional(v.id("mapDirections")),
   }).index("by_room", ["roomId", "createdAt"]),
+
+  /** Council gift directions that combine memories (D23 trial). Interpretations: they publish nothing. */
+  mapDirections: defineTable({
+    roomId: v.id("rooms"),
+    label: v.string(),
+    query: v.string(),
+    why: v.string(),
+    clueIds: v.array(v.id("publishedClues")),
+    trend: v.optional(v.object({ trendJobId: v.id("trendJobs"), query: v.string() })),
+    broad: v.boolean(),
+    source: v.union(v.literal("agent"), v.literal("preset")),
+    knowledgeRevision: v.number(),
+    createdAt: v.number(),
+  }).index("by_room", ["roomId"]),
 
   recipientProfiles: defineTable({
     roomId: v.id("rooms"), ownerUserId: v.string(), revision: v.number(), createdAt: v.number(),
@@ -560,7 +577,10 @@ export default defineSchema({
     attempt: v.number(),
     lastError: v.optional(v.string()),
     createdAt: v.number(),
+    /** The direction this search shops (D23 trial). Jobs in different directions run side by side. */
+    directionId: v.optional(v.id("mapDirections")),
   })
     .index("by_room", ["roomId"])
-    .index("by_room_idempotency", ["roomId", "idempotencyKey"]),
+    .index("by_room_idempotency", ["roomId", "idempotencyKey"])
+    .index("by_room_direction", ["roomId", "directionId"]),
 });
