@@ -221,3 +221,16 @@ export const councilResult = v.object({
   cached: v.optional(v.boolean()),
   error: v.optional(v.string()),
 });
+
+
+/** Shared persisted snapshot for selection and approved proposal item arrays. */
+export const giftBoxItem = v.object({
+  listingId: v.id("productListings"),
+  quantity: v.literal(1),
+  listingSnapshot: v.object({
+    title: v.string(), sourceUrl: v.string(),
+    priceMinor: v.optional(v.number()), priceStatus,
+    currency, shippingMinor: v.optional(v.number()), shippingStatus,
+    imageUrl: v.optional(v.string()), retrievedAt: v.number(),
+  }),
+});

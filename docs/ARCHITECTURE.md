@@ -463,3 +463,16 @@ must verify API parameters, application schemas, photo behavior and timing befor
 switching the existing configurable provider. No new SDK, database or service is
 introduced. Offline fixture checks do not establish live model capability or
 prize eligibility.
+
+
+## Bounded multi-gift box — Alex-authorized integration
+
+Alex requested both single and multiple gifts in the buying flow. Keep one
+Convex selection and one versioned proposal per room; add optional item snapshots
+rather than a second cart/payment engine. One to twelve distinct products, one
+unit each; no optimization, merchant checkout, currency conversion or inferred
+shipping bundling. Allocation and approval operate on the combined estimate.
+Legacy single-gift fields remain first-item compatibility projections. Simulation
+continues to use the approved revision, never a client-calculated amount.
+Dev 2 reviews selection/schema changes; Dev 1 consumes item arrays. Existing
+rows remain valid without a data migration. No deployment accompanies this change.

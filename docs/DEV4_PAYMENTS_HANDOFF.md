@@ -143,3 +143,53 @@ with the team's normal backend workflow. Then Dev 1 mounts the connected box
 component and the team repeats the same flow with two actual room members.
 Existing Stripe orchestration code remains dormant; no new refund/recovery
 feature or enabled real payment action was added.
+
+
+## Multi-gift box integration for Ally and Jonathon
+
+Alex requested single or multiple gifts. This feature branch now provides:
+
+- `proposals.setGiftBox({roomId, listingIds})`: organizer replaces the complete
+  ordered box with 1–12 distinct sourced listing IDs; one unit each. Use `[]` to
+  clear. For add/remove UI, submit the complete resulting list. Existing
+  `selectGift` deliberately still **replaces the whole box with one gift**.
+- `proposals.getSelection({roomId})`: `Result<selection | null>`; read `items`
+  for every chosen gift, its snapshot photo/title/price/shipping/source link.
+  Old rows without `items` still represent their single legacy `listingId`.
+- Existing private-cap APIs, `createProposal`, `getProposal`, `approveRevision`
+  and `withdrawApproval` continue to work. Render `revision.items` for the exact
+  approval summary and `revision.payableTotalMinor` for the whole estimate;
+  legacy `revision.listingId` is the first item, never the combined box.
+- Existing `ConnectedContributionSimulation` follows the combined approved
+  proposal. Or style your own surface using `payments.simulation.getState`,
+  `simulateContribution({roomId, revisionId})`, and `wrapGift` with the same args.
+  Use server `canSimulate`/`canWrap`; show only the caller's cap and simulation
+  share plus group completion counts. Real payment/order APIs are not called.
+- Any gift membership, item snapshot or share change produces fresh approvals
+  and resets simulation. Approving, contributing and wrapping also recheck the
+  listing observations, so a changed second item cannot sneak into an old deal.
+- Invalidating any selected item conservatively clears the whole box. Unknown
+  item prices block the proposal; unknown shipping/tax are excluded visibly.
+  Separately observed shipping is summed, without assuming bundled discounts.
+
+Buying-screen sequence: box summary and individual source links → private maxima
+→ combined estimate and own allocated share → everyone approves that revision
+→ labelled simulated contributions with shared count → organizer wraps → keep
+individual source links accessible. Never claim the products were ordered.
+The local `/demo/contributions` page is still the original one-gift UI fixture;
+this change adds the real backend basket support for Ally's buying screen.
+
+Shared changes needing Dev 2 review before the team's normal deployment:
+optional `items` arrays on selections/revisions (old rows remain schema-valid),
+shared snapshot validator, bounded selection mutation, item-aware revision
+comparison and invalidation. No new service or migration job. No backend was
+deployed by this change. Two-user browser acceptance awaits the buying-screen
+integration; offline tests do not establish deployed/browser success.
+
+
+Verification for the multi-gift change: frontend and Convex TypeScript checks;
+full offline Vitest suite; dedicated gift-box integration coverage for totals,
+unknown/invalid prices, separately observed shipping, same-total item changes,
+second-item price changes at approve/contribute/wrap, caps, authorization,
+idempotency, empty-box clearing, invalidation, frozen payment state, legacy rows
+and the 12-item bound. No paid provider calls or live deployment tests.

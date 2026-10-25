@@ -6,6 +6,7 @@ import { mutation, query } from "../_generated/server";
 import type { QueryCtx } from "../_generated/server";
 import { requireMember } from "../lib/auth";
 import { err, memberError, ok } from "../lib/result";
+import { recomputeProposal } from "../lib/proposalEngine";
 
 async function project(ctx: QueryCtx, room: Doc<"rooms">, me: Doc<"participants">) {
   const revision = room.currentRevisionId ? await ctx.db.get(room.currentRevisionId) : null;
@@ -49,6 +50,9 @@ export const simulateContribution = mutation({
     const member = await requireMember(ctx, roomId);
     if (!member.ok) return memberError(member.code);
     if (member.room.currentRevisionId !== revisionId) return err("invalid_revision", "This proposal changed. Review the new revision.");
+    const refreshed = await recomputeProposal(ctx, roomId);
+    if (!refreshed.revision || refreshed.revision._id !== revisionId)
+      return err("invalid_revision", "This proposal changed. Review the new revision.");
     const p = await project(ctx, member.room, member.me);
     if (p.view.status === "waiting_for_approvals" || p.view.status === "unavailable")
       return err("invalid_revision", "Everyone must approve the current pledged revision before the simulation.");
@@ -69,6 +73,9 @@ export const wrapGift = mutation({
     if (!member.ok) return memberError(member.code);
     if (member.me.role !== "organizer") return err("unauthorized", "Only the organizer wraps the demo gift.");
     if (member.room.currentRevisionId !== revisionId) return err("invalid_revision", "This proposal changed. Review the new revision.");
+    const refreshed = await recomputeProposal(ctx, roomId);
+    if (!refreshed.revision || refreshed.revision._id !== revisionId)
+      return err("invalid_revision", "This proposal changed. Review the new revision.");
     const p = await project(ctx, member.room, member.me);
     if (p.view.status === "wrapped") return ok(p.view);
     if (!p.view.canWrap || !p.row) return err("refused", "Every payer must complete their simulated contribution first.");

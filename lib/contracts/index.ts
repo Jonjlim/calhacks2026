@@ -420,7 +420,18 @@ export interface Recommendation {
 
 // ---------- Selection, contributions, proposals ----------
 
+/** One observed product in a bounded gift box; no merchant order is implied. */
+export interface GiftBoxItem {
+  listingId: string;
+  quantity: 1;
+  listingSnapshot: Pick<ProductListing,
+    "title" | "sourceUrl" | "priceMinor" | "priceStatus" | "retrievedAt"
+    | "currency" | "shippingMinor" | "shippingStatus" | "imageUrl">;
+}
+
 export interface GiftSelection {
+  /** Complete box when present. Legacy fields describe the first item only. */
+  items?: GiftBoxItem[];
   id: string;
   roomId: string;
   listingId: string;
@@ -462,6 +473,8 @@ export type ProposalStatus =
   | "canceled";
 
 export interface ProposalRevision {
+  /** Frozen full box. Legacy rows without this field contain one gift. */
+  items?: GiftBoxItem[];
   id: string;
   roomId: string;
   selectionId: string;

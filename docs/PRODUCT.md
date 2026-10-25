@@ -55,10 +55,10 @@ P0 ends at a versioned, approved proposal (pledges, not charges). P1 features ha
 6. The council suggests a few themes that group the published clues. Themes are suggestions; people can rename, merge, or dismiss them.
 7. Research returns a bounded set of live listings (target 6–12 visible candidates). Each sits between the themes its recommendation cites.
 8. The group steers by dragging: toward the box supports, away passes. "She has it" and "too pricey" are reactions on the node. One sharpen round may ask a single question and refine the leading ideas.
-9. The organizer drags one gift into the box at the center.
+9. The organizer puts one or several gifts into the box at the center (up to 12 distinct products, one unit each).
 10. Each person sets a private maximum from the box. Allocation is equal-split-capped, with remainder redistributed to people who still have capacity.
-11. A proposal revision freezes product, total, and shares. Everyone approves that exact revision at the box.
-12. If the gift, total, or any share changes, approvals reset. The group looks at the new revision.
+11. A proposal revision freezes every selected product, the combined estimate, and shares. Everyone approves that exact revision at the box.
+12. If any selected gift, item observation, combined total, or share changes, approvals reset. The group looks at the new revision.
 
 Two people in one room, updating live, is the minimum multiplayer bar.
 
@@ -234,3 +234,10 @@ If time gets tight, keep this spine and drop everything else:
 Drop in this order: trend ranking, voice notes, reveal animation, sharpen variants, the zoom animation (swap instantly), themes (listings by score instead), Factory/Droid, custom Actors, recipient agent, photo clues, screenshot clues, Stripe.
 
 Do not drop source integrity, private caps, or approval invalidation to make room for a sponsor logo.
+
+
+The buying screen supports one or multiple gifts through the same proposal flow.
+Each product retains its observed price and source link. Unknown item prices block
+funding; unknown shipping/tax stay visibly excluded from the estimate. Demo
+contributions and wrapping are labelled simulation: no money charged or gifts
+purchased. No automatic basket optimization or cross-retailer checkout is implied.

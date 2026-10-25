@@ -199,6 +199,7 @@ export default defineSchema({
   }).index("by_room", ["roomId"]),
 
   giftSelections: defineTable({
+    items: v.optional(v.array(V.giftBoxItem)),
     roomId: v.id("rooms"),
     listingId: v.id("productListings"),
     quantity: v.literal(1),
@@ -234,6 +235,7 @@ export default defineSchema({
     .index("by_room_participant", ["roomId", "participantId"]),
 
   proposalRevisions: defineTable({
+    items: v.optional(v.array(V.giftBoxItem)),
     roomId: v.id("rooms"),
     revisionNumber: v.number(),
     selectionId: v.id("giftSelections"),

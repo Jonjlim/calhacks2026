@@ -1669,3 +1669,47 @@ citations. Dismissed/stale/foreign themes and withdrawn/foreign citations do not
 link. No label matching or model-provided theme references are trusted. No theme
 schema, signal mutation, ranking change or new map query is implemented here.
 Dev 2 can use the helper in MAP-007 once the proposed contract is accepted.
+
+
+### Gift box with one or multiple gifts (Alex-authorized integration)
+
+Owners: Dev 2 selection/proposal state, Dev 4 simulation integration. Consumer:
+Dev 1 buying screen. This is a bounded basket, not an optimizer or merchant order.
+
+`proposals.setGiftBox({roomId, listingIds})` atomically replaces the box with
+1–12 distinct same-room USD listings (one unit each). An empty array clears it.
+Only the organizer may change it; payment-frozen proposals remain frozen.
+Input order is retained for display; an identical ordered box is idempotent.
+`selectGift` remains the backward-compatible replace-with-one operation.
+`getSelection` returns the existing selection plus optional `items`.
+
+```ts
+interface GiftBoxItem {
+  listingId: string;
+  quantity: 1;
+  listingSnapshot: Pick<ProductListing,
+    "title" | "sourceUrl" | "priceMinor" | "priceStatus" | "retrievedAt"
+    | "currency" | "shippingMinor" | "shippingStatus" | "imageUrl">;
+}
+// Additive fields on GiftSelection and ProposalRevision:
+// items?: GiftBoxItem[];
+```
+
+When present, `items` is the complete box, including the first item. Legacy
+`listingId`, `quantity` and selection `listingSnapshot` describe only that first
+item for old clients; they must never be used as the multi-gift total. Legacy
+rows without `items` are interpreted as one gift. No existing-data migration is
+required. New revisions freeze every item's observed snapshot, combined estimate,
+shares and conditions. Sum each observed price and separately observed shipping;
+unknown shipping/tax remain explicitly excluded, with no inferred combined
+shipping discount. Unknown/nonpositive/unsafe prices, unsafe totals, unavailable
+or invalid items make the whole proposal infeasible. No partial box funding.
+
+Any material item snapshot change (including a second item's price or shipping),
+box membership/order change, or changed shares supersedes the revision and its
+approvals. Invalidating any selected item clears the entire box and its revision,
+matching the existing conservative invalidation behavior. The organizer can then
+reselect the remaining valid items. Simulation follows the combined revision and
+therefore resets with it; a real charge/order is never created. Each item keeps
+its own source link. Dev 1 must render `revision.items` for approval and
+`selection.items` for the current box, with the one-item fallback for old rows.

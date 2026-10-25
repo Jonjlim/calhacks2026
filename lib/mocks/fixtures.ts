@@ -233,3 +233,24 @@ export const mockApprovals: Approval[] = [
     updatedAt: T0 + 400_000,
   },
 ];
+
+
+/** Multi-gift buying-screen fixture. Prices are labelled manual fixtures, not live offers. */
+export const mockGiftBoxRevision: ProposalRevision = {
+  ...mockRevision,
+  id: "rev_box",
+  items: mockListings.slice(0, 2).map(listing => ({
+    listingId: listing.id, quantity: 1,
+    listingSnapshot: { title: listing.title, sourceUrl: listing.sourceUrl,
+      priceMinor: listing.priceMinor, priceStatus: listing.priceStatus,
+      currency: listing.currency, shippingMinor: listing.shippingMinor,
+      shippingStatus: listing.shippingStatus, imageUrl: listing.imageUrl,
+      retrievedAt: listing.retrievedAt },
+  })),
+  payableTotalMinor: 13_899,
+  shares: [
+    { participantId: "p_alex", amountMinor: 6_950 },
+    { participantId: "p_jordan", amountMinor: 6_949 },
+  ],
+  conditions: ["Sample prices only. Includes $5.99 observed shipping for the tools; shipping for the other item and all tax are unknown and excluded."],
+};
