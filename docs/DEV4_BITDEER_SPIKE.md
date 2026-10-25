@@ -67,3 +67,46 @@ requests, fixed host/token parameter, image payloads, malformed answers, sanitiz
 provider failures, missing credentials and unexpected model IDs. Running the
 script without `--run` confirmed that it prints help and makes no requests.
 No real key was read and no live Bitdeer call has been made by this work.
+
+## Candidate result reported by Alex
+
+Alex ran the candidate check and supplied `allPassed: true` for
+`zai-org/GLM-5.3-Flash`: source-linked extraction 1315 ms, grounded selection
+1036 ms, image discrimination 827 ms. Reported usage totaled 555 input and 422
+output tokens. This is user-supplied run evidence, not an independently executed
+live call by this agent; no bill/cost or broader reliability claim follows.
+
+## Next check — actual Unwrap adapter and schemas
+
+From the same worktree and existing `.env.bitdeer.local`, run:
+
+```sh
+node --env-file=.env.bitdeer.local scripts/bitdeer-app-check.mts --run
+```
+
+The runner scopes Bitdeer's key/endpoint/model to the child test process only.
+It runs Dev 3's existing live tests without modifying them: extraction with
+application source references, grounded buyer recommendation, and permitted
+recipient response. One additional opt-in check calls the real `readPhoto` and
+`proposePhotoClues` functions with a generated unmarked image, validating the
+real photo schema, no unmarked recipient activity and uncertain clue handling.
+A blank/no-gift-relevant observation is legitimate for this shape fixture. This
+is **not** a test of real-photo activity/style accuracy; a consented or suitable
+synthetic scene should still be exercised in the app before the demo.
+
+There are four checks and at most eight paid requests including the existing
+single schema-repair retry. Each request uses the app's normal 20-second timeout
+and a 2400-token requested limit. No Convex, Apify, Stripe, real-user-data or
+application state writes occur. No deployment/environment file is changed.
+
+Unlike the first standalone check, this uses the **unchanged application
+transport**, including `max_completion_tokens`. No test-only token-parameter
+translation is hidden in the runner. A full pass would establish that this model
+accepts those current requests; if it fails, inspect sanitized failures with Dev 3
+before changing the provider adapter or shared deployment. Do not assume the
+parameter must change merely because the documentation examples differ.
+
+Offline verification of the new runner: two Node tests passed (isolated config,
+missing credentials/model refusal); invoking without `--run` sent no requests;
+the four live checks skip by default. Frontend and Convex TypeScript checks pass.
+No live application-level Bitdeer check has been run by this agent.
