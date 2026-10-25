@@ -10,7 +10,7 @@ import { portraitUrl } from "@/lib/room/avatars";
 import { IslandMesh } from "../FloatingIsland";
 import { FAR_PALETTE, MID_PALETTE } from "../islands/shared";
 import { GIFT_SPOT } from "../sceneConfig";
-import type { IslandShape } from "../terrain";
+import type { IslandPalette, IslandShape } from "../terrain";
 import { Jar } from "./TowerInterior";
 import { mapCursor, type MapCursorMode } from "./mapCursor";
 import { mapView } from "./mapView";
@@ -21,6 +21,10 @@ import { useRings } from "./ringsStore";
 import { PledgeRing, type PledgeWorld } from "./PledgeRing";
 import { platformTop } from "../props/Stonework";
 import { CameraIcon, GiftIcon } from "@/components/ui/Icons";
+import { MagicTrail } from "./MagicTrail";
+import { buildBody } from "../convergence/GiftConvergence";
+import { paint } from "../painterly/materials";
+import { LOOKS, lookFor, NOTE_SHAPE, ThemeScenery } from "./ThemeScenery";
 import s from "./gift-rings.module.css";
 
 /**
@@ -163,12 +167,12 @@ function revealScale(arrive: number | undefined): number {
   return convergence.leaving ? gone + (1 - gone) * smooth(span(convergence.exit, 0.2, 1.2)) : gone;
 }
 
-function RingIsland({ at, kind, delay, animate, muted, arrive, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; arrive?: () => number | undefined; children?: ReactNode }) {
+function RingIsland({ at, kind, delay, animate, muted, arrive, shape, palette: paletteOverride, body, children }: { at: THREE.Vector3; kind: Kind; delay: number; animate: boolean; muted?: boolean; arrive?: () => number | undefined; shape?: IslandShape; palette?: IslandPalette; /** Replaces the island itself (a memory is a small floating object, not a rock). */ body?: ReactNode; children?: ReactNode }) {
   const group = useRef<THREE.Group>(null);
   // Set once: passing a fresh position on every render would snap the island back to its entrance spot each time.
   const start = useMemo(() => at.clone().setY(at.y - 3), []); // eslint-disable-line react-hooks/exhaustive-deps
   const born = useRef(-1);
-  const palette = kind === "theme" ? MID_PALETTE : FAR_PALETTE;
+  const palette = paletteOverride ?? (kind === "theme" ? MID_PALETTE : FAR_PALETTE);
   useFrame(({ clock }, dt) => {
     const g = group.current;
     if (!g) return;
@@ -183,8 +187,34 @@ function RingIsland({ at, kind, delay, animate, muted, arrive, children }: { at:
   });
   return (
     <group ref={group} position={start}>
-      <IslandMesh shape={SHAPES[kind]} palette={palette} detail={DETAIL} />
+      {body ?? <IslandMesh shape={shape ?? SHAPES[kind]} palette={palette} detail={DETAIL} />}
       {children}
+    </group>
+  );
+}
+
+/** One memory, drawn as what it is: a folded note, a wish star or a keepsake charm, floating on a wisp of cloud, tinted by its theme. */
+function MemoryNote({ shape, color, animate }: { shape: "note" | "star" | "charm"; color: string; animate: boolean }) {
+  const body = useMemo(() => buildBody(shape, color), [shape, color]);
+  const spin = useRef<THREE.Group>(null);
+  const puff = useMemo(() => paint("memory-puff", { color: "#fffaf0", emissive: "#f3ecff", emissiveIntensity: 0.4 }), []);
+  useFrame(({ clock }) => {
+    const g = spin.current;
+    if (!g || !animate) return;
+    g.rotation.y = clock.elapsedTime * 0.45 + color.length;
+    g.rotation.z = Math.sin(clock.elapsedTime * 0.8 + color.charCodeAt(1)) * 0.14;
+    g.position.y = 1.0 + Math.sin(clock.elapsedTime * 1.1 + color.charCodeAt(2)) * 0.12;
+  });
+  return (
+    <group>
+      <group ref={spin} position={[0, 1.0, 0]} scale={4.4}>
+        <primitive object={body} />
+      </group>
+      {[[0, 0, 0, 0.9], [0.7, -0.05, 0.1, 0.55], [-0.7, -0.05, -0.05, 0.6]].map(([x, y, z, r], i) => (
+        <mesh key={i} position={[x!, y!, z!]} scale={[r!, r! * 0.5, r!]} material={puff}>
+          <sphereGeometry args={[1, 10, 8]} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -339,6 +369,7 @@ function useMapNavigation(center: THREE.Vector3) {
       else if (e.key === "ArrowDown") mapView.panScreen(0, -step);
       else if (e.key === "+" || e.key === "=") mapView.zoomBy(0.85);
       else if (e.key === "-" || e.key === "_") mapView.zoomBy(1 / 0.85);
+      else if (e.key === "1" || e.key === "2" || e.key === "3") mapView.preset(Number(e.key) as 1 | 2 | 3);
       else if (e.key === "0") mapView.reset();
       else return;
       e.preventDefault();
@@ -486,11 +517,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
         const t = themeAt.get(c.theme);
         return (
           <group key={c.key}>
-            {t && !revealing && lit(c.key) && lit(`theme:${c.theme}`) && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(c.key) ? "#ffd98a" : c.tint} lineWidth={lit(c.key) ? 3 : 1.5} transparent opacity={dim(c.key) ? 0.12 : 0.7} />}
-            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)}>
-              <Suspense fallback={null}>
-                <StorybookAvatar avatar={c.avatar} position={[0.35, 0.15, 0]} rotation={[0, -0.4, 0]} scale={AVATAR_WORLD_SCALE * 2.2} />
-              </Suspense>
+            {t && !revealing && lit(c.key) && lit(`theme:${c.theme}`) && <MagicTrail start={world(x, z, 0.4)} end={world(t[0], t[1], 0.6)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, 2.4)} color={c.tint} strong={rings.selectedKey === c.key} />}
+            <RingIsland at={world(x, z)} kind="clue" delay={i * 0.06} animate={animate} muted={dim(c.key)} arrive={() => convergence.arrivals.get(c.key)} body={<MemoryNote shape={NOTE_SHAPE[rings.themes.find((th) => th.theme === c.theme)?.jar ?? "interest"]} color={c.tint} animate={animate} />}>
               <Token k={c.key} rings={rings} from={[c.x, c.z]} drag={drag} dim={dim(c.key)} offset={[0, -0.6, 2.2]} label={`${c.author}'s memory`}
                 face={<span className={s.bubble} style={{ ["--c" as string]: c.tint }}>{c.photo ? <img className={s.bubblePhoto} src={c.photo} alt="" /> : <img src={portraitUrl(c.avatar)} alt="" />}<q>{c.text}</q>{c.fromPhoto && <i className={s.photoBadge} title="From a photo, read privately"><CameraIcon size={11} /></i>}</span>} />
             </RingIsland>
@@ -501,7 +529,8 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
       {rings.themes.map((t, i) => {
         const [x, z] = place(t.key, t.x, t.z);
         return (
-          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)}>
+          <RingIsland key={t.key} at={world(x, z)} kind="theme" delay={0.3 + i * 0.12} animate={animate} muted={dim(t.key)} arrive={() => themeGone(t.theme)} shape={LOOKS[lookFor(t.label, t.jar)].shape} palette={LOOKS[lookFor(t.label, t.jar)].palette}>
+            <ThemeScenery look={lookFor(t.label, t.jar)} animate={animate} />
             <Jar kind={t.jar} count={t.count} scale={2.4} position={[0, 0.2, 0]} />
             <Token k={t.key} rings={rings} from={[t.x, t.z]} drag={drag} dim={dim(t.key)} offset={[0, -0.8, 3]} label={`${t.label} theme`}
               face={<span className={s.theme} style={{ ["--c" as string]: t.tint }}><b>{t.label}</b><small>{t.count} shared</small></span>} />
@@ -515,9 +544,9 @@ function Rings({ rings, animate }: { rings: RingsWorld; animate: boolean }) {
           <group key={g.key}>
             {g.themes.map((theme) => {
               const t = themeAt.get(theme);
-              return t && !revealing && lit(g.key) && lit(`theme:${theme}`) ? <QuadraticBezierLine key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, -1.2)} color={lit(g.key) ? "#ffd98a" : "#e7c98f"} lineWidth={lit(g.key) ? 3 : 1.5} transparent opacity={dim(g.key) ? 0.1 : 0.75} /> : null;
+              return t && !revealing && lit(g.key) && lit(`theme:${theme}`) ? <MagicTrail key={theme} start={world(t[0], t[1], 0.6)} end={world(x, z, 0.4)} mid={world((x + t[0]) / 2, (z + t[1]) / 2, 2.4)} color="#f2c46d" strong={rings.selectedKey === g.key} /> : null;
             })}
-            {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <QuadraticBezierLine start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, -0.6)} color="#ffd98a" lineWidth={3} />}
+            {rings.selectedListingId === g.listingId && !revealing && lit(g.key) && <MagicTrail start={world(x, z, 0.4)} end={world(0, 0, 1.2)} mid={world(x / 2, z / 2, 2.2)} color="#ffd98a" strong />}
             <RingIsland at={world(x, z)} kind="gift" delay={0.5 + i * 0.1} animate={animate} muted={dim(g.key) || !!g.faded} arrive={() => convergence.arrivals.get(g.key)}>
               <Token k={g.key} rings={rings} from={[g.x, g.z]} drag={drag} dim={dim(g.key)} offset={[0, -0.4, 2.2]} label={g.title}
                 face={<span className={`${s.gift} ${g.finalist ? s.finalist : ""} ${g.faded ? s.fadedGift : ""}`}>{g.imageUrl ? <img src={g.imageUrl} alt="" /> : <i aria-hidden><GiftIcon size={26} /></i>}<b>{g.price}</b><em>#{g.rank}</em>{(g.up > 0 || g.down > 0) && <span className={s.votes}>{g.up > 0 && <i className={s.yes}>♥ {g.up}</i>}{g.down > 0 && <i className={s.pass}>✕ {g.down}</i>}</span>}</span>} />

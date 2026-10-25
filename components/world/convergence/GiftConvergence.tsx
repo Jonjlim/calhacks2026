@@ -71,7 +71,7 @@ function tagShape() {
 const PAPER = "#fbf3e3";
 
 /** One artifact's body: a toon-lit little object with a warm glow of its own colour. */
-function buildBody(shape: ArtifactShape, color: string): THREE.Group {
+export function buildBody(shape: ArtifactShape, color: string): THREE.Group {
   const tint = paint(`conv-${color}`, { color, emissive: color, emissiveIntensity: 0.3 });
   // Paper tinted a little towards the artifact's colour, so each note reads against the pale sky.
   const paper = paint(`conv-paper-${color}`, { color: new THREE.Color(PAPER).lerp(new THREE.Color(color), 0.5), emissive: color, emissiveIntensity: 0.12, side: THREE.DoubleSide });

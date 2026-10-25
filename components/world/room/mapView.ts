@@ -101,6 +101,19 @@ class MapView {
     this.emit();
   }
 
+  /**
+   * Three named viewpoints: 1 a high overview (about 66 degrees), 2 a
+   * three-quarter exploring view (about 40) and 3 a low cinematic one (about
+   * 20) that shows island thickness, waterfalls and the far kingdom. The
+   * default framing sits near 53 degrees.
+   */
+  preset(view: 1 | 2 | 3) {
+    if (this.locked) return;
+    this.gliding = true;
+    this.target.pitch = clamp({ 1: 0.22, 2: -0.23, 3: -0.58 }[view], PITCH_MIN, PITCH_MAX);
+    this.emit();
+  }
+
   /** Back to the default overview. `instant` also snaps the eased value. */
   reset(instant = false) {
     this.gliding = !instant;

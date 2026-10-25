@@ -28,7 +28,9 @@ export function RevealHarness() {
   const [votes, setVotes] = useState<Record<string, VoteValue | undefined>>({});
   const [chosenId, setChosenId] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    setTimeOfDay("day");
+    // `?sky=sunrise|sunset|bluehour|day|night` previews a sky; the default is the room's own (sunrise).
+    const sky = new URLSearchParams(window.location.search).get("sky");
+    if (sky) setTimeOfDay(sky as Parameters<typeof setTimeOfDay>[0], { remember: false });
     setReady(true);
   }, []);
   // `?council=live` replays a recorded council run event by event, as live runs arrive.

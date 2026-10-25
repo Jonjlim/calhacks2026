@@ -63,7 +63,7 @@ export default function WorldCanvas({ reducedMotion, soundEnabled, painterlyStre
   const [quality, setQuality] = useState<WorldQuality>("high");
   const [canvasReady, setCanvasReady] = useState(false);
   const palette = paletteFor(useTimeOfDay());
-  const night = palette.time === "night";
+  const night = palette.time === "night" || palette.time === "bluehour";
   const animate = !reducedMotion;
   const markReady = useCallback(() => {
     setCanvasReady(true);

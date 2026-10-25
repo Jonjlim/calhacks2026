@@ -109,3 +109,7 @@
 /* Product pages: the catalogue frames step back so the details read cleanly. */
 .frameDecor { transition: opacity 0.35s ease; }
 .detailMode .frameDecor { opacity: 0 !important; }
+
+/* Turning a page or changing a filter is quick: the leaf slides in from the spine, no full redraw. */
+.turn { animation: pageTurn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; transform-origin: left center; }
+@keyframes pageTurn { from { opacity: 0; transform: perspective(900px) rotateY(-14deg) translateX(1.5cqw); } }

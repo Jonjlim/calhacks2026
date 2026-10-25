@@ -6,6 +6,7 @@ import { useRings } from "@/components/world/room/ringsStore";
 import type { ProductListing, PublishedClue, Recommendation } from "@/lib/contracts";
 import { formatMinor } from "@/lib/money";
 import { getPriceFreshness } from "@/lib/research/freshness";
+import { playChoose, playPencil, playTick, playWash } from "@/components/world/sfx";
 import { book, BOOK_OPEN_MS, useBookOpen } from "./bookStore";
 import { motifFor } from "./motifs";
 import s from "./book.module.css";
@@ -147,7 +148,13 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
       setReady(true);
       book.markSeen();
     }, 3500 * k);
-    return () => clearTimeout(t);
+    // Graphite while it draws, a soft wash as the color blooms.
+    playPencil(2.6 * k);
+    const wash = setTimeout(playWash, 2100 * k);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(wash);
+    };
   }, [k]);
   const instant = skipped || (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   useEffect(() => {
@@ -192,6 +199,7 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
     try {
       const res = mine === value ? await actions.clearVote(id) : await actions.castVote(id, value);
       if (!res.ok) setError(res.error.message);
+      else playTick(mine !== value && value === "up");
     } catch {
       setError("That didn’t go through. Check the connection and try again.");
     } finally {
@@ -208,6 +216,7 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
       return;
     }
     // The chosen gift's page lifts, then the book folds shut and the reveal takes over.
+    playChoose();
     setLifted(id);
     setTimeout(() => book.hide(), 950);
   };
@@ -282,7 +291,7 @@ function Pages({ data, actions, isOrganizer, onChoose, leaving }: { data: RoomDa
                 {visible.length === 0 ? (
                   <p className={s.empty}>{filter.kind === "saved" ? "Nothing saved yet. Save a gift you like and it will wait here." : filter.kind === "passed" ? "Nothing passed on. Gifts you pass on can be brought back from here." : items.length ? "No gifts here." : "When the council has researched gifts, they will appear on these pages."}</p>
                 ) : (
-                  <ul className={s.grid}>
+                  <ul key={`${filter.kind}:${current}`} className={`${s.grid} ${s.turn}`}>
                     {pageItems.map((i) => (
                       <li key={i.listing.id}>
                         <button type="button" className={`${s.card} ${i.myVote === "down" ? s.passed : ""} ${i.selected ? s.chosen : ""} ${lifted === i.listing.id ? s.lift : ""}`} onClick={() => showDetail(i.listing.id)} aria-label={`${i.listing.title}, ${priceOf(i.listing)}${i.myVote === "up" ? ", saved" : i.myVote === "down" ? ", passed on" : ""}${i.selected ? ", chosen as our gift" : ""}`}>
@@ -326,7 +335,7 @@ function Detail({ item, clues, isOrganizer, busy, canAct, onBack, onVote, onChoo
   useEffect(() => setNow(Date.now()), []);
   const freshness = now ? getPriceFreshness(listing, now) : null;
   return (
-    <article className={s.detail}>
+    <article className={`${s.detail} ${s.turn}`}>
       <button type="button" className={s.back} onClick={onBack}>All gifts</button>
       <h3 className={s.dTitle}>{listing.title}</h3>
       <p className={s.dPrice}>

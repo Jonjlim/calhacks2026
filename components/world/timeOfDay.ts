@@ -6,7 +6,19 @@ import * as THREE from "three";
  * Every colour that changes between the two lives here so sky, fog, light and
  * clouds can never disagree.
  */
-export type TimeOfDay = "day" | "night";
+export type TimeOfDay = "day" | "night" | "sunrise" | "sunset" | "bluehour";
+
+/** The skies a person can pick, in the order the sky control cycles through them. */
+export const SKIES: { id: TimeOfDay; label: string }[] = [
+  { id: "sunrise", label: "Rose-gold sunrise" },
+  { id: "sunset", label: "Lavender sunset" },
+  { id: "bluehour", label: "Enchanted blue hour" },
+  { id: "day", label: "Day" },
+  { id: "night", label: "Night" },
+];
+
+/** Whether a sky is a dark one, for the page chrome that has only a light and a dark look. */
+export const isDarkSky = (time: TimeOfDay) => time === "night" || time === "bluehour";
 
 export interface ScenePalette {
   time: TimeOfDay;
@@ -107,10 +119,53 @@ export const NIGHT: ScenePalette = {
   distant: { mountainTint: "#646ca4", hazeTint: "#3f4880", hazeOpacity: 0.7 },
 };
 
+/**
+ * Rose-gold sunrise: the welcoming default for exploring. Peach horizon, blush
+ * cloud highlights, pale lavender shadows, soft golden key light with a warm
+ * rim on the islands.
+ */
+export const SUNRISE: ScenePalette = {
+  ...DAY,
+  time: "sunrise",
+  clearColor: "#f0cfd4",
+  fog: { color: "#f2d2d4", near: 30, far: 180 },
+  sky: { zenith: "#93a9e0", mid: "#f0c8d6", horizon: "#ffdcbc", below: "#e3b6c6", glow: "#ffc79a", glowStrength: 1.35, orbDirection: new THREE.Vector3(0.38, 0.14, -0.91).normalize(), disc: 0, stars: 0 },
+  light: { hemiSky: "#ffdad2", hemiGround: "#b69bc4", hemiIntensity: 0.92, key: "#ffc58f", keyIntensity: 3.1, bounce: "#f4b9b8", bounceIntensity: 1.0, rim: "#ffb7c9", rimIntensity: 0.75 },
+  cloudTint: "#ffe6e2",
+  deckTint: "#f7dce1",
+  distant: { mountainTint: "#e9c6d8", hazeTint: "#f3d5d8", hazeOpacity: 1 },
+};
+
+/** Lavender sunset: for gift discovery. Dusty violet shadows, coral highlights, amber sun, deeper cloud valleys. */
+export const SUNSET: ScenePalette = {
+  ...DAY,
+  time: "sunset",
+  clearColor: "#b690b8",
+  fog: { color: "#b78cbb", near: 28, far: 170 },
+  sky: { zenith: "#5d4f9c", mid: "#b27fb8", horizon: "#ffb18a", below: "#8b6aa8", glow: "#ff9a6b", glowStrength: 1.45, orbDirection: new THREE.Vector3(0.52, 0.1, -0.85).normalize(), disc: 0, stars: 0 },
+  light: { hemiSky: "#cdaaea", hemiGround: "#6c4e8e", hemiIntensity: 0.86, key: "#ffad77", keyIntensity: 3.3, bounce: "#c47aa8", bounceIntensity: 0.85, rim: "#ff9cb2", rimIntensity: 0.85 },
+  cloudTint: "#f3c6d8",
+  deckTint: "#b898c9",
+  distant: { mountainTint: "#9d7ab6", hazeTint: "#c9a1c9", hazeOpacity: 0.95 },
+};
+
+/** Enchanted blue hour: special reveals. Periwinkle and indigo, a soft pink horizon, warm lantern light, a few stars. */
+export const BLUEHOUR: ScenePalette = {
+  ...NIGHT,
+  time: "bluehour",
+  clearColor: "#4c5aa0",
+  fog: { color: "#5964ac", near: 30, far: 175 },
+  sky: { zenith: "#2b3a8d", mid: "#5b6cc1", horizon: "#f2a9ba", below: "#3b4a90", glow: "#ffbacb", glowStrength: 0.95, orbDirection: new THREE.Vector3(0.4, 0.1, -0.91).normalize(), disc: 0, stars: 0.35 },
+  light: { hemiSky: "#90a2e8", hemiGround: "#3b3571", hemiIntensity: 0.95, key: "#ffcaa2", keyIntensity: 1.9, bounce: "#6b65b2", bounceIntensity: 0.6, rim: "#b9c5ff", rimIntensity: 0.85 },
+  cloudTint: "#aab4e8",
+  deckTint: "#7581c5",
+  distant: { mountainTint: "#8189c9", hazeTint: "#6b75b9", hazeOpacity: 0.8 },
+};
+
 /** `?time=day` / `?time=night` in the URL, or null when the URL does not say. */
 export function readTimeOfDay(search: string): TimeOfDay | null {
   const value = new URLSearchParams(search).get("time");
-  return value === "day" || value === "night" ? value : null;
+  return SKIES.some((k) => k.id === value) ? (value as TimeOfDay) : null;
 }
 
-export const paletteFor = (time: TimeOfDay): ScenePalette => (time === "day" ? DAY : NIGHT);
+export const paletteFor = (time: TimeOfDay): ScenePalette => ({ day: DAY, night: NIGHT, sunrise: SUNRISE, sunset: SUNSET, bluehour: BLUEHOUR })[time];

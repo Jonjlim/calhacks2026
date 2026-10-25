@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { playBookOpen } from "@/components/world/sfx";
 
 /**
  * The Book of Possibilities: open or shut, and what it was opened for. Local
@@ -41,6 +42,7 @@ class BookStore {
     this.openedAt = performance.now();
     this.theme = opts.theme ?? null;
     this.listingId = opts.listingId ?? null;
+    playBookOpen();
     this.emit();
   }
 

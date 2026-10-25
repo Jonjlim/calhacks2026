@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useSyncExternalStore } from "react";
-import { NIGHT, readTimeOfDay, type ScenePalette, type TimeOfDay } from "./timeOfDay";
+import { isDarkSky, NIGHT, readTimeOfDay, SKIES, type ScenePalette, type TimeOfDay } from "./timeOfDay";
 
 /** Provided inside the R3F Canvas so every scene component reads the same time-of-day palette. */
 export const ScenePaletteContext = createContext<ScenePalette>(NIGHT);
@@ -19,7 +19,9 @@ const listeners = new Set<() => void>();
 
 /** Lets CSS (text wash, loading backdrop, chrome) follow the scene. */
 function applyToDocument(time: TimeOfDay) {
-  document.documentElement.dataset.time = time;
+  // Page chrome has a light and a dark look; the exact sky is also kept for anything that wants it.
+  document.documentElement.dataset.time = isDarkSky(time) ? "night" : "day";
+  document.documentElement.dataset.sky = time;
 }
 
 function initialTime(): TimeOfDay {
@@ -27,7 +29,7 @@ function initialTime(): TimeOfDay {
   if (fromUrl) return fromUrl;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "day" || stored === "night") return stored;
+    if (SKIES.some((k) => k.id === stored)) return stored as TimeOfDay;
   } catch {
     // Storage can be blocked; fall back to the default.
   }
@@ -42,12 +44,22 @@ function getTime(): TimeOfDay {
   return current;
 }
 
-export function setTimeOfDay(time: TimeOfDay) {
+/** Whether the person (or the URL) has chosen a sky, as opposed to the default. */
+export function hasChosenSky(): boolean {
+  if (readTimeOfDay(window.location.search)) return true;
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function setTimeOfDay(time: TimeOfDay, opts: { remember?: boolean } = {}) {
   if (time === getTime()) return;
   current = time;
   applyToDocument(time);
   try {
-    localStorage.setItem(STORAGE_KEY, time);
+    if (opts.remember !== false) localStorage.setItem(STORAGE_KEY, time);
   } catch {
     // ignore
   }

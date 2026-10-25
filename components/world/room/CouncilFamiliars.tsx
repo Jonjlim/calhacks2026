@@ -4,12 +4,13 @@ import { Html } from "@react-three/drei";
 import { type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { useConvergenceActive } from "@/components/convergence/convergenceClock";
+import { useConvergenceActive, useConvergenceState } from "@/components/convergence/convergenceClock";
 import { CouncilMember } from "@/components/council/CouncilMember";
 import { COUNCIL_LABEL, COUNCIL_TINT, type CouncilClip, poseFor } from "@/lib/council/animation";
 import { COUNCIL_ACTORS, type CouncilActor, type CouncilMemberState, reduceCouncil } from "@/lib/council/contracts";
 import type { RoomWorld } from "../IslandWorldProvider";
 import { sparkleTexture } from "../painterly/textures";
+import { playCouncilTick } from "../sfx";
 import { platformTop } from "../props/Stonework";
 import { GIFT_SPOT } from "../sceneConfig";
 import { ringBase } from "./stageLayout";
@@ -150,7 +151,7 @@ function Trail({ from, to, tint, startedAt }: { from: THREE.Object3D; to: THREE.
   );
 }
 
-function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
+function Companion({ actor, member, slot, bubble, speaking, animate, mood, quiet, focused, onPick, onTrail }: { actor: CouncilActor; member: CouncilMemberState; slot: number; bubble: Bubble | null; speaking: boolean; animate: boolean; /** During the gift reveal: how they feel about it. */ mood?: CouncilClip; quiet: boolean; /** The branch in focus concerns this companion (memories: Archivist, themes: Muse, gifts: Scout). */ focused?: boolean; onPick?: (actor: CouncilActor) => void; onTrail: (actor: CouncilActor, group: THREE.Group) => void }) {
   const camera = useThree((st) => st.camera) as THREE.PerspectiveCamera;
   const size = useThree((st) => st.size);
   const group = useRef<THREE.Group>(null);
@@ -205,10 +206,11 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
     const halfH = DEPTH * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
     const halfW = halfH * camera.aspect;
     // Steps out toward the world a little for news, or while hovered or working.
-    st.out += (((speaking ? 1 : 0) + (hover ? 0.8 : 0) + (working ? 0.4 : 0)) - st.out) * k;
+    st.out += (((speaking ? 1 : 0) + (hover ? 0.8 : 0) + (working ? 0.4 : 0) + (focused ? 0.6 : 0)) - st.out) * k;
     if (bubble && bubble.at > st.lastAt) {
       st.lastAt = bubble.at;
       st.react = t;
+      if (speaking) playCouncilTick();
     }
     const hop = Math.max(0, Math.sin((t - st.react) * 7)) * Math.exp(-(t - st.react) * 2.2) * (t - st.react < 1.4 ? 1 : 0);
     // Hugs the left edge of the window: a few pixels of margin plus half a companion, whatever the window size, and corrected for the
@@ -219,13 +221,14 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
     const ny = place + (animate ? Math.sin(t * 1.1 + slot * 1.9) * 0.012 : 0) + hop * 0.035;
     g.position.copy(camera.position).addScaledVector(_fwd, DEPTH).addScaledVector(_right, nx * halfW).addScaledVector(_up, ny * halfH);
     g.quaternion.copy(camera.quaternion);
-    g.rotateY(0.4 + (hover ? 0.2 : 0));
+    // Turned a little toward the world, and toward the gift while it is being revealed.
+    g.rotateY(0.4 + (hover ? 0.2 : 0) + (mood ? 0.55 : 0));
     // Keeps its on-screen size whatever the field of view or window height.
     st.scale = (HEIGHT_SHARE * 2 * halfH) / MODEL_UNITS * (narrow ? 1.15 : 1) * (1 + st.out * 0.12);
     g.scale.setScalar(st.scale / 2.3);
     const sc = glow.current;
     if (sc) {
-      sc.visible = working || failed || hover || hop > 0.02;
+      sc.visible = working || failed || hover || !!focused || hop > 0.02;
       const pulse = working ? 1 + 0.15 * Math.sin(t * 5 + slot) : 1;
       sc.scale.setScalar((working ? 3.4 : 2.5) * pulse);
       glowMat.opacity = working ? 0.7 : failed ? 0.55 : hover ? 0.4 : 0.45;
@@ -247,7 +250,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
     <group ref={group}>
       <sprite ref={glow} material={glowMat} position={[0, 1.6, -0.6]} visible={false} />
       <Suspense fallback={null}>
-        <CouncilMember state={member} position={[0, 0, 0]} scale={2.3} animate={animate} clipOverride={hover && member.status === "idle" ? "wave" : member.status === "idle" ? gesture : undefined} />
+        <CouncilMember state={member} position={[0, 0, 0]} scale={2.3} animate={animate} clipOverride={mood ?? (hover && member.status === "idle" ? "wave" : member.status === "idle" ? gesture : undefined)} />
       </Suspense>
       {/* A generous invisible target: hover for the name, click for the log, without disturbing the map under it. */}
       <mesh position={[0, 1.8, 0]} onPointerOver={over} onPointerOut={out} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onPick?.(actor); }}>
@@ -257,7 +260,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
       {/* Beside the companion, toward the world: its one bubble, or its name and status on hover. */}
       <Html position={[2.2, 2.2, 0]} zIndexRange={[38, 30]} style={{ pointerEvents: "none", transform: "translateY(-50%)" }}>
         <div data-map-token className={s.dock}>
-          {((speaking && bubble) || hover) && (
+          {!quiet && ((speaking && bubble) || hover) && (
             <p role="status" className={`${s.councilBubble} ${s.dockBubble} ${speaking && bubble ? s[bubble.tone] : ""}`} style={{ ["--tint" as string]: tint }}>
               {hover && <b className={s.dockName}>{COUNCIL_LABEL[actor]}</b>}
               {speaking && bubble ? bubble.text : poseFor(member).caption}
@@ -265,7 +268,7 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
           )}
         </div>
       </Html>
-      {active && !speaking && !hover && (
+      {!quiet && active && !speaking && !hover && (
         <Html position={[1.6, 3.4, 0]} style={{ pointerEvents: "none" }}>
           <i data-map-token className={s.statusDot} style={{ background: tint }} aria-hidden />
         </Html>
@@ -276,7 +279,13 @@ function Companion({ actor, member, slot, bubble, speaking, animate, onPick, onT
 
 export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate: boolean }) {
   const revealing = useConvergenceActive();
+  const conv = useConvergenceState();
+  // While the present is revealed they watch with it: excited as it charges, cheering as it bursts.
+  const mood: CouncilClip | undefined = !revealing ? undefined : conv === "charging" ? "excited_hop" : conv === "burst" || conv === "revealing" || conv === "complete" ? "celebrate" : undefined;
   const rings = useRings();
+  // Choosing something on the map nudges the companion it concerns; the others stay quiet.
+  const focusKey = rings?.selectedKey ?? "";
+  const focusActor: CouncilActor | null = focusKey.startsWith("clue:") ? "archivist" : focusKey.startsWith("theme:") ? "muse" : focusKey.startsWith("gift:") ? "scout" : null;
   const members = useMemo(() => reduceCouncil(world.events), [world.events]);
   const bubbles = useCouncilBubbles(members);
   const groups = useRef<Partial<Record<CouncilActor, THREE.Group>>>({});
@@ -286,11 +295,10 @@ export function CouncilFamiliars({ world, animate }: { world: RoomWorld; animate
   // A trail only follows a live event whose object is clear, and only for the one that is speaking.
   const trail = speaker && bubbles[speaker]!.at > 0 && bubbles[speaker]!.tone !== "failed" ? { actor: speaker, at: bubbles[speaker]!.at } : null;
   const target = trail ? trailTarget(trail.actor, rings) : null;
-  if (revealing) return null;
   return (
     <group>
       {COUNCIL_ACTORS.map((actor, i) => (
-        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={speaker === actor} animate={animate} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
+        <Companion key={actor} actor={actor} member={members[actor]} slot={i} bubble={bubbles[actor]} speaking={speaker === actor && !revealing} animate={animate} mood={mood} quiet={revealing} focused={focusActor === actor} onTrail={registered} onPick={world.onPick ? (a) => world.onPick?.({ kind: "agent", actor: a }) : undefined} />
       ))}
       {trail && target && groups.current[trail.actor] && <Trail key={`${trail.actor}:${trail.at}`} from={groups.current[trail.actor]!} to={target} tint={COUNCIL_TINT[trail.actor]} startedAt={trail.at} />}
     </group>

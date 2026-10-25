@@ -14,7 +14,9 @@ import { convergence, useConvergenceActive, useConvergenceState } from "@/compon
 import { QrModulesSvg } from "@/components/unwrap/QrModulesSvg";
 import { type ArtifactInput, buildArtifacts } from "@/lib/convergence/artifacts";
 import { type PickTarget, useIslandWorld } from "@/components/world/IslandWorldProvider";
-import { setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { sfx } from "@/components/world/sfx";
+import { hasChosenSky, setTimeOfDay, useTimeOfDay } from "@/components/world/scenePalette";
+import { isDarkSky, SKIES } from "@/components/world/timeOfDay";
 import { mapView } from "@/components/world/room/mapView";
 import { ringsStore } from "@/components/world/room/ringsStore";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -79,6 +81,9 @@ function MoreIcon() {
 function BookIcon() {
   return <svg {...ICON}><path d="M4 5.5C4 5 4.5 4.5 5 4.5H11V19.5H5C4.5 19.5 4 19 4 18.5z" /><path d="M20 5.5C20 5 19.5 4.5 19 4.5H13V19.5H19C19.5 19.5 20 19 20 18.5z" /><path d="M7 8.5h2.5M7 11.5h2.5M14.5 8.5H17M14.5 11.5H17" /></svg>;
 }
+function CheckIcon() {
+  return <svg {...ICON} width={18} height={18}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+}
 function EnvelopeIcon() {
   return <svg {...ICON}><rect x="3.5" y="5.5" width="17" height="13" rx="2" /><path d="M4 7l8 6 8-6" /></svg>;
 }
@@ -91,6 +96,11 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
   const reducedMotion = useReducedMotion() ?? false;
   const [drawer, setDrawer] = useState<Drawer>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => sfx.setEnabled(soundEnabled), [soundEnabled]);
+  // The room opens under a warm rose-gold sunrise unless the person has picked a sky of their own.
+  useEffect(() => {
+    if (!hasChosenSky()) setTimeOfDay("sunrise", { remember: false });
+  }, []);
 
   // --- Stage: the gift map first (D19); tower and garden stay reachable. Kept in the URL for refresh / deep links.
   // Resolved after mount (the URL isn't known while rendering on the server), so the first glide starts from the right place.
@@ -277,7 +287,12 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       <button className="btn-primary h-11 px-5" onClick={() => setDrawer({ kind: "gifts" })}>Gift ideas · {data.recommendations.length}</button>
     );
   } else if (phase === "approve" || phase === "done") {
-    primary = <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>{phase === "done" ? "All approved ✓" : "Review shares"}</button>;
+    // "All approved" is a status, not something to press: it reads as a quiet badge, and the shares stay one tap away in the present or the menu.
+    primary = phase === "done" ? (
+      <span role="status" className="flex h-11 items-center gap-2 rounded-full bg-[#dcebdc] px-4 text-[14px] font-semibold text-[#3d6b4a]"><CheckIcon /> All approved</span>
+    ) : (
+      <button className="btn-primary h-11 px-5" onClick={() => (stage === "map" ? map.openBox() : setDrawer({ kind: "shares" }))}>Review shares</button>
+    );
   }
 
   const status = !run
@@ -317,16 +332,24 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
       <div className={`absolute top-5 right-5 max-[640px]:top-[88px] flex flex-col items-end gap-2 transition-opacity duration-500 ${engaged ? "pointer-events-none opacity-0" : "pointer-events-auto"}`}>
         <div className="flex gap-2">
           <button className={iconChip} onClick={toggleSound} aria-pressed={soundEnabled} aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"} title={soundEnabled ? "Sound on" : "Sound off"}><SoundIcon on={soundEnabled} /></button>
-          <button className={iconChip} onClick={() => setTimeOfDay(time === "day" ? "night" : "day")} aria-label={time === "day" ? "Switch to night" : "Switch to day"} title={time === "day" ? "Day" : "Night"}><DayIcon day={time === "day"} /></button>
+          <button className={iconChip} onClick={() => setTimeOfDay(SKIES[(SKIES.findIndex((k) => k.id === time) + 1) % SKIES.length]!.id)} aria-label={`Change the sky. Now: ${SKIES.find((k) => k.id === time)?.label}`} title={`Sky: ${SKIES.find((k) => k.id === time)?.label}. Click for the next.`}><DayIcon day={!isDarkSky(time)} /></button>
           {stage === "map" && !preview && <button className={iconChip} onClick={() => book.show()} aria-label="Open the Book of Possibilities" title="Book of Possibilities (B)"><BookIcon /></button>}
           {stage === "map" && (
-            <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, + / - zoom, 0 returns.">
+            <button className={iconChip} onClick={() => mapView.reset()} aria-label="Return to the overview" title="Return to the overview. Drag to look around, right-drag or Shift-drag to move, scroll to zoom. Keys: arrows move, Shift + arrows or Q / E turn, 1 / 2 / 3 high, three-quarter and low views, + / - zoom, 0 returns.">
               <CompassIcon />
             </button>
           )}
         </div>
         {data.invitePath && <InviteCard path={data.invitePath} />}
       </div>
+
+      {/* In a branch: one way back, wherever the camera has wandered. */}
+      {stage === "map" && !engaged && !bookOpen && map.rings?.selectedKey && map.rings.selectedKey !== "box" && (
+        <button type="button" className="paper-card pointer-events-auto absolute top-5 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full px-4 py-2 text-[13.5px] font-semibold text-dusk shadow-sm" onClick={() => { map.rings?.onSelect(null); mapView.reset(); }}>
+          <svg {...ICON} width={16} height={16}><path d="M14.5 6l-6 6 6 6" /></svg>
+          Back to the overview
+        </button>
+      )}
 
       {/* The memory game floats over the tower while the room is still gathering. */}
       {actions && stage === "tower" && !drawer && (phase === "collect" || phase === "review") && (
@@ -368,6 +391,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
                 {stage === "map" && selection && isOrganizer && !preview && seen && <button role="menuitem" className={menuItem} onClick={() => startReveal(false)}>Replay reveal</button>}
                 {stage === "map" && map.tools && <div className="flex flex-col gap-1 [&>button]:!w-full [&>button]:!justify-start">{map.tools}</div>}
                 {stage === "map" && <button role="menuitem" className={menuItem} onClick={() => setStage("garden")}>Back to the present</button>}
+                {stage === "map" && phase === "done" && <button role="menuitem" className={menuItem} onClick={() => map.openBox()}>Review shares</button>}
                 {!preview && actions && <button role="menuitem" className={menuItem} onClick={() => setDrawer({ kind: "notes" })}>Backstage: notes, agents and sharing</button>}
               </div>
             )}
