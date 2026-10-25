@@ -68,8 +68,8 @@ export function CouncilMember({ state, position, rotationY = 0, scale = 1, anima
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
     });
-    // Slimmer and cuter: a narrower body (its flippers and face come with it), set on the clone only.
-    if (capsule) c.scale.set(c.scale.x * 0.8, c.scale.y * 1.04, c.scale.z * 0.8);
+    // Slimmer and cuter: a narrower, rounder body (its flippers and face come with it), set on the clone only.
+    if (capsule) c.scale.set(c.scale.x * 0.82, c.scale.y * 0.97, c.scale.z * 0.82);
     return c;
   }, [scene, state.actor]);
   const antenna = useMemo(() => instance.getObjectByName("Antenna") ?? null, [instance]);
