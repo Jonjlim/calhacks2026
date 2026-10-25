@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import type { AvatarId } from "@/components/characters/StorybookAvatar";
 import s from "@/components/world/room/gift-rings.module.css";
+import { MapIcon } from "@/components/world/room/MapIcon";
 import type { AppError, GiftSelection, Participant, ProductListing, ProposalView } from "@/lib/contracts";
 import { formatMinor, parseMajorToMinor } from "@/lib/money";
 import { portraitUrl } from "@/lib/room/avatars";
@@ -15,7 +16,7 @@ import type { RoomActions } from "./types";
  * Same rules as ProposalPanel: never shows anyone else's limit, and an
  * approval is a pledge, not a charge.
  */
-export function BoxPanel({ proposal, selection, listing, participants, me, isOrganizer, actions, avatarOf, colorOf, why, onWhy, onClose }: {
+export function BoxPanel({ proposal, selection, listing, participants, me, isOrganizer, actions, avatarOf, colorOf, why, onWhy, onClose, onReveal, revealLabel }: {
   proposal: ProposalView;
   selection: GiftSelection | null;
   listing?: ProductListing;
@@ -28,6 +29,9 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
   why: boolean;
   onWhy(): void;
   onClose(): void;
+  /** The cinematic reveal of the chosen gift (see components/convergence). */
+  onReveal?(): void;
+  revealLabel?: string;
 }) {
   const { revision, approvals, myLimit } = proposal;
   const [limitInput, setLimitInput] = useState(myLimit ? (myLimit.amountMinor / 100).toFixed(2) : "");
@@ -80,7 +84,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
 
       {selection ? (
         <div className={s.boxGift}>
-          {listing?.imageUrl ? <img src={listing.imageUrl} alt="" /> : <i aria-hidden>🎁</i>}
+          {listing?.imageUrl ? <img src={listing.imageUrl} alt="" /> : <i aria-hidden><MapIcon name="present" size={30} /></i>}
           <div>
             <b>{selection.listingSnapshot.title}</b>
             <a href={selection.listingSnapshot.sourceUrl} target="_blank" rel="noreferrer">{revision ? formatMinor(revision.payableTotalMinor, revision.currency) : selection.listingSnapshot.priceMinor !== undefined ? formatMinor(selection.listingSnapshot.priceMinor) : "Price unknown"} · see listing ↗</a>
@@ -98,7 +102,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
         <>
           <div className={s.boxMeter} aria-label={`${formatMinor(pledgedMinor)} of ${formatMinor(revision.payableTotalMinor)} pledged`}>
             <i style={{ width: `${revision.payableTotalMinor ? (pledgedMinor / revision.payableTotalMinor) * 100 : 0}%` }} />
-            <span>{everyone ? "Everyone’s in ✓" : `${formatMinor(pledgedMinor)} of ${formatMinor(revision.payableTotalMinor)} pledged`}</span>
+            <span>{everyone ? "Everyone’s in" : `${formatMinor(pledgedMinor)} of ${formatMinor(revision.payableTotalMinor)} pledged`}</span>
           </div>
           <ul className={s.boxPeople}>
             {revision.shares.map((share) => {
@@ -108,7 +112,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
                   <img src={portraitUrl(avatarOf(share.participantId))} alt="" />
                   <b>{name(share.participantId)}</b>
                   <span>{formatMinor(share.amountMinor)}</span>
-                  <small>{yes ? "✓ yes" : "waiting"}</small>
+                  <small>{yes ? <><MapIcon name="check" size={11} />yes</> : "waiting"}</small>
                 </li>
               );
             })}
@@ -119,7 +123,7 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
       {actions && revision && collecting && (
         myApproval?.status === "approved" ? (
           <div className={s.boxActions}>
-            <p className={s.boxMine}>You’re in{myShare ? ` for ${formatMinor(myShare.amountMinor)}` : ""} ✓</p>
+            <p className={s.boxMine}>You’re in{myShare ? ` for ${formatMinor(myShare.amountMinor)}` : ""} <MapIcon name="check" size={14} /></p>
             <button type="button" className={s.boxGhost} disabled={withdraw.pending} onClick={() => withdraw.run(revision.id)}>Take back my yes</button>
           </div>
         ) : (
@@ -143,8 +147,10 @@ export function BoxPanel({ proposal, selection, listing, participants, me, isOrg
         <p className={s.boxWarn} role="alert">{(limitError ?? saveLimit.error ?? approve.error ?? withdraw.error ?? clear.error)!.message}</p>
       )}
 
+      {selection && onReveal && <button type="button" className={s.boxApprove} onClick={onReveal}>{revealLabel ?? "Reveal our gift"}</button>}
+
       <footer>
-        {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "✨ Why this gift?"}</button>}
+        {selection && <button type="button" className={s.boxGhost} aria-pressed={why} onClick={onWhy}>{why ? "Hide the path" : "Why this gift?"}</button>}
         {actions && isOrganizer && selection && <button type="button" className={s.boxGhost} disabled={clear.pending} onClick={() => clear.run()}>Change gift</button>}
       </footer>
       <small className={s.boxFine}>Approving is a pledge. No card is charged and no order is placed.</small>

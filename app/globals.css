@@ -267,3 +267,11 @@ body {
   background-size: 5px 5px;
   box-shadow: inset 0 0 2.2em rgba(160, 110, 60, 0.28);
 }
+
+/* The gift reveal takes the stage: the map's labels, rings and tokens step back while it plays. */
+html[data-convergence="on"] [data-map-token],
+html[data-convergence="on"] [data-map-ui] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.5s ease;
+}

@@ -30,8 +30,11 @@ export function signalLabel(signals: readonly TrendSignal[]): string {
 
 /**
  * Places up to five suggestions in a small fan at the source memory's angle,
- * halfway between the theme ring and the gift ring. Passed ideas stay; the map fades them.
+ * between the theme ring and the gift ring. They step to either side of that
+ * angle rather than sitting on it, because the theme's label cloud sits right
+ * there; a fifth goes nearer the gift ring. Passed ideas stay; the map fades them.
  */
+const FAN = [[-13, 0], [13, 0], [-19.5, 0.4], [19.5, 0.4], [0, -0.9]] as const;
 export function layoutTrendIdeas(
   trendJobId: string,
   suggestions: readonly TrendSuggestion[],
@@ -39,9 +42,10 @@ export function layoutTrendIdeas(
 ): TrendIdeaNode[] {
   const visible = suggestions.slice(0, 5);
   const angle = source ? (Math.atan2(source.z, source.x / 1.5) * 180) / Math.PI : 300;
-  const radius = (RING_RADII.theme + RING_RADII.gift) / 2 + 0.6;
+  const radius = RING_RADII.gift + 0.9;
   return visible.map((s, i) => {
-    const [x, z] = ringPoint(angle + (i - (visible.length - 1) / 2) * 14, radius + (i % 2) * 1.1);
+    const [offset, step] = FAN[i]!;
+    const [x, z] = ringPoint(angle + offset, radius + step);
     return { key: trendKey(trendJobId, s.query), trendJobId, query: s.query, sourceUrl: s.sourceUrl, signal: signalLabel(s.signals), x, z };
   });
 }

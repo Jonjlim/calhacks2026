@@ -10,7 +10,7 @@ const LABEL: Record<MapCursorMode, string> = {
   gift: "+ gift idea",
   box: "open the box",
   node: "open",
-  pan: "moving",
+  pan: "looking around",
   drag: "drag to vote",
   ui: "",
 };

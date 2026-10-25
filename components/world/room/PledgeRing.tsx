@@ -10,6 +10,7 @@ import { platformTop } from "../props/Stonework";
 import { GIFT_SPOT } from "../sceneConfig";
 import { emitGiftPop } from "../worldEvents";
 import s from "./gift-rings.module.css";
+import { MapIcon } from "./MapIcon";
 
 /**
  * The shared yes, drawn above the island's present: one arc per friend,
@@ -123,7 +124,7 @@ export function PledgeRing({ pledge, animate }: { pledge: PledgeWorld; animate: 
               <span className={`${s.pledgeFace} ${seg.status === "approved" ? s.pledgeYes : ""}`} style={{ ["--who" as string]: seg.color }}>
                 <img src={portraitUrl(seg.avatar)} alt="" />
                 <b>{seg.amountLabel}</b>
-                <i aria-label={seg.status}>{seg.status === "approved" ? "✓" : seg.status === "pending" ? "…" : "↺"}</i>
+                <i aria-label={seg.status}><MapIcon name={seg.status === "approved" ? "check" : seg.status === "pending" ? "wait" : "redo"} size={12} /></i>
               </span>
             </Html>
           );

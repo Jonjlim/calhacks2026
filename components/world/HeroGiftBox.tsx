@@ -19,6 +19,10 @@ import { GiftUnwrap, LID_OPEN_ANGLE } from "./unwrap/GiftUnwrap";
 import { LobbySpirits } from "./unwrap/LobbySpirits";
 import { RIBBON_SWAP, RibbonUnravel } from "./unwrap/RibbonUnravel";
 import { progress, span, UNWRAP_TIMES, unwrapClock } from "@/components/unwrap/unwrapTimeline";
+import { convergence } from "@/components/convergence/convergenceClock";
+import { type Artifact, buildArtifacts, filledAt } from "@/lib/convergence/artifacts";
+import { type GiftChoreography, giftChoreography, smoother, span as cspan } from "@/lib/convergence/timeline";
+import { GiftConvergence } from "./convergence/GiftConvergence";
 import { emitGiftPop } from "./worldEvents";
 import { GiftTag } from "./giftTag/GiftTag";
 import { giftTag, settleSwing, tugCurves, useGiftTagEnabled } from "./giftTag/giftTagStore";
@@ -177,6 +181,12 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
   const bands = useRef<THREE.Group>(null);
   const tails = useRef<THREE.Group>(null);
   const sideTail = useRef<THREE.Group>(null);
+  const bandXMesh = useRef<THREE.Mesh>(null);
+  const bandZMesh = useRef<THREE.Mesh>(null);
+  const tailFrontMesh = useRef<THREE.Mesh>(null);
+  const tailSideMesh = useRef<THREE.Mesh>(null);
+  const convCache = useRef<{ run: number; artifacts: Artifact[] }>({ run: -1, artifacts: [] });
+  const convWas = useRef(false);
   const tagEnabled = useGiftTagEnabled();
   const tagTug = useRef(0);
   const sparkles = useRef<SparkleHandle>(null);
@@ -200,7 +210,9 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     paperMat.emissiveIntensity = 0;
     ribbonMat.emissive.copy(GLOW);
     ribbonMat.emissiveIntensity = 0;
-  }, [paperMat, ribbonMat]);
+    linerMat.emissive.copy(GLOW);
+    linerMat.emissiveIntensity = 0;
+  }, [paperMat, ribbonMat, linerMat]);
 
   // Handmade imperfection: soften the machined edges of the box a touch.
   const boxRef = useRef<THREE.Mesh>(null);
@@ -231,10 +243,12 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       invalidate();
       raf = performance.now() < until ? requestAnimationFrame(loop) : 0;
     };
-    return unwrapClock.subscribe(() => {
+    const kick = () => {
       until = performance.now() + 700;
       if (!raf) loop();
-    });
+    };
+    const offs = [unwrapClock.subscribe(kick), convergence.subscribe(kick)];
+    return () => offs.forEach((off) => off());
   }, [animate, invalidate]);
 
   useFrame(({ clock }, dt) => {
@@ -299,6 +313,12 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     }
     ribbonMat.emissiveIntensity = tug.glow * 0.2;
     paperMat.emissiveIntensity = tug.glow * 0.08;
+    const warm = convergence.active ? giftChoreography(convergence.t, filledAt(convCache.current.artifacts, convergence.t)).glow : 0;
+    if (warm > 0) {
+      ribbonMat.emissiveIntensity = Math.max(ribbonMat.emissiveIntensity, warm * 0.3);
+      paperMat.emissiveIntensity = Math.max(paperMat.emissiveIntensity, warm * 0.1);
+    }
+    linerMat.emissiveIntensity = warm * 0.4;
     if (sideTail.current) {
       // The tail lifts away from the box as the tag pulls on it, and ripples when the tag first swings.
       const kick = settleSwing(now - giftTag.revealAt, animate);
@@ -319,12 +339,46 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       spin = 0;
       lift = tug.hop * 0.07;
     }
+
+    // --- The Great Gift Convergence (see convergence/): open, receive, close, wrap, rise, shake, burst. ---
+    let cv: GiftChoreography | null = null;
+    if (convergence.active && !chapter) {
+      if (convCache.current.run !== convergence.run) convCache.current = { run: convergence.run, artifacts: buildArtifacts(convergence.inputs).artifacts };
+      cv = giftChoreography(convergence.t, filledAt(convCache.current.artifacts, convergence.t));
+      // Once the reveal is closed the present comes back, wrapped, to its pedestal.
+      const back = convergence.leaving ? smoother(cspan(convergence.exit, 0.35, 1.15)) : 0;
+      const presence = convergence.leaving ? back : cv.presence;
+      sy = cv.scaleY * presence;
+      sxz = cv.scaleXZ * presence;
+      lift = convergence.leaving ? 0 : cv.lift;
+      spin = 0;
+    }
+    convWas.current = !!cv;
+    r.visible = !cv || sy > 0.002;
     g.scale.set(sxz, sy, sxz);
-    r.position.y = baseY + lift;
-    r.rotation.y = -0.38 + spin + (animate && !chapter ? Math.sin(t * 0.5) * 0.02 : 0);
+    r.position.set(GIFT_SPOT.x + (cv && !convergence.leaving ? cv.shakeX : 0), baseY + lift, GIFT_SPOT.z + (cv && !convergence.leaving ? cv.shakeZ : 0));
+    r.rotation.set(cv && !convergence.leaving ? cv.tiltX : 0, -0.38 + spin + (animate && !chapter && !cv ? Math.sin(t * 0.5) * 0.02 : 0), cv && !convergence.leaving ? cv.tiltZ : 0);
 
     const wrapped = !chapter || ut < RIBBON_SWAP;
     const collapse = span(ut, UNWRAP_TIMES.ribbonPull, RIBBON_SWAP);
+    // The convergence unties the ribbon, then winds it back on: each part is drawn progressively along its path.
+    const rb = cv ? cv.ribbon : null;
+    const reveal = (mesh: THREE.Mesh | null, frac: number, segments: number) => {
+      if (!mesh) return;
+      mesh.visible = frac > 0.002;
+      mesh.geometry.setDrawRange(0, frac >= 0.999 ? Infinity : Math.floor(frac * segments) * 24);
+    };
+    if (rb) {
+      reveal(bandXMesh.current, rb.bandX, 120);
+      reveal(bandZMesh.current, rb.bandZ, 120);
+      reveal(tailFrontMesh.current, rb.tails, 50);
+      reveal(tailSideMesh.current, rb.tails, 50);
+    } else {
+      for (const [m] of [[bandXMesh.current], [bandZMesh.current], [tailFrontMesh.current], [tailSideMesh.current]] as const) {
+        if (m && m.geometry.drawRange.count !== Infinity) m.geometry.setDrawRange(0, Infinity);
+        if (m) m.visible = true;
+      }
+    }
     if (bands.current) bands.current.visible = wrapped;
     if (tails.current) {
       tails.current.visible = wrapped;
@@ -337,35 +391,66 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
     // Then every wall folds down flat; the lid, hinged to the back wall, rides
     // down with it and settles flat beyond it, hollow side up.
     const open = span(ut, UNWRAP_TIMES.lidOpen[0], UNWRAP_TIMES.lidOpen[1]);
-    const hollow = chapter && ut >= UNWRAP_TIMES.lidOpen[0];
+    // The convergence reuses the same hollow shells, folding them down to receive the memories and back up again.
+    const hollow = cv ? cv.hollow && !convergence.leaving : chapter && ut >= UNWRAP_TIMES.lidOpen[0];
     if (boxRef.current) boxRef.current.visible = !hollow;
     if (lidRef.current) lidRef.current.visible = !hollow;
     if (hollowBox.current) hollowBox.current.visible = hollow;
     if (hollowLid.current) hollowLid.current.visible = hollow;
-    let backFold = 0;
+    let backFold = cv ? cv.backFold : 0;
     WALLS.forEach((w, i) => {
       const shell = wallShells.current[i];
       if (shell) shell.visible = hollow;
       const pivot = wallPivots.current[i];
       if (!pivot) return;
-      const k = progress(ut, UNWRAP_TIMES.wallsFold[0] + i * 0.07, UNWRAP_TIMES.wallsFold[1] - (3 - i) * 0.05);
-      if (i === BACK_WALL) backFold = span(k, 0, 0.8);
-      const a = WALL_FOLD * flop(k) * w.dir;
+      let fold: number;
+      if (cv) {
+        fold = cv.wall[i]!;
+      } else {
+        const k = progress(ut, UNWRAP_TIMES.wallsFold[0] + i * 0.07, UNWRAP_TIMES.wallsFold[1] - (3 - i) * 0.05);
+        if (i === BACK_WALL) backFold = span(k, 0, 0.8);
+        fold = flop(k);
+      }
+      const a = WALL_FOLD * fold * w.dir;
       pivot.rotation.set(w.axis === "x" ? a : 0, 0, w.axis === "z" ? a : 0);
+      // At the burst each wall (and the lid riding the back one) is flung outward from the centre.
+      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
+      const len = Math.hypot(w.pivot[0], w.pivot[2]) || 1;
+      pivot.position.set(w.pivot[0] + (w.pivot[0] / len) * out * 3.2, w.pivot[1] + Math.sin(out * Math.PI) * 0.5 + out * 0.3, w.pivot[2] + (w.pivot[2] / len) * out * 3.2);
     });
-    const lidAngle = LID_OPEN_ANGLE * (1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2));
+    const lidAngle = LID_OPEN_ANGLE * (cv ? cv.lid : 1 + 1.8 * Math.pow(open - 1, 3) + 0.8 * Math.pow(open - 1, 2));
     if (lidPivot.current) lidPivot.current.rotation.x = -THREE.MathUtils.lerp(lidAngle, Math.PI / 2, backFold);
 
+    if (hollowBox.current) {
+      // The floor rises and swells away, and the ribbon is carried up and out with the burst.
+      const out = cv ? 1 - Math.pow(1 - cv.burst, 3) : 0;
+      hollowBox.current.position.y = out * 1.2;
+      hollowBox.current.scale.setScalar(1 + out * 0.6);
+      if (cv && cv.burst > 0) {
+        if (bands.current) bands.current.visible = cv.burst < 0.5;
+        if (tails.current) tails.current.visible = cv.burst < 0.5;
+        if (bands.current) bands.current.scale.setScalar(1 + out * 0.7);
+        if (tails.current) tails.current.position.y = ribbons.top + out * 0.6;
+      } else if (bands.current) {
+        bands.current.scale.setScalar(1);
+        if (tails.current) tails.current.position.y = ribbons.top;
+      }
+    }
+
     const sway = animate ? Math.sin(t * 2.1) * 0.03 : 0;
-    const unfurl = collapse * 0.9;
+    const unfurl = rb ? (1 - Math.min(1, rb.bow)) * 0.9 + (cv && convergence.t >= 9 ? cv.sweep * 0.8 : 0) : collapse * 0.9;
     if (loopL.current) loopL.current.rotation.z = -sway - flap - s.hover * 0.08 - unfurl;
     if (loopR.current) loopR.current.rotation.z = sway + flap + s.hover * 0.08 + unfurl;
     if (bow.current) {
-      bow.current.visible = wrapped;
+      bow.current.visible = wrapped && (!rb || rb.bow > 0.002);
       // Loops fold down into the knot as the ribbon is pulled through it.
-      bow.current.scale.setScalar(Math.max(0.0001, (1 + s.hover * 0.04 + Math.abs(flap) * 0.15) * (1 - collapse * 0.92)));
+      bow.current.scale.setScalar(Math.max(0.0001, (1 + s.hover * 0.04 + Math.abs(flap) * 0.15) * (rb ? Math.max(0, rb.bow) : 1 - collapse * 0.92)));
       bow.current.position.set(0, ribbons.top + 0.02 + Math.sin(collapse * Math.PI) * 0.06, 0);
-      bow.current.rotation.set(0, 0.55 + collapse * 0.8, 0);
+      bow.current.rotation.set(0, 0.55 + collapse * 0.8 + (cv ? cv.burst * 3 : 0), 0);
+      if (cv && cv.burst > 0) {
+        bow.current.position.y += (1 - Math.pow(1 - cv.burst, 3)) * 2.2;
+        bow.current.visible = cv.burst < 0.8;
+      }
     }
   });
 
@@ -462,17 +547,17 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
           ))}
           <RibbonUnravel />
           <group ref={bands}>
-            <mesh geometry={ribbons.bandX} material={ribbonMat} castShadow receiveShadow />
-            <mesh geometry={ribbons.bandZ} material={ribbonMat} castShadow receiveShadow />
+            <mesh ref={bandXMesh} geometry={ribbons.bandX} material={ribbonMat} castShadow receiveShadow />
+            <mesh ref={bandZMesh} geometry={ribbons.bandZ} material={ribbonMat} castShadow receiveShadow />
           </group>
           <group ref={tails} position={[0, ribbons.top, 0]}>
             <group position={[0, -ribbons.top, 0]}>
-              <mesh geometry={ribbons.tailFront} material={ribbonMat} castShadow receiveShadow>
+              <mesh ref={tailFrontMesh} geometry={ribbons.tailFront} material={ribbonMat} castShadow receiveShadow>
                 <InkOutline weight="fine" color={INK} />
               </mesh>
               <group ref={sideTail} position={ribbons.tailPivot}>
                 <group position={[-ribbons.tailPivot[0], -ribbons.tailPivot[1], -ribbons.tailPivot[2]]}>
-                  <mesh geometry={ribbons.tailSide} material={ribbonMat} castShadow receiveShadow>
+                  <mesh ref={tailSideMesh} geometry={ribbons.tailSide} material={ribbonMat} castShadow receiveShadow>
                     <InkOutline weight="fine" color={INK} />
                   </mesh>
                 </group>
@@ -502,6 +587,7 @@ export function HeroGiftBox({ animate, soundEnabled }: { animate: boolean; sound
       <FlyingTag />
       <GiftUnwrap bodyRef={body} />
       <LobbySpirits animate={animate} />
+      <GiftConvergence />
     </>
   );
 }
