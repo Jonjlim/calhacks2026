@@ -1515,3 +1515,37 @@ interface OrganizerCheckoutStore {
   settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
 }
 ```
+
+
+### Contributor Checkout worker port (RC-011, Dev 4 → Dev 2)
+
+Additive transport integration; no new public endpoint or schema. The organizer
+runner remains `collect` only. `runContributorCheckout(store, adapter)` requires
+`authorize` mode, reserving one contributor's frozen approved share rather than
+collecting the organizer total. Stripe manual capture is specified on the hosted
+session; returning from Checkout never establishes authorization or capture.
+
+```ts
+type ContributorCheckoutClaim = OrganizerCheckoutClaim & {
+  input: StripeCheckoutInput & { mode: "authorize" };
+};
+interface ContributorCheckoutStore {
+  claim(): Promise<StripeAdapterResult<ContributorCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+```
+
+Owner: Dev 4 transport. Consumer/implementation owner: Dev 2 durable store. No
+existing caller migrates. The store must authorize the human attempt owner,
+require the current fully approved revision and exact USD share, and persist the
+operation key plus exclusive claim before returning it. It must not reissue a
+create claim after an unresolved start without a session ID. Repeated known
+sessions use GET only. Settlement persists session/intent references and checks
+membership/current revision plus its operation fence before releasing a URL.
+A rejected/failed settlement withholds the URL and must retain enough references
+for later recovery. An open session is not an `authorized` payment attempt.
+
+The offline rehearsal injects a fake HTTP transport into the real Stripe adapter
+and exercises existing state-machine functions. Its in-memory claim store is a
+test double, not an implementation of Dev 2's durable port or webhook receipt.
+It creates no Convex records, reads no keys and calls no external service.

@@ -689,6 +689,15 @@ export interface OrganizerCheckoutStore {
   settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
 }
 
+/** Server-only RC-011: the store authorizes exactly one contributor's frozen share. */
+export type ContributorCheckoutClaim = OrganizerCheckoutClaim & {
+  input: StripeCheckoutInput & { mode: "authorize" };
+};
+export interface ContributorCheckoutStore {
+  claim(): Promise<StripeAdapterResult<ContributorCheckoutClaim | null>>;
+  settle(claimId: string, result: StripeAdapterResult<StripeTestSession>): Promise<boolean>;
+}
+
 export interface StripePaymentExpectation {
   binding: StripePaymentBinding;
   amountMinor: number;

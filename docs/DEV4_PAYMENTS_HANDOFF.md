@@ -76,3 +76,28 @@ key. No public payment action or webhook route has been enabled by this work.
 - Exercise explicit capture, expired sessions, provider timeouts, partial capture, failed/pending refunds and old revisions against real sandbox objects.
 - Verify post-authorization cancellation behavior for the chosen Checkout flow before offering multi-person holds. Open-session expiry alone is not cancellation of a completed authorization.
 - Multi-contributor orchestration and group recovery remain joint Dev 2/Dev 4 work, not completed by the adapter tests.
+
+
+## Phase 2 update — contributor worker and offline rehearsal
+
+On `dev4/phase2-payments` (base `origin/refactor` at `9550a1a`):
+
+- `runContributorCheckout` accepts only a revision-bound manual authorization
+  claim for the contributor's approved share. The existing organizer collection
+  function keeps its behavior. Both validate returned amount/binding, retrieve
+  saved sessions instead of recreating, and withhold URLs until claim settlement.
+- `node scripts/payment-rehearsal.mts` runs four deterministic simulated payment
+  scenarios. The real Stripe adapter/reader/group-state functions run against an
+  injected fake transport and in-memory store. No keys, network, Convex writes,
+  actual card entry, funds or orders. It is suitable for engineering rehearsal;
+  a product demo must visibly say simulation if it renders these outcomes.
+- All 130 payment tests pass. Frontend/Convex typecheck is checked separately.
+
+This does not implement BE-015's missing durable claim bridge, organizer-total
+policy, webhook HTTP route, capture-operation claims or UI. Do not enable or
+advertise end-to-end payment based on the offline result. Organizer Checkout is
+still the smallest first live integration; per-contributor orchestration follows.
+
+The checkout port contract is appended to CONTRACTS.md. Shared changes are
+additive types only; there are no payment schema/state-machine changes. No deploy,
+environment change or paid request is included.
