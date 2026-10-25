@@ -6,7 +6,8 @@ import { convergence } from "@/components/convergence/convergenceClock";
 import { BoxPanel } from "@/components/room/BoxPanel";
 import { QuestionPoll } from "@/components/room/QuestionPoll";
 import type { GiftSelection, ProposalView, QuestionPollView } from "@/lib/contracts";
-import { mockListings, mockParticipants } from "@/lib/mocks/fixtures";
+import type { TrailEntry } from "@/components/room/types";
+import { mockListings, mockParticipants, mockPublishedClues, mockRecommendations } from "@/lib/mocks/fixtures";
 import { formatMinor } from "@/lib/money";
 import { allocate } from "@/convex/allocations";
 
@@ -48,6 +49,15 @@ export default function GroupFlowPreview() {
     stale: false, open: !closed, canFinish: !closed && person === 0 && leader !== null };
   const net = (id: string) => Object.values(giftVotes[id] ?? {}).reduce((n, v) => n + v, 0);
   const order = [...gifts].sort((a, b) => net(b.id) - net(a.id) || counts[gifts.indexOf(b)]! - counts[gifts.indexOf(a)]! || a.id.localeCompare(b.id));
+  // Clearly labelled sample history, not live agent/provider activity.
+  const sampleAt = gifts[0]!.retrievedAt;
+  const sampleTrail: TrailEntry[] = [
+    { _id: "sample-memories" as TrailEntry["_id"], stage: "memories", actor: "person", outcome: "kept", who: "Alex", text: "Sample: shared an interest in pottery; Jordan shared that she already owns a starter kit.", clueIds: ["c1", "c2"] as NonNullable<TrailEntry["clueIds"]>, at: sampleAt - 3000 },
+    { _id: "sample-council" as TrailEntry["_id"], stage: "council", actor: "council", outcome: "kept", text: "Sample: considered a pottery experience and tools that build on her hobby.", clueIds: ["c1"] as NonNullable<TrailEntry["clueIds"]>, at: sampleAt - 2000 },
+    { _id: "sample-checks" as TrailEntry["_id"], stage: "council", actor: "checks", outcome: "rejected", text: "Sample: ruled out another starter kit because she already owns one.", clueIds: ["c2"] as NonNullable<TrailEntry["clueIds"]>, at: sampleAt - 1500 },
+    { _id: "sample-search" as TrailEntry["_id"], stage: "search", actor: "search", outcome: "kept", text: "Sample: loaded two fixture gifts. No live product search was run.", at: sampleAt - 1000 },
+    ...items.map((it, i): TrailEntry => ({ _id: `sample-choice-${i}` as TrailEntry["_id"], stage: "choice", actor: "person", outcome: "kept", who: "Alex", listingId: it.listingId as NonNullable<TrailEntry["listingId"]>, text: `Added ${it.listingSnapshot.title} to the local demo box.`, at: sampleAt + i })),
+  ];
   const reveal = () => { if (selection) { convergence.abort(); convergence.start({ selectionId: selection.id, inputs: [], total: 0, instant: true }); } };
   const resetDeal = () => { setRevision(r => r + 1); setApproved([]); };
   return <main className="min-h-screen bg-ivory p-5 text-dusk md:p-10">
@@ -79,6 +89,6 @@ export default function GroupFlowPreview() {
           }} />}
       </div>
     </div>
-    {selection && <ConvergenceOverlay gift={{ selection, listings: gifts, clues: [] }} isOrganizer={person === 0} onPlan={() => setBoxOpen(true)} onReplay={reveal} />}
+    {selection && <ConvergenceOverlay gift={{ selection, listings: gifts, clues: mockPublishedClues, recommendations: mockRecommendations, trail: sampleTrail }} isOrganizer={person === 0} onPlan={() => setBoxOpen(true)} onReplay={reveal} />}
   </main>;
 }

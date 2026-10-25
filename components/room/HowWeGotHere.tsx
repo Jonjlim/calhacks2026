@@ -37,10 +37,6 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
     return () => window.removeEventListener("keydown", key);
   }, [onClose]);
 
-  const onPath = (e: TrailEntry) => !!focus && (
-    (!!e.listingId && e.listingId === focus.listingId)
-    || (!!e.directionId && e.directionId === focus.directionId)
-    || (!!e.clueIds?.length && !!focus.clueIds?.some((id) => e.clueIds!.some((c) => c === id))));
   const thrownOut = entries.filter((e) => e.outcome === "rejected" && e.actor !== "person").length;
   const passes = entries.filter((e) => e.outcome === "rejected" && e.actor === "person").length;
   const people = new Set(entries.flatMap((e) => (e.who ? [e.who] : []))).size;
@@ -64,7 +60,26 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
           </section>
         )}
 
-        <ol className={s.storyFlow}>
+        <DecisionTrail entries={entries} focus={focus} />
+        <p className={s.storyFoot}>Memories stay as friends wrote them; private notes, unpublished guesses and anyone’s maximum are never shown here. Prices are as seen at search time. No money was charged and no gift was purchased.</p>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Shared recorded flow, embedded in the reveal as well as the map's full story. */
+export function DecisionTrail({ entries, focus, compact = false }: {
+  entries: TrailEntry[];
+  focus?: { listingId?: string; directionId?: string; clueIds?: string[] };
+  compact?: boolean;
+}) {
+  const onPath = (e: TrailEntry) => !!focus && (
+    (!!e.listingId && e.listingId === focus.listingId)
+    || (!!e.directionId && e.directionId === focus.directionId)
+    || (!!e.clueIds?.length && !!focus.clueIds?.some((id) => e.clueIds!.some((c) => c === id))));
+  return (
+        <ol className={s.storyFlow} aria-label="Recorded gift journey">
           {STAGES.map((stage, i) => {
             const rows = entries.filter((e) => e.stage === stage.id);
             return (
@@ -75,7 +90,7 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
                   {rows.length === 0 ? <p className={s.storyNone}>Nothing yet.</p> : (
                     <ul>
                       {rows.map((e) => (
-                        <li key={e._id} className={`${s.storyRow} ${e.outcome === "rejected" ? s.storyOut : e.outcome === "kept" ? s.storyKept : ""} ${onPath(e) ? s.storyLit : ""}`}>
+                        <li key={e._id} style={compact ? { gridTemplateColumns: "1fr", gap: 2 } : undefined} className={`${s.storyRow} ${e.outcome === "rejected" ? s.storyOut : e.outcome === "kept" ? s.storyKept : ""} ${onPath(e) ? s.storyLit : ""}`}>
                           <b>{e.actor === "person" ? e.who ?? "A friend" : ACTOR[e.actor]}</b>
                           <span>{e.text}</span>
                           <time>{new Date(e.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
@@ -88,9 +103,5 @@ export function HowWeGotHere({ entries, chain, focus, giftTitle, onClose }: {
             );
           })}
         </ol>
-        <p className={s.storyFoot}>Memories stay as friends wrote them; private notes, unpublished guesses and anyone’s maximum are never shown here. Prices are as seen at search time. No money was charged and no gift was purchased.</p>
-      </div>
-    </div>,
-    document.body,
   );
 }

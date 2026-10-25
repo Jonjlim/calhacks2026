@@ -417,7 +417,7 @@ export function RoomLayout({ data, actions, preview = false }: { data: RoomData;
 
       {selection && (
         <ConvergenceOverlay
-          gift={{ selection, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues }}
+          gift={{ selection, listing: data.listings.find((l) => l.id === selection.listingId), recommendation: data.recommendations.find((r) => r.listingId === selection.listingId), clues: data.publishedClues, listings: data.listings, recommendations: data.recommendations, directions: data.directions, trail: data.trail }}
           isOrganizer={isOrganizer}
           onPlan={() => setDrawer({ kind: "shares" })}
           onReplay={replayReveal}
